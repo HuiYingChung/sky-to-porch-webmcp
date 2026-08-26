@@ -1,0 +1,19 @@
+Sky to Porch WebMCP
+Copyright 2026 Huiying Chung
+
+This repository contains a sanitized import of the pre-existing Sky to Porch
+application. The original repository and baseline commit are identified in
+PRIOR_WORK.md.
+
+The original project included material development assistance from IBM Bob,
+Claude Code, OpenAI Codex, and ChatGPT. Their names and trademarks belong to
+their respective owners. No endorsement is implied.
+
+External observations, maps, and datasets retrieved by this software remain
+subject to the terms and attribution requirements of their publishers,
+including NASA, NOAA, USGS, EPA, and other sources identified alongside the
+evidence. The Apache License 2.0 applies to repository code and does not
+relicense external data.
+
+This software presents environmental evidence and is not an emergency alerting
+or professional decision system.

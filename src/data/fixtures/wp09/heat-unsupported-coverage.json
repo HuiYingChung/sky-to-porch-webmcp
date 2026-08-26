@@ -1,0 +1,50 @@
+{
+  "_fixtureId": "wp09-heat-unsupported-coverage-1990-01-01",
+  "_fixtureDescription": "Deterministic pre-MODIS unsupported-coverage case. It contains no observations and makes no temperature or safety claim.",
+  "_fixtureWarning": "Unsupported coverage is not evidence of low temperature or no danger.",
+  "evidenceId": "evd-heat-unsupported-coverage-fixture",
+  "hazardId": "extreme_heat",
+  "intentId": "intent-fixture-heat-unsupported-001",
+  "evidenceState": "unsupported_coverage",
+  "dataMode": "fixture",
+  "observations": [],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "Terra",
+      "agency": "NASA",
+      "purpose": "MODIS land-surface-temperature visualization through NASA GIBS",
+      "selectionReason": "Required satellite visualization source for the WP-09 path",
+      "contributedObservationIds": [],
+      "retrievalStatus": "not_attempted",
+      "keyLimitation": "This fixture date predates the approved MODIS Terra visualization path, so no live retrieval was attempted.",
+      "datasetId": "MODIS_Terra_Land_Surface_Temp_Day"
+    }
+  ],
+  "freshness": {
+    "status": "unknown",
+    "classificationBasis": "no_observation_time",
+    "evaluatedAt": "2026-08-12T05:00:00Z",
+    "note": "No observation timestamp exists for unsupported coverage."
+  },
+  "confidence": {
+    "level": "insufficient",
+    "rationale": "The approved sources do not support this fixture date; no temperature or safety conclusion is available."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-heat-unsupported-not-safe",
+      "source": "nasa_gibs_modis_lst_day",
+      "description": "Unsupported satellite coverage is not evidence of low land-surface temperature or safe conditions.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-heat-unsupported-no-station",
+      "source": "noaa_uscrn_heat_exposure",
+      "description": "No NOAA station row is provided for this unsupported fixture date; no value was fabricated.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2026-08-12T05:00:00Z"
+}

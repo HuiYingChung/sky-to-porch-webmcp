@@ -1,0 +1,162 @@
+{
+  "_fixtureId": "wp09-heat-success-tucson-2024-07-11",
+  "_fixtureDescription": "Small normalized fixture derived from the separately authorized Tucson feasibility summary. It contains no raw PNG or 16 MB NOAA CSV payload.",
+  "_fixtureHashBasis": "GIBS payloadHash is the observed raw-response SHA-256. NOAA payloadHash is SHA-256 of the normalized summary row '2024071100,41.7,38.9,11', because the raw NOAA response hash was not retained.",
+  "_fixtureWarning": "FIXTURE · HISTORICAL. This is not a new live retrieval or evidence of current, indoor, household, or individual conditions.",
+  "evidenceId": "evd-heat-tucson-20240711-fixture",
+  "hazardId": "extreme_heat",
+  "intentId": "intent-fixture-heat-tucson-001",
+  "evidenceState": "observations_returned",
+  "dataMode": "fixture",
+  "observations": [
+    {
+      "observationId": "obs-gibs-modis-lst-tucson-20240711",
+      "provenance": {
+        "sourceId": "nasa_gibs_modis_lst_day",
+        "sourceUrl": "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Land_Surface_Temp_Day/default/2024-07-11/GoogleMapsCompatible_Level7/7/51/24.png",
+        "retrievedAt": "2026-08-12T05:00:00Z",
+        "observedAt": "2024-07-11T00:00:00Z",
+        "product": "MODIS_Terra_Land_Surface_Temp_Day",
+        "payloadHash": "7f26420eb6eb8f40c4a9b0f990b0afc99b62eba5c73a6c1068b21494a3bf54ba",
+        "requestParameters": {
+          "date": "2024-07-11",
+          "tileMatrixSet": "GoogleMapsCompatible_Level7",
+          "tileMatrix": "7",
+          "tileRow": "51",
+          "tileCol": "24"
+        }
+      },
+      "variableName": "Land-surface temperature visualization",
+      "textValue": "visualization_available",
+      "dataMode": "fixture",
+      "qualifiers": ["visualization_only", "numeric_temperature_not_inferred"],
+      "metadata": {
+        "heatRole": "satellite_land_surface_temperature_visualization",
+        "layerId": "MODIS_Terra_Land_Surface_Temp_Day",
+        "contentType": "image/png",
+        "imageWidth": 256,
+        "imageHeight": 256,
+        "tileMatrixSet": "GoogleMapsCompatible_Level7",
+        "tileMatrix": 7,
+        "tileRow": 51,
+        "tileCol": 24,
+        "byteLength": 22974,
+        "opaqueSampleCount": 256,
+        "distinctColorCount": 36
+      }
+    },
+    {
+      "observationId": "obs-uscrn-air-tucson-2024071100",
+      "provenance": {
+        "sourceId": "noaa_uscrn_heat_exposure",
+        "sourceUrl": "https://www.ncei.noaa.gov/pub/data/uscrn/products/heat01/CRNHE0101-AZ_Tucson_11_W.csv",
+        "sourceRecordId": "CRNHE0101-AZ_Tucson_11_W.csv#2024071100",
+        "retrievedAt": "2026-08-12T05:00:00Z",
+        "observedAt": "2024-07-11T00:00:00Z",
+        "product": "USCRN Heat01 v1.0",
+        "payloadHash": "a4531d5592b24dfb584d4d58b4c69cbb90c9bf60022dbd706c62bbcf96b42837",
+        "requestParameters": { "station": "AZ_Tucson_11_W", "utcDate": "2024-07-11" }
+      },
+      "variableName": "Hourly air temperature",
+      "value": 41.7,
+      "unit": "degC",
+      "dataMode": "fixture",
+      "qualifiers": ["outdoor_station", "historical_fixture"],
+      "periodStart": "2024-07-10T23:00:00Z",
+      "periodEnd": "2024-07-11T00:00:00Z",
+      "metadata": {
+        "heatRole": "ground_air_temperature",
+        "stationId": "AZ_Tucson_11_W",
+        "stationName": "AZ Tucson 11 W",
+        "stationLatitude": 32.24,
+        "stationLongitude": -111.17,
+        "relativeHumidityPct": 11,
+        "fieldName": "DRY_BULB_TEMPERATURE_C",
+        "fileFormat": "CRNHE0101"
+      }
+    },
+    {
+      "observationId": "obs-uscrn-heat-index-tucson-2024071100",
+      "provenance": {
+        "sourceId": "noaa_uscrn_heat_exposure",
+        "sourceUrl": "https://www.ncei.noaa.gov/pub/data/uscrn/products/heat01/CRNHE0101-AZ_Tucson_11_W.csv",
+        "sourceRecordId": "CRNHE0101-AZ_Tucson_11_W.csv#2024071100",
+        "retrievedAt": "2026-08-12T05:00:00Z",
+        "observedAt": "2024-07-11T00:00:00Z",
+        "product": "USCRN Heat01 v1.0",
+        "payloadHash": "a4531d5592b24dfb584d4d58b4c69cbb90c9bf60022dbd706c62bbcf96b42837",
+        "requestParameters": { "station": "AZ_Tucson_11_W", "utcDate": "2024-07-11" }
+      },
+      "variableName": "Hourly heat index",
+      "value": 38.9,
+      "unit": "degC",
+      "dataMode": "fixture",
+      "qualifiers": ["NOAA_derived", "historical_fixture"],
+      "periodStart": "2024-07-10T23:00:00Z",
+      "periodEnd": "2024-07-11T00:00:00Z",
+      "metadata": {
+        "heatRole": "derived_heat_index",
+        "stationId": "AZ_Tucson_11_W",
+        "stationName": "AZ Tucson 11 W",
+        "stationLatitude": 32.24,
+        "stationLongitude": -111.17,
+        "relativeHumidityPct": 11,
+        "fieldName": "HEAT_INDEX_C",
+        "fileFormat": "CRNHE0101"
+      }
+    }
+  ],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "Terra",
+      "agency": "NASA",
+      "purpose": "MODIS daily daytime land-surface-temperature visualization through NASA GIBS",
+      "selectionReason": "Credential-free daily visualization for the fixed Tucson historical case",
+      "contributedObservationIds": ["obs-gibs-modis-lst-tucson-20240711"],
+      "retrievalStatus": "success",
+      "keyLimitation": "The PNG is visualization only. No Celsius or Fahrenheit value is inferred from its colors.",
+      "datasetId": "MODIS_Terra_Land_Surface_Temp_Day"
+    }
+  ],
+  "freshness": {
+    "status": "historical",
+    "classificationBasis": "historical_context",
+    "mostRecentObservationAt": "2024-07-11T00:00:00Z",
+    "evaluatedAt": "2026-08-12T05:00:00Z",
+    "ageSeconds": 65854800,
+    "note": "Historical fixed-date fixture; it does not describe current conditions."
+  },
+  "confidence": {
+    "level": "low",
+    "rationale": "A regional satellite visualization and one outdoor station row are present. They do not establish indoor, household, or individual conditions."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-heat-gibs-visual-only",
+      "source": "nasa_gibs_modis_lst_day",
+      "description": "NASA GIBS imagery is visualization evidence only; no numeric temperature is inferred from PNG colors.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-heat-uscrn-outdoor-station",
+      "source": "noaa_uscrn_heat_exposure",
+      "description": "USCRN Heat01 describes one named outdoor station and hour, not indoor temperature or conditions at a selected home.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-heat-index-derived",
+      "source": "noaa_uscrn_heat_exposure",
+      "description": "Heat index is a NOAA-derived outdoor indicator, not a thermometer reading, diagnosis, or individual medical-risk assessment.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-heat-fixture-historical",
+      "source": "nasa_gibs_modis_lst_day",
+      "description": "This small normalized fixture is historical test data and is not a live or current result.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2026-08-12T05:00:00Z"
+}

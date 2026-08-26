@@ -1,0 +1,50 @@
+{
+  "_fixtureId": "wp09-heat-source-failure",
+  "_fixtureDescription": "Deterministic Extreme Heat source-failure fixture; no live request and no successful fixture fallback.",
+  "_fixtureWarning": "Source failure is not proof of safe outdoor, indoor, household, or individual conditions.",
+  "evidenceId": "evd-heat-source-failure-fixture",
+  "hazardId": "extreme_heat",
+  "intentId": "intent-fixture-heat-source-failure-001",
+  "evidenceState": "source_failure",
+  "dataMode": "failed",
+  "observations": [],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "Terra",
+      "agency": "NASA",
+      "purpose": "MODIS land-surface-temperature visualization through NASA GIBS",
+      "selectionReason": "Required satellite visualization source for the WP-09 path",
+      "contributedObservationIds": [],
+      "retrievalStatus": "failed",
+      "keyLimitation": "The source failed; no imagery, numeric temperature, or safety conclusion is available.",
+      "datasetId": "MODIS_Terra_Land_Surface_Temp_Day"
+    }
+  ],
+  "freshness": {
+    "status": "unknown",
+    "classificationBasis": "no_observation_time",
+    "evaluatedAt": "2026-08-12T05:00:00Z",
+    "note": "No observation time exists because the deterministic retrieval case failed."
+  },
+  "confidence": {
+    "level": "insufficient",
+    "rationale": "Required sources failed. Missing evidence is not evidence of safe conditions or no danger."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-heat-failure-not-safe",
+      "source": "nasa_gibs_modis_lst_day",
+      "description": "Source failure is not proof of low surface temperature, safe outdoor conditions, or no heat danger.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-heat-failure-no-fallback",
+      "source": "noaa_uscrn_heat_exposure",
+      "description": "No stale, cached, or successful fixture result was substituted for the failed retrieval.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2026-08-12T05:00:00Z"
+}

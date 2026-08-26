@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---- Classification gate ----
+  # Always runs. Determines what subsequent jobs are needed.
+  classify:
+    name: Classify change
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      code: ${{ steps.detect.outputs.code }}
+      records: ${{ steps.detect.outputs.records }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: detect
+        run: |
+          set -euo pipefail
+          ZERO40="0000000000000000000000000000000000000000"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          elif [ "${{ github.event.before }}" = "$ZERO40" ]; then
+            # First push to branch — enumerate every tracked file at HEAD.
+            CHANGED=$(git ls-tree -r --name-only HEAD)
+          else
+            CHANGED=$(git diff --name-only "${{ github.event.before }}..HEAD")
+          fi
+          CODE=false
+          RECORDS=false
+          while IFS= read -r file; do
+            case "$file" in
+              src/*|scripts/*|tests/*|*.config.*|package*.json|tsconfig.json|tailwind*|postcss*|next.config*|playwright*|vitest*|.github/*)
+                CODE=true ;;
+              docs/*|AGENTS.md|PLAN.md|.gitignore|.gitattributes|.env.example|README.md)
+                RECORDS=true ;;
+            esac
+          done <<< "$CHANGED"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "records=$RECORDS" >> "$GITHUB_OUTPUT"
+
+  # ---- Quick deterministic checks (code path) ----
+  quick:
+    name: Lint · typecheck · unit · integration
+    needs: classify
+    if: needs.classify.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+        timeout-minutes: 4
+      - name: Lint
+        run: npm run lint
+        timeout-minutes: 2
+      - name: Typecheck
+        run: npm run typecheck
+        timeout-minutes: 2
+      - name: Unit tests
+        run: npm test
+        timeout-minutes: 2
+      - name: Integration tests
+        run: npm run test:integration
+        timeout-minutes: 2
+      - name: Secret check
+        run: npm run secret-check
+        timeout-minutes: 1
+
+  # ---- Build (code path, after quick) ----
+  build:
+    name: Production build
+    needs: quick
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        timeout-minutes: 4
+      - name: Build
+        run: npm run build
+        timeout-minutes: 6
+
+  # ---- E2E smoke (code path, after build) ----
+  e2e:
+    name: Chromium E2E smoke
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --user 1001
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        timeout-minutes: 4
+      - name: Build for E2E
+        run: npm run build
+        timeout-minutes: 6
+      - name: E2E smoke tests
+        run: npm run test:e2e
+        timeout-minutes: 15
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7

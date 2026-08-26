@@ -1,0 +1,56 @@
+{
+  "_fixtureId": "wp05-fire-source-failure",
+  "_fixtureDescription": "Deterministic source-failure fixture for WP-05 Fire & Smoke. Simulates a NOAA HMS endpoint failure (network/parse error). Zero observations, source_failure state, failed dataMode, insufficient confidence, no stale result, no fallback.",
+  "_capturedBy": "Imported prior-work fixture; see PRIOR_WORK.md",
+  "_fixtureWarning": "This is a deterministic test fixture. It does not represent current or live conditions. source_failure does not mean no fire and does not mean no danger.",
+  "evidenceId": "evd-fire-source-failure-wp05",
+  "hazardId": "fire_smoke",
+  "intentId": "intent-fixture-fire-source-failure-001",
+  "evidenceState": "source_failure",
+  "dataMode": "failed",
+  "observations": [],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "NOAA Hazard Mapping System (HMS)",
+      "agency": "NOAA / NESDIS / OSPO",
+      "purpose": "Satellite-based detection and mapping of fire and smoke using multiple satellite platforms",
+      "selectionReason": "Primary approved source for fire_smoke. Not available due to simulated source failure.",
+      "contributedObservationIds": [],
+      "retrievalStatus": "failed",
+      "keyLimitation": "Source failure: no observations could be retrieved. Source failure is not proof of no fire and not proof of no danger."
+    }
+  ],
+  "freshness": {
+    "status": "unknown",
+    "classificationBasis": "no_observation_time",
+    "evaluatedAt": "2026-08-06T18:55:15Z",
+    "note": "Source failure. No data was retrieved. Freshness cannot be assessed. Classification basis: no observation time available."
+  },
+  "confidence": {
+    "level": "insufficient",
+    "rationale": "Source failure: no observations were returned. Confidence is insufficient. Absence of data is not proof of no fire or no danger."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-source-failure-no-danger-001",
+      "source": "noaa_hms_fire_points",
+      "description": "Source failure. No data was retrieved from NOAA HMS. A source failure is NOT proof of no fire and NOT proof of no danger.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-source-failure-no-fallback-001",
+      "source": "noaa_hms_fire_points",
+      "description": "No stale or fallback result is substituted for a source failure. Do not infer safety from missing data.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-source-failure-fixture-001",
+      "source": "noaa_hms_fire_points",
+      "description": "This is a deterministic test fixture simulating a source failure. It does not represent a live retrieval.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2026-08-06T18:55:15Z"
+}

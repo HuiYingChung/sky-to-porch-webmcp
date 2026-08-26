@@ -1,0 +1,86 @@
+{
+  "_fixtureId": "wp02-fire-no-observation-lake-michigan-2025-01-08",
+  "_fixtureDescription": "Explicit no-observation fixture. Same NOAA HMS fire-points KML for 2025-01-08, queried against the Lake Michigan feasibility box lon [-87.0,-86.9] lat [43.0,43.1]. Zero coordinate pairs found in box.",
+  "_capturedBy": "Imported prior-work fixture; see PRIOR_WORK.md",
+  "_fixtureWarning": "This is a test fixture, not a live data result. no_observation is NOT proof of no fire or no danger.",
+  "evidenceId": "evd-fire-lake-michigan-20250108-no-obs-fixture",
+  "hazardId": "fire_smoke",
+  "intentId": "intent-fixture-fire-lake-michigan-001",
+  "evidenceState": "no_observation",
+  "dataMode": "fixture",
+  "observations": [
+    {
+      "observationId": "obs-hms-fire-lake-michigan-001",
+      "provenance": {
+        "sourceId": "noaa_hms_fire_points",
+        "sourceUrl": "https://satepsanone.nesdis.noaa.gov/pub/FIRE/web/HMS/Fire_Points/KML/2025/01/hms_fire20250108.kml",
+        "retrievedAt": "2026-08-03T23:00:00Z",
+        "observedAt": "2025-01-08T00:00:00Z",
+        "product": "NOAA HMS Fire Detection Points",
+        "payloadHash": "878506D644EEAC979AE2BC9529B6825F53C0532769BB92796DC65B6FF1C8A67D",
+        "requestParameters": {
+          "date": "2025-01-08",
+          "archiveType": "KML"
+        }
+      },
+      "variableName": "HMS fire detection coordinate pairs in Lake Michigan feasibility box",
+      "value": 0,
+      "unit": "coordinate_pairs",
+      "dataMode": "fixture",
+      "qualifiers": [],
+      "metadata": {
+        "totalFilePlacemarks": 12986,
+        "totalFileCoordinatePairs": 12986,
+        "boundingBox": "lon [-87.0,-86.9], lat [43.0,43.1]",
+        "coordinatePairsInBox": 0
+      }
+    }
+  ],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "NOAA Hazard Mapping System (HMS)",
+      "agency": "NOAA / NESDIS / OSPO",
+      "purpose": "Satellite-based detection and mapping of fire and smoke using multiple satellite platforms",
+      "selectionReason": "Credential-free historical fire observations for WP-02 Fire gate no-observation case",
+      "contributedObservationIds": ["obs-hms-fire-lake-michigan-001"],
+      "retrievalStatus": "success",
+      "keyLimitation": "No coordinate pairs in the requested box does not mean no fire or no danger. Detection gaps can result from cloud cover, smoke, canopy, or terrain occlusion.",
+      "datasetId": "NOAA_HMS_v1"
+    }
+  ],
+  "freshness": {
+    "status": "historical",
+    "classificationBasis": "historical_context",
+    "mostRecentObservationAt": "2025-01-08T00:00:00Z",
+    "evaluatedAt": "2026-08-03T23:00:00Z",
+    "ageSeconds": 49503600,
+    "note": "Historical fixture from 2025-01-08. This is a test fixture; age does not reflect a live retrieval."
+  },
+  "confidence": {
+    "level": "insufficient",
+    "rationale": "Zero coordinate pairs were found in the Lake Michigan box for this date. This is a no-observation result: it does not establish fire-free status. Detection limits, cloud cover, smoke, canopy, and terrain can prevent satellite detections even when fires are present."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-hms-no-obs-meaning-001",
+      "source": "noaa_hms_fire_points",
+      "description": "No observation in this dataset is NOT proof of no fire and NOT proof of no danger. Detection limitations, cloud cover, smoke, canopy, and terrain can produce zero detections even when fires are present.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-hms-fixture-no-obs-001",
+      "source": "noaa_hms_fire_points",
+      "description": "This is a deterministic test fixture. It does not represent current or live conditions.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-hms-counts-no-obs-001",
+      "source": "noaa_hms_fire_points",
+      "description": "Coordinate or placemark counts are parsing counts, not counts of distinct fires, threatened homes, or unsafe users.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2026-08-03T23:00:00Z"
+}

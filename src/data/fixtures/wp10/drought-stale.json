@@ -1,0 +1,156 @@
+{
+  "_fixtureId": "wp10-drought-synthetic-stale-arizona-gibs-2024-05-24-usdm-2024-06-04",
+  "_fixtureDescription": "Synthetic two-source fixture whose GIBS 2024-05-24 and USDM 2024-06-04 evidence is deterministically stale at the 2024-06-20 evaluation time.",
+  "_fixtureWarning": "STALE FIXTURE ONLY. It must not be presented as current evidence or used for property, crop, soil-moisture, or household conclusions.",
+  "evidenceId": "evd-wp10-drought-synthetic-stale",
+  "hazardId": "drought_land",
+  "intentId": "intent-wp10-drought-synthetic-stale",
+  "evidenceState": "stale_data",
+  "dataMode": "fixture",
+  "observations": [
+    {
+      "observationId": "obs-wp10-gibs-synthetic-stale-20240524",
+      "provenance": {
+        "sourceId": "nasa_gibs_modis_ndvi_16day",
+        "sourceUrl": "https://gibs.earthdata.nasa.gov/wms/epsg4326/std/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=MODIS_Terra_L3_NDVI_16Day_v6.1_STD&STYLES=&SRS=EPSG%3A4326&BBOX=-115%2C31%2C-109%2C37&WIDTH=256&HEIGHT=256&TIME=2024-05-24&FORMAT=image%2Fpng&TRANSPARENT=TRUE",
+        "retrievedAt": "2024-06-20T00:00:00Z",
+        "observedAt": "2024-05-24T00:00:00Z",
+        "product": "NASA GIBS MODIS Terra L3 NDVI 16-Day v6.1 Standard visualization",
+        "payloadHash": "ad1fd88ad02d9ed2a160cb187b534f8d9532bd9a4d41b4246c245ee60dffcba9",
+        "requestParameters": {
+          "SERVICE": "WMS",
+          "REQUEST": "GetMap",
+          "VERSION": "1.1.1",
+          "LAYERS": "MODIS_Terra_L3_NDVI_16Day_v6.1_STD",
+          "STYLES": "",
+          "SRS": "EPSG:4326",
+          "BBOX": "-115,31,-109,37",
+          "WIDTH": "256",
+          "HEIGHT": "256",
+          "TIME": "2024-05-24",
+          "FORMAT": "image/png",
+          "TRANSPARENT": "TRUE"
+        }
+      },
+      "variableName": "16-day NDVI visualization",
+      "textValue": "synthetic_visualization_contract_fixture",
+      "dataMode": "fixture",
+      "qualifiers": ["synthetic_fixture", "visualization_only", "numeric_ndvi_not_inferred", "regional_not_property"],
+      "metadata": {
+        "droughtRole": "satellite_vegetation_visualization",
+        "layerId": "MODIS_Terra_L3_NDVI_16Day_v6.1_STD",
+        "contentType": "image/png",
+        "imageWidth": 256,
+        "imageHeight": 256,
+        "nativeScaleMeters": 250,
+        "compositePeriodDays": 16,
+        "boundingBox": "-115,31,-109,37",
+        "byteLength": 0,
+        "opaqueSampleCount": 0,
+        "distinctColorCount": 0,
+        "fixtureKind": "synthetic_contract_fixture_no_source_payload"
+      }
+    },
+    {
+      "observationId": "obs-wp10-usdm-synthetic-stale-20240604",
+      "provenance": {
+        "sourceId": "us_drought_monitor_rest",
+        "sourceUrl": "https://usdmdataservices.unl.edu/api/StateStatistics/GetDroughtSeverityStatisticsByAreaPercent?aoi=04&startdate=6%2F4%2F2024&enddate=6%2F4%2F2024&statisticsType=1",
+        "sourceRecordId": "synthetic-contract-fixture#StateStatistics#04#2024-06-04",
+        "retrievedAt": "2024-06-20T00:00:00Z",
+        "observedAt": "2024-06-04T00:00:00Z",
+        "product": "U.S. Drought Monitor percent-of-area statistics",
+        "payloadHash": "15737f7fb6a242cf28afeb9f33e009ec589cec07f8c4948ac90cc571ebe96369",
+        "requestParameters": {
+          "areaType": "StateStatistics",
+          "aoi": "04",
+          "startDate": "6/4/2024",
+          "endDate": "6/4/2024",
+          "statisticsType": "1",
+          "accept": "application/json"
+        }
+      },
+      "variableName": "Regional drought area statistics",
+      "textValue": "synthetic_regional_statistics_contract_fixture",
+      "dataMode": "fixture",
+      "qualifiers": ["synthetic_fixture", "regional_state_scale", "weekly_product", "d0_is_not_drought", "property_inference_not_supported"],
+      "metadata": {
+        "droughtRole": "regional_drought_statistics",
+        "areaType": "StateStatistics",
+        "stateFips": "04",
+        "areaName": "Arizona",
+        "statisticsFormat": "traditional_cumulative_percent_of_area",
+        "unit": "percent",
+        "mapValidDay": "Tuesday",
+        "releaseDay": "Thursday",
+        "cadenceDays": 7,
+        "nonePct": 40,
+        "d0Pct": 60,
+        "d1Pct": 45,
+        "d2Pct": 25,
+        "d3Pct": 10,
+        "d4Pct": 0,
+        "fixtureKind": "synthetic_contract_fixture_no_source_payload"
+      }
+    }
+  ],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "Terra synthetic stale scenario",
+      "agency": "NASA",
+      "purpose": "Exercise stale-state handling for the prepared GIBS visualization contract.",
+      "selectionReason": "WP-10 stale evidence boundary test.",
+      "contributedObservationIds": ["obs-wp10-gibs-synthetic-stale-20240524"],
+      "retrievalStatus": "success",
+      "keyLimitation": "The fixture is stale and synthetic; it is not current satellite evidence.",
+      "datasetId": "MODIS_Terra_L3_NDVI_16Day_v6.1_STD"
+    },
+    {
+      "missionName": "U.S. Drought Monitor synthetic stale scenario",
+      "agency": "NDMC / USDA / NOAA",
+      "purpose": "Exercise stale-state handling for weekly regional statistics.",
+      "selectionReason": "WP-10 stale regional evidence boundary test.",
+      "contributedObservationIds": ["obs-wp10-usdm-synthetic-stale-20240604"],
+      "retrievalStatus": "success",
+      "keyLimitation": "The fixture is stale and synthetic; it is not a current USDM result.",
+      "datasetId": "USDM_StateStatistics_PercentArea"
+    }
+  ],
+  "freshness": {
+    "status": "stale",
+    "classificationBasis": "age_thresholds",
+    "mostRecentObservationAt": "2024-06-04T00:00:00Z",
+    "evaluatedAt": "2024-06-20T00:00:00Z",
+    "ageSeconds": 1382400,
+    "currentAgeLimitSeconds": 172800,
+    "recentAgeLimitSeconds": 691200,
+    "note": "Evidence is 16 days old, beyond the locked eight-day recent threshold."
+  },
+  "confidence": {
+    "level": "insufficient",
+    "rationale": "Stale evidence cannot support a current drought or land-condition claim."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-wp10-stale-gibs",
+      "source": "nasa_gibs_modis_ndvi_16day",
+      "description": "The synthetic 16-day visualization is stale and cannot be presented as current vegetation evidence.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-wp10-stale-usdm",
+      "source": "us_drought_monitor_rest",
+      "description": "The synthetic weekly regional statistics are stale and cannot establish current regional or local conditions.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-wp10-stale-not-safe",
+      "source": "us_drought_monitor_rest",
+      "description": "Stale evidence is not proof of no drought, no land concern, or safe property conditions.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2024-06-20T00:00:00Z"
+}

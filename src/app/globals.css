@@ -1,0 +1,935 @@
+/*
+ * src/app/globals.css
+ *
+ * WP-03 Design System — Semantic CSS tokens for Sky to Porch.
+ *
+ * DARK-FIRST: :root defines the dark theme values.
+ * The .light class (applied by ThemeProvider) overrides for light mode.
+ *
+ * Token categories:
+ *   --canvas-*     page background
+ *   --surface-*    card/panel backgrounds
+ *   --border-*     borders and dividers
+ *   --text-*       text colors
+ *   --focus-*      focus ring
+ *   --status-*     loading / empty / error states
+ *   --hazard-*     per-hazard tokens (color + text label combination)
+ *
+ * All six hazard tokens pair color with a distinct visual marker so
+ * hazard meaning never relies on color alone.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────
+   DARK (default / dark-first)
+   ───────────────────────────────────────────── */
+:root {
+  /* ADR-0047: native form controls (date-picker icon, scrollbars) must
+     follow the theme; without this the calendar icon is dark-on-dark. */
+  color-scheme: dark;
+
+  /* Canvas */
+  --canvas-bg: #0d1117;
+  --canvas-bg-subtle: #161b22;
+
+  /* Surfaces */
+  --surface-1: #1c2128;
+  --surface-2: #22272e;
+  --surface-3: #2d333b;
+
+  /* Borders */
+  /* Form-control and navigation boundaries stay >=3:1 on surface-1/2. */
+  --border-default: #6e7681;
+  --border-subtle:  #2d333b;
+  --border-strong:  #545d68;
+
+  /* Text
+     Contrast on --surface-1 (#1c2128, L≈0.016):
+       --text-primary   #e6edf3 L≈0.855 → 13.5:1 ✓
+       --text-secondary #8b949e L≈0.318 →  5.6:1 ✓
+       --text-muted     #9ca3af L≈0.388 →  6.6:1 ✓  (was #6e7681 3.5:1 ✗)
+  */
+  --text-primary:   #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted:     #9ca3af;
+  --text-inverse:   #0d1117;
+  --text-link:      #58a6ff;
+
+  /* Focus — visible in both themes, ≥3:1 on surface-1
+     #4493f8 L≈0.258 on #1c2128 L≈0.016 → 4.7:1 ✓ (was #1f6feb 2.9:1 ✗) */
+  --focus-ring:     #4493f8;
+  --focus-ring-offset: #0d1117;
+
+  /* Status */
+  --status-loading-fg: #8b949e;
+  --status-empty-fg:   #8b949e;
+  --status-error-bg:   #3d1a1f;
+  --status-error-fg:   #f85149;
+  --status-error-border: #6e2b30;
+  /* PR4b: warning tokens were referenced by components but never defined,
+     so light-theme fallbacks leaked into dark mode (fire limitations box). */
+  --status-warning-bg:   #3a2d12;
+  --status-warning-fg:   #d29922;
+  --status-warning-border: #6e5423;
+
+  /* ── Hazard tokens ──────────────────────────
+     Each hazard uses a named icon class (defined below) in addition
+     to the background tint so color alone is never the only signal. */
+
+  /* fire_smoke  — warm red-orange */
+  --hazard-fire-smoke-bg:     #3d1a1a;
+  --hazard-fire-smoke-border: #f85149;
+  --hazard-fire-smoke-fg:     #ff7b72;
+  --hazard-fire-smoke-label:  "🔥"; /* supplementary; icon always shown */
+
+  /* flood_storm — blue */
+  --hazard-flood-storm-bg:     #0d2134;
+  --hazard-flood-storm-border: #388bfd;
+  --hazard-flood-storm-fg:     #79c0ff;
+  --hazard-flood-storm-label:  "🌊";
+
+  /* extreme_heat — amber */
+  --hazard-extreme-heat-bg:     #2b1e00;
+  --hazard-extreme-heat-border: #d29922;
+  --hazard-extreme-heat-fg:     #e3b341;
+  --hazard-extreme-heat-label:  "🌡️";
+
+  /* drought_land — brown/tan */
+  --hazard-drought-land-bg:     #1e1400;
+  --hazard-drought-land-border: #9e6a03;
+  --hazard-drought-land-fg:     #c98a3a;
+  --hazard-drought-land-label:  "🌵";
+
+  /* air_quality — purple/gray */
+  --hazard-air-quality-bg:     #1f1630;
+  --hazard-air-quality-border: #8957e5;
+  --hazard-air-quality-fg:     #b392f0;
+  --hazard-air-quality-label:  "💨";
+
+  /* earth_volcanoes — teal/green */
+  --hazard-earth-volcanoes-bg:     #0d2222;
+  --hazard-earth-volcanoes-border: #2ea043;
+  --hazard-earth-volcanoes-fg:     #3fb950;
+  --hazard-earth-volcanoes-label:  "🌋";
+}
+
+/* ─────────────────────────────────────────────
+   LIGHT override
+   Applied by ThemeProvider via `class="light"` on <html>
+   ───────────────────────────────────────────── */
+:root.light {
+  color-scheme: light;
+
+  /* Canvas */
+  --canvas-bg: #ffffff;
+  --canvas-bg-subtle: #f6f8fa;
+
+  /* Surfaces */
+  --surface-1: #f6f8fa;
+  --surface-2: #eaeef2;
+  --surface-3: #d0d7de;
+
+  /* Borders */
+  /* #7d8590 is 3.2:1 on surface-2 and 3.5:1 on surface-1. */
+  --border-default: #7d8590;
+  --border-subtle:  #eaeef2;
+  --border-strong:  #8c959f;
+
+  /* Text
+     Contrast on --surface-1 (#f6f8fa, L≈0.961):
+       --text-primary   #1f2328 L≈0.014 → 16.2:1 ✓
+       --text-secondary #57606a L≈0.133 →  6.6:1 ✓
+       --text-muted     #5c6370 L≈0.129 →  6.4:1 ✓  (was #8c959f 2.9:1 ✗)
+  */
+  --text-primary:   #1f2328;
+  --text-secondary: #57606a;
+  --text-muted:     #5c6370;
+  --text-inverse:   #ffffff;
+  --text-link:      #0969da;
+
+  /* Focus — ≥3:1 on surface-1
+     #0969da L≈0.182 on #f6f8fa L≈0.961 → 4.3:1 ✓ */
+  --focus-ring:     #0969da;
+  --focus-ring-offset: #ffffff;
+
+  /* Status */
+  --status-loading-fg: #57606a;
+  --status-empty-fg:   #57606a;
+  --status-error-bg:   #fff5f5;
+  --status-error-fg:   #cf222e;
+  --status-error-border: #ffc1c1;
+  --status-warning-bg:   #fff8c5;
+  --status-warning-fg:   #9a6700;
+  --status-warning-border: #d4a72c;
+
+  /* Hazards — light variants */
+  --hazard-fire-smoke-bg:     #fff0ee;
+  --hazard-fire-smoke-border: #cf222e;
+  --hazard-fire-smoke-fg:     #a40e26;
+
+  --hazard-flood-storm-bg:     #ddf4ff;
+  --hazard-flood-storm-border: #0969da;
+  --hazard-flood-storm-fg:     #0a3069;
+
+  --hazard-extreme-heat-bg:    #fff8c5;
+  --hazard-extreme-heat-border: #9a6700;
+  --hazard-extreme-heat-fg:    #7d4e00;
+
+  --hazard-drought-land-bg:    #faf0e4;
+  --hazard-drought-land-border: #7d4e00;
+  --hazard-drought-land-fg:    #5c3800;
+
+  --hazard-air-quality-bg:     #fbefff;
+  --hazard-air-quality-border: #8250df;
+  --hazard-air-quality-fg:     #5a2ca0;
+
+  --hazard-earth-volcanoes-bg:     #dafbe1;
+  --hazard-earth-volcanoes-border: #1a7f37;
+  --hazard-earth-volcanoes-fg:     #116329;
+}
+
+/* ─────────────────────────────────────────────
+   Base styles using semantic tokens
+   ───────────────────────────────────────────── */
+body {
+  background-color: var(--canvas-bg);
+  color: var(--text-primary);
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Site-wide readable text rhythm. Component layout stays local; typography is
+   consistent across Query, Map/non-map, and Insights. */
+:where(h1, h2, h3, h4) {
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
+:where(p, li, dd) {
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+:where(a) {
+  text-underline-offset: 3px;
+}
+
+:where(button, input, select, textarea) {
+  line-height: 1.35;
+}
+
+/* Results are scan-first: short measure, clear paragraph/list spacing, and
+   cards for separate records. Inline component styles may refine these rules. */
+[data-testid="insight-navigation"] [role="tabpanel"] {
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+[data-testid="insight-navigation"] [role="tabpanel"] :where(p) {
+  max-width: 68ch;
+  margin-block: 0 0.75rem;
+}
+
+[data-testid="insight-navigation"] [role="tabpanel"] :where(h3) {
+  margin-block: 1rem 0.45rem;
+  font-size: 16px;
+}
+
+[data-testid="insight-navigation"] [role="tabpanel"] :where(ul, ol) {
+  display: grid;
+  gap: 0.45rem;
+  margin-block: 0.5rem 1rem;
+  padding-inline-start: 1.35rem;
+}
+
+[data-testid="insight-navigation"] [role="tabpanel"] :where(li) {
+  padding-inline-start: 0.15rem;
+  line-height: 1.5;
+}
+
+[data-testid="insight-navigation"] [role="tabpanel"] :where(article) {
+  margin-block: 0.75rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+[data-testid="insight-navigation"] [role="tabpanel"] :where(article p:last-child) {
+  margin-bottom: 0;
+}
+
+/* ADR-0047: unbroken tokens (payload hashes, URLs) must wrap inside their
+   card — the p/li/dd rule above misses the evidence panels' divs/spans. */
+[data-testid="insight-navigation"] [role="tabpanel"] :where(div, span, code) {
+  overflow-wrap: anywhere;
+}
+
+/* Consistent focus ring — visible in both themes */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ─────────────────────────────────────────────
+   ADR-0047 visual polish
+   Components style themselves inline; these rules only add properties no
+   inline style sets (cursor, transition, filter, box-shadow), so they
+   compose with every existing button and card without specificity fights.
+   ───────────────────────────────────────────── */
+
+/* Buttons: pointer affordance and hover/active feedback everywhere.
+   brightness() works on any background, including the inline-styled ones. */
+:where(button) {
+  cursor: pointer;
+  transition: filter 120ms ease, box-shadow 120ms ease;
+}
+
+:where(button):hover:not(:disabled) {
+  filter: brightness(1.2);
+}
+
+:where(button):active:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+:root.light :where(button):hover:not(:disabled) {
+  filter: brightness(0.94);
+}
+
+:root.light :where(button):active:not(:disabled) {
+  filter: brightness(0.88);
+}
+
+:where(button):disabled {
+  cursor: not-allowed;
+}
+
+/* Form fields get a quieter version of the same feedback. */
+:where(select, textarea, input:not([type="checkbox"]):not([type="radio"])) {
+  transition: filter 120ms ease;
+}
+
+:where(select, textarea, input:not([type="checkbox"]):not([type="radio"])):hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+:root.light
+  :where(select, textarea, input:not([type="checkbox"]):not([type="radio"])):hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+:where(input[type="checkbox"]) {
+  cursor: pointer;
+}
+
+/* Soft elevation separates cards from their panel background. */
+[data-testid$="demo-gallery"],
+[data-testid="insight-navigation"] [role="tabpanel"] :where(article),
+.about-hazard-card,
+.about-source-card {
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.28);
+}
+
+:root.light [data-testid$="demo-gallery"],
+:root.light [data-testid="insight-navigation"] [role="tabpanel"] :where(article),
+:root.light .about-hazard-card,
+:root.light .about-source-card {
+  box-shadow: 0 1px 3px rgb(31 35 40 / 0.09);
+}
+
+/* Demo story rows lift slightly under the pointer. */
+[data-testid*="gq-story-"] {
+  transition: box-shadow 120ms ease;
+}
+
+[data-testid*="gq-story-"]:hover {
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+}
+
+:root.light [data-testid*="gq-story-"]:hover {
+  box-shadow: 0 2px 8px rgb(31 35 40 / 0.14);
+}
+
+/* Reduced motion — no transitions by default */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Skip link — visible only on focus */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0.5rem;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: var(--focus-ring);
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 0 0 4px 4px;
+  text-decoration: none;
+}
+.skip-link:focus {
+  top: 0;
+}
+
+/* Horizontal overflow guard */
+html,
+body {
+  overflow-x: hidden;
+}
+
+/* PR4b — WCAG 2.5.5 target size on touch devices only. Coarse-pointer
+   media keeps the desktop design untouched while giving fingers a 44px
+   hit area on every interactive control. Checkboxes keep their visual
+   size; their label rows provide the effective target. */
+@media (pointer: coarse) {
+  button,
+  select,
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  input[type="search"] {
+    min-height: 44px;
+  }
+}
+
+/* Utility: visually hidden but accessible */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Compact evidence-coverage About surface. Details remain collapsed by
+   default so technical source notes do not become a wall of text. */
+.app-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.app-about-button,
+.about-close,
+.about-section-picker button {
+  border: 1px solid var(--border-default);
+  border-radius: 5px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.app-about-button {
+  padding: 4px 10px;
+  font-size: 14px;
+}
+
+/* ADR-0047: enlarged dialog so Evidence coverage can breathe; full-page
+   was rejected (routing/structure change). Owner feedback trimmed the
+   first 1200px attempt back: text measures left the right side empty. */
+.about-dialog {
+  box-sizing: border-box;
+  width: min(980px, calc(100vw - 2rem));
+  height: min(92vh, 1000px);
+  height: min(92dvh, 1000px);
+  max-width: 980px;
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  box-shadow: 0 20px 70px rgb(0 0 0 / 0.45);
+  overflow: hidden;
+}
+
+.about-dialog::backdrop {
+  background: rgb(5 10 16 / 0.72);
+}
+
+.about-dialog-frame {
+  display: grid;
+  /* ADR-0051: a fixed title bar, then one scrolling body holding the intro,
+     the sticky tabs, and the catalogue. */
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.about-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 1rem;
+  padding: 1.4rem 1.75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.about-dialog-header h2,
+.about-dialog-header p {
+  margin: 0;
+}
+
+.about-dialog-header h2 {
+  font-size: 21px;
+}
+
+.about-dialog-header #about-summary {
+  max-width: 70ch;
+  margin-top: 0.4rem;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+/* ADR-0051: the product statement, above the source catalogue it introduces. */
+.about-intro {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.9rem 1.75rem 0;
+}
+
+.about-intro p {
+  max-width: 84ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/*
+ * ADR-0053: the colophon is a note about the project, not more of the
+ * product statement, so it takes the app's established aside treatment
+ * (tinted panel, hairline, radius) rather than another paragraph in the
+ * same register. Text stays 14px: the About E2E forbids anything smaller.
+ */
+.about-colophon {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+/*
+ * ADR-0053: 12px is a deliberate, owner-granted exception to the 14px floor
+ * the rest of the app holds. It applies ONLY to this colophon, so the block
+ * reads as an annotation rather than more body copy. The About E2E carves
+ * out this one selector and still forbids anything smaller anywhere else.
+ */
+.about-colophon p {
+  max-width: 84ch;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.about-colophon a {
+  color: var(--text-link);
+}
+
+.about-intro .about-eyebrow {
+  margin-top: 0.35rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-link);
+}
+
+.about-eyebrow {
+  color: var(--text-link);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.about-close {
+  padding: 0.45rem 0.7rem;
+}
+
+.about-section-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
+  /* Sticky so switching sections never requires scrolling back up. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.8rem 1.75rem;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.about-section-picker button {
+  min-width: 0;
+  flex: 0 1 auto;
+  padding: 0.45rem 0.75rem;
+  color: var(--text-secondary);
+}
+
+.about-section-picker button[aria-pressed="true"] {
+  border-color: var(--focus-ring);
+  background: var(--surface-3);
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+/* ADR-0047: bulk expand/collapse sits apart from the section tabs. */
+.about-bulk-controls {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.about-bulk-controls button {
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+/* The dialog's single scroll owner. */
+.about-dialog-body {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.about-dialog-content {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 1.1rem 1.75rem 1.6rem;
+}
+
+.about-section-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.about-card-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.about-lead {
+  max-width: 90ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+/* ADR-0047: small headings give the lead paragraphs a scannable hierarchy;
+   the shared h3 style lives with .about-gap-summary below. */
+.about-lead-block {
+  display: grid;
+  gap: 0.3rem;
+}
+
+/* ADR-0047: the gap summary is a heading, a status-grouped list, and two
+   short paragraphs instead of one wall paragraph; measure capped at 90ch. */
+.about-gap-summary {
+  display: grid;
+  gap: 0.45rem;
+  max-width: 90ch;
+  line-height: 1.55;
+}
+
+.about-gap-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-inline-start: 1.2rem;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+.about-gap-list strong {
+  color: var(--text-primary);
+}
+
+/* Ties the prepared row to the amber "Prepared" status pill. */
+.about-gap-list .about-gap-label-prepared {
+  color: var(--status-warning-fg);
+}
+
+.about-lead-block h3,
+.about-gap-summary h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.about-status-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.about-status-key span {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.about-hazard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.85rem;
+}
+
+/* The wider ADR-0047 dialog fits the six hazards as a tidy 3×2. */
+@media (min-width: 1100px) {
+  .about-hazard-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.about-hazard-card[open] {
+  grid-column: 1 / -1;
+}
+
+.about-hazard-card,
+.about-source-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.about-hazard-card > summary,
+.about-source-card > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.85rem 1rem;
+  padding-left: 2.1rem;
+  position: relative;
+  cursor: pointer;
+}
+
+.about-hazard-card > summary::before,
+.about-source-card > summary::before {
+  position: absolute;
+  left: 0.8rem;
+  content: "›";
+  color: var(--text-link);
+  font-size: 18px;
+  line-height: 1;
+  transform: rotate(0deg);
+}
+
+.about-hazard-card[open] > summary::before,
+.about-source-card[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.about-hazard-card > summary small,
+.about-source-card > summary small {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.about-card-list,
+.about-source-body {
+  padding: 0 0.9rem 0.9rem;
+}
+
+.about-status {
+  flex: 0 0 auto;
+  max-width: 15rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-align: center;
+}
+
+.about-status[data-status="live_integrated"],
+.about-status[data-status="live_key_required"] {
+  border-color: var(--hazard-earth-volcanoes-border);
+  color: var(--hazard-earth-volcanoes-fg);
+}
+
+/* ADR-0047: Prepared gets the warning hue so the three statuses read as
+   green / amber / neutral. The pill text still names the status, so color
+   never carries the meaning alone. */
+.about-status[data-status="prepared_for_live"] {
+  border-color: var(--status-warning-border);
+  color: var(--status-warning-fg);
+}
+
+.about-source-body {
+  display: grid;
+  gap: 0.6rem;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.about-source-body p,
+.about-source-body dl {
+  margin: 0;
+}
+
+.about-source-body dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 0.9rem;
+}
+
+.about-source-body dt {
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.about-source-body dd {
+  margin: 0.12rem 0 0;
+}
+
+.about-source-body a {
+  color: var(--text-link);
+}
+
+.about-gate,
+.about-limit {
+  padding-left: 0.65rem;
+  border-left: 3px solid var(--border-default);
+}
+
+@media (max-width: 720px) {
+  .mobile-header {
+    height: auto !important;
+    min-height: 52px;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.4rem 0.65rem !important;
+  }
+
+  .app-header-controls {
+    gap: 0.3rem;
+  }
+
+  .app-about-button {
+    padding-inline: 0.55rem;
+  }
+
+  .about-dialog {
+    width: calc(100vw - 1rem);
+    height: min(92vh, 820px);
+    height: min(92dvh, 820px);
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .about-dialog-header,
+  .about-dialog-content {
+    padding-inline: 0.85rem;
+  }
+
+  .about-section-picker,
+  .about-intro {
+    padding-inline: 0.85rem;
+  }
+
+  /* The intro must not eat the whole first screen on a phone; the coverage
+     catalogue below it still has to be reachable without a long scroll. */
+  .about-intro {
+    gap: 0.3rem;
+    padding-top: 0.7rem;
+  }
+
+  .about-dialog-header #about-summary {
+    font-size: 14px;
+  }
+
+  .about-section-picker button {
+    flex: 1 1 9rem;
+  }
+
+  /* The bulk controls take their own tidy row instead of inheriting the
+     stretchy section-tab sizing. */
+  .about-bulk-controls {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
+  .about-bulk-controls button {
+    flex: 1 1 auto;
+  }
+
+  .about-hazard-grid,
+  .about-source-body dl {
+    grid-template-columns: 1fr;
+  }
+
+  .about-source-card > summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   WP-04 Map container
+   ───────────────────────────────────────────── */
+
+/* MapLibre GL canvas must fill its container */
+.maplibregl-map {
+  width: 100%;
+  height: 100%;
+}
+
+/* Ensure the map section in the desktop shell fills the column */
+[data-testid="map-area"] {
+  height: 100%;
+}
+
+/* MapLibre attribution — always visible, bottom right */
+.maplibregl-ctrl-attrib {
+  font-size: 14px;
+}
+
+/* Pipeline loading indicator — current-stage dot pulse (states/pipeline-loading.tsx).
+   Neutralized by the global prefers-reduced-motion rule above. */
+@keyframes pipeline-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.86); }
+}

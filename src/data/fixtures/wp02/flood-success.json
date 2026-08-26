@@ -1,0 +1,146 @@
+{
+  "_fixtureId": "wp02-flood-success-houston-2024-07-08",
+  "_fixtureDescription": "Successful normalized flood-evidence fixture. NASA GIBS IMERG visualization for 2024-07-08, Houston-area bounding box -97,28,-94,31, plus USGS gage-height observations for site 08074500 (Whiteoak Bayou at Houston).",
+  "_capturedBy": "Imported prior-work fixture; see PRIOR_WORK.md",
+  "_fixtureWarning": "This is a test fixture, not a live data result. Do not present as current evidence.",
+  "evidenceId": "evd-flood-houston-20240708-fixture",
+  "hazardId": "flood_storm",
+  "intentId": "intent-fixture-flood-houston-001",
+  "evidenceState": "observations_returned",
+  "dataMode": "fixture",
+  "observations": [
+    {
+      "observationId": "obs-gibs-imerg-houston-001",
+      "provenance": {
+        "sourceId": "nasa_gibs_imerg",
+        "sourceUrl": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=IMERG_Precipitation_Rate&SRS=EPSG%3A4326&STYLES=&WIDTH=512&HEIGHT=512&TIME=2024-07-08&BBOX=-97,28,-94,31",
+        "retrievedAt": "2026-08-03T23:00:00Z",
+        "observedAt": "2024-07-08T00:00:00Z",
+        "product": "GPM_3IMERGHH (GIBS alias IMERG_Precipitation_Rate), concept C2723754847-GES_DISC",
+        "payloadHash": "236E461C8EC64D7D0D3130D01D204EB2E8D4CEAADBBDCC59107DB51768A122B6",
+        "requestParameters": {
+          "SERVICE": "WMS",
+          "VERSION": "1.1.1",
+          "REQUEST": "GetMap",
+          "LAYERS": "IMERG_Precipitation_Rate",
+          "SRS": "EPSG:4326",
+          "TIME": "2024-07-08",
+          "BBOX": "-97,28,-94,31",
+          "WIDTH": "512",
+          "HEIGHT": "512",
+          "FORMAT": "image/png"
+        }
+      },
+      "variableName": "GIBS IMERG Precipitation Rate visualization PNG",
+      "textValue": "PNG tile received and matched the pinned preflight payload; no numeric precipitation value was derived from colors",
+      "unit": "PNG tile (visual evidence only; numeric rainfall not inferred from colors)",
+      "dataMode": "fixture",
+      "qualifiers": [],
+      "metadata": {
+        "httpStatus": "200",
+        "contentType": "image/png",
+        "bytes": "8627",
+        "requestedTime": "2024-07-08",
+        "boundingBox": "-97,28,-94,31",
+        "layerAlias": "IMERG_Precipitation_Rate",
+        "conceptIdFinal": "C2723754847-GES_DISC",
+        "conceptIdNRT": "C2723758340-GES_DISC"
+      }
+    },
+    {
+      "observationId": "obs-usgs-gage-houston-001",
+      "provenance": {
+        "sourceId": "usgs_instantaneous_values",
+        "sourceUrl": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=08074500&startDT=2024-07-08&endDT=2024-07-10&parameterCd=00065&siteStatus=all",
+        "retrievedAt": "2026-08-03T23:38:01.080Z",
+        "observedAt": "2024-07-08T00:00:00-05:00",
+        "product": "USGS NWIS Instantaneous Values",
+        "payloadHash": "806521C12BE5EF7338FBAF4EAB968690F3464344B8CFAAB1574507FCB8E43D63",
+        "requestParameters": {
+          "sites": "08074500",
+          "startDT": "2024-07-08",
+          "endDT": "2024-07-10",
+          "parameterCd": "00065",
+          "format": "json"
+        }
+      },
+      "variableName": "Gage height",
+      "value": 38.72,
+      "unit": "ft",
+      "dataMode": "fixture",
+      "qualifiers": ["A"],
+      "periodStart": "2024-07-08T00:00:00-05:00",
+      "periodEnd": "2024-07-10T23:45:00-05:00",
+      "metadata": {
+        "siteId": "08074500",
+        "siteName": "Whiteoak Bayou at Houston",
+        "parameterCd": "00065",
+        "parameterName": "Gage height",
+        "totalValues": "288",
+        "observedRangeMin": "9.14",
+        "observedRangeMax": "38.72",
+        "qualifierNote": "A = Approved for publication; processing and review completed",
+        "serviceDisclaimer": "USGS Water Services states that provisional data are subject to revision"
+      }
+    }
+  ],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "GPM (Global Precipitation Measurement)",
+      "agency": "NASA / JAXA",
+      "purpose": "Global precipitation measurement via IMERG multi-satellite product",
+      "selectionReason": "Credential-free GIBS visualization of IMERG precipitation for WP-02 Flood gate",
+      "contributedObservationIds": ["obs-gibs-imerg-houston-001"],
+      "retrievalStatus": "success",
+      "keyLimitation": "GIBS PNG is visual evidence only; numeric rainfall may not be inferred from pixel colors. IMERG is a model estimate, not a direct measurement.",
+      "datasetId": "GPM_3IMERGHH_v07"
+    }
+  ],
+  "freshness": {
+    "status": "historical",
+    "classificationBasis": "historical_context",
+    "mostRecentObservationAt": "2024-07-10T23:45:00-05:00",
+    "evaluatedAt": "2026-08-03T23:40:00Z",
+    "ageSeconds": 65127300,
+    "note": "Historical fixture from 2024-07-08 to 2024-07-10. This is a test fixture; age does not reflect a live retrieval."
+  },
+  "confidence": {
+    "level": "low",
+    "rationale": "Visual GIBS precipitation signal is present in the Houston area on 2024-07-08. USGS gage at Whiteoak Bayou reached 38.72 ft (provisional). These are regional and single-station observations only; they do not establish a flood threshold or property-level flood conclusion."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-gibs-visual-001",
+      "source": "nasa_gibs_imerg",
+      "description": "GIBS PNG is visual evidence only. Numeric rainfall must not be inferred from pixel colors without a separately validated algorithm and calibrated color map.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-imerg-model-001",
+      "source": "nasa_gibs_imerg",
+      "description": "IMERG is a modelled precipitation estimate, not a direct measurement. Processing delay applies.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-usgs-provisional-001",
+      "source": "usgs_instantaneous_values",
+      "description": "USGS gage values are provisional and subject to revision.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-usgs-no-threshold-001",
+      "source": "usgs_instantaneous_values",
+      "description": "A single gage reading does not establish a universal flood threshold or a property-level flood conclusion.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-flood-fixture-001",
+      "source": "nasa_gibs_imerg",
+      "description": "This is a deterministic test fixture. It does not represent current or live conditions.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2026-08-03T23:40:00Z"
+}

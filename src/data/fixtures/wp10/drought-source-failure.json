@@ -1,0 +1,60 @@
+{
+  "_fixtureId": "wp10-drought-source-failure",
+  "_fixtureDescription": "Deterministic total source-failure state; no successful fixture, cached value, or alternate source is substituted.",
+  "_fixtureWarning": "SOURCE FAILURE is not no drought, no land concern, no impact, or no danger.",
+  "evidenceId": "evd-wp10-drought-source-failure",
+  "hazardId": "drought_land",
+  "intentId": "intent-wp10-drought-source-failure",
+  "evidenceState": "source_failure",
+  "dataMode": "failed",
+  "observations": [],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "Terra GIBS NDVI candidate",
+      "agency": "NASA",
+      "purpose": "Regional 16-day vegetation visualization.",
+      "selectionReason": "Required primary source role for the prepared WP-10 path.",
+      "contributedObservationIds": [],
+      "retrievalStatus": "failed",
+      "keyLimitation": "Failure provides no image, numeric NDVI, vegetation condition, or drought conclusion.",
+      "datasetId": "MODIS_Terra_L3_NDVI_16Day_v6.1_STD"
+    },
+    {
+      "missionName": "U.S. Drought Monitor regional statistics candidate",
+      "agency": "NDMC / USDA / NOAA",
+      "purpose": "Weekly regional drought-category confirmation.",
+      "selectionReason": "Required supporting regional source role for the prepared WP-10 path.",
+      "contributedObservationIds": [],
+      "retrievalStatus": "failed",
+      "keyLimitation": "Failure provides no regional category percentages or local safety conclusion.",
+      "datasetId": "USDM_StateStatistics_PercentArea"
+    }
+  ],
+  "freshness": {
+    "status": "unknown",
+    "classificationBasis": "no_observation_time",
+    "evaluatedAt": "2026-08-12T22:30:00Z",
+    "note": "No observation time exists because no source evidence was assembled."
+  },
+  "confidence": {
+    "level": "insufficient",
+    "rationale": "Both required source roles failed; no drought, vegetation, soil, property, crop, or water-supply conclusion is supported."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-wp10-failure-not-safe",
+      "source": "nasa_gibs_modis_ndvi_16day",
+      "description": "Source failure is missing evidence, not evidence of healthy vegetation, no drought, or safe land conditions.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-wp10-failure-no-fallback",
+      "source": "us_drought_monitor_rest",
+      "description": "No successful fixture, stale value, cached value, or alternate source was substituted for the failed source path.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2026-08-12T22:30:00Z"
+}

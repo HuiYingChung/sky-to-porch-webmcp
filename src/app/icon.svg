@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <!--
+    ADR-0050: favicon variant of the Sky to Porch mark. Redrawn rather than
+    scaled: at 16px the header mark's 2.5px arc and three narrow bars fall
+    below a pixel and mush together, so the strokes are heavier, the bars
+    are wider, and there are two of them instead of three.
+
+    Fixed accent colour, not currentColor: a standalone favicon has no
+    inherited colour, and browser tab strips are light in one theme and dark
+    in the other. #4493f8 is the app's own focus-ring blue and stays legible
+    on both.
+  -->
+  <g stroke="#4493f8" fill="#4493f8">
+    <path d="M9 18 Q32 6 55 18" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+    <circle cx="32" cy="12.5" r="4.5" stroke="none"/>
+    <path d="M11 38 L32 22 L53 38 V57 H11 Z" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
+    <rect x="20" y="45" width="9" height="9" rx="1.5" stroke="none"/>
+    <rect x="34" y="38" width="9" height="16" rx="1.5" stroke="none"/>
+  </g>
+</svg>

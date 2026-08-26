@@ -1,0 +1,109 @@
+{
+  "_fixtureId": "wp10-drought-synthetic-no-observation",
+  "_fixtureDescription": "Synthetic empty-row USDM contract case. It is not an assertion that an actual request returned no row.",
+  "_fixtureWarning": "NO OBSERVATION is not None=100, no drought, no impact, or no danger.",
+  "evidenceId": "evd-wp10-drought-synthetic-no-observation",
+  "hazardId": "drought_land",
+  "intentId": "intent-wp10-drought-synthetic-no-observation",
+  "evidenceState": "no_observation",
+  "dataMode": "fixture",
+  "observations": [
+    {
+      "observationId": "obs-wp10-usdm-synthetic-no-row-20240611",
+      "provenance": {
+        "sourceId": "us_drought_monitor_rest",
+        "sourceUrl": "https://usdmdataservices.unl.edu/api/StateStatistics/GetDroughtSeverityStatisticsByAreaPercent?aoi=04&startdate=6%2F11%2F2024&enddate=6%2F11%2F2024&statisticsType=1",
+        "sourceRecordId": "synthetic-contract-fixture#StateStatistics#04#2024-06-11#no-row",
+        "retrievedAt": "2026-08-12T22:30:00Z",
+        "observedAt": "2024-06-11T00:00:00Z",
+        "product": "U.S. Drought Monitor percent-of-area statistics",
+        "payloadHash": "8025c8334bb6bf55c98ddb228ba92026e70cccd169a0c84faf3a6c26b414fd87",
+        "requestParameters": {
+          "areaType": "StateStatistics",
+          "aoi": "04",
+          "startDate": "6/11/2024",
+          "endDate": "6/11/2024",
+          "statisticsType": "1",
+          "accept": "application/json"
+        }
+      },
+      "variableName": "Regional drought statistics response rows",
+      "textValue": "no_regional_row_returned",
+      "dataMode": "fixture",
+      "qualifiers": [
+        "synthetic_fixture",
+        "regional_state_scale",
+        "weekly_product",
+        "d0_is_not_drought",
+        "property_inference_not_supported"
+      ],
+      "metadata": {
+        "droughtRole": "regional_drought_statistics",
+        "areaType": "StateStatistics",
+        "stateFips": "04",
+        "areaName": "Arizona",
+        "statisticsFormat": "traditional_cumulative_percent_of_area",
+        "mapValidDay": "Tuesday",
+        "releaseDay": "Thursday",
+        "cadenceDays": 7,
+        "resultRowCount": 0,
+        "fixtureKind": "synthetic_contract_fixture_no_source_payload"
+      }
+    }
+  ],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "U.S. Drought Monitor synthetic empty-row scenario",
+      "agency": "NDMC / USDA / NOAA",
+      "purpose": "Exercise an explicit zero-row response state without manufacturing zero drought percentages.",
+      "selectionReason": "Required WP-10 no-observation boundary test.",
+      "contributedObservationIds": ["obs-wp10-usdm-synthetic-no-row-20240611"],
+      "retrievalStatus": "success",
+      "keyLimitation": "The zero-row state is synthetic and is not equivalent to None=100 or D0-D4=0.",
+      "datasetId": "USDM_StateStatistics_PercentArea"
+    },
+    {
+      "missionName": "Terra synthetic fixture scenario",
+      "agency": "NASA",
+      "purpose": "Potential vegetation visualization source.",
+      "selectionReason": "Not attempted in the isolated USDM empty-row test.",
+      "contributedObservationIds": [],
+      "retrievalStatus": "not_attempted",
+      "keyLimitation": "No GIBS visualization evidence is present in this fixture.",
+      "datasetId": "MODIS_Terra_L3_NDVI_16Day_v6.1_STD"
+    }
+  ],
+  "freshness": {
+    "status": "unknown",
+    "classificationBasis": "no_observation_time",
+    "evaluatedAt": "2026-08-12T22:30:00Z",
+    "note": "The marker preserves the requested date but contains no observed regional statistics row."
+  },
+  "confidence": {
+    "level": "insufficient",
+    "rationale": "No regional statistics or satellite visualization is available; no drought or safety conclusion can be made."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-wp10-no-row-not-none",
+      "source": "us_drought_monitor_rest",
+      "description": "No returned row is missing evidence; it must not be converted to None=100, D0-D4=0, no drought, or no danger.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-wp10-no-row-no-gibs",
+      "source": "nasa_gibs_modis_ndvi_16day",
+      "description": "No satellite visualization was attempted or substituted in this isolated no-observation fixture.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-wp10-no-row-synthetic",
+      "source": "us_drought_monitor_rest",
+      "description": "This is a synthetic test state, not a retained source response.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2026-08-12T22:30:00Z"
+}

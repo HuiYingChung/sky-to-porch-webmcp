@@ -1,0 +1,32 @@
+# Line-ending normalization.
+# Normalize all text files to LF in the repository.
+# Windows checkouts may use CRLF locally; the repository stores LF.
+* text=auto eol=lf
+
+# Explicitly mark binary files as binary to prevent normalization.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+
+# Geospatial and scientific data — binary.
+*.tif binary
+*.tiff binary
+*.nc binary
+*.hdf5 binary
+*.h5 binary
+*.grib binary
+*.grib2 binary
+*.gpkg binary
+*.mbtiles binary
+*.pmtiles binary
+*.las binary
+*.laz binary
+*.jp2 binary

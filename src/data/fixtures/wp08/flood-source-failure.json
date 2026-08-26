@@ -1,0 +1,51 @@
+{
+  "_fixtureId": "wp08-flood-source-failure",
+  "_fixtureDescription": "Deterministic Flood source-failure fixture. No live request was made and no successful fixture was substituted.",
+  "_fixtureWarning": "Source failure is not proof of no flood danger, no property impact, or a safe route.",
+  "evidenceId": "evd-flood-source-failure-fixture",
+  "hazardId": "flood_storm",
+  "intentId": "intent-fixture-flood-source-failure-001",
+  "evidenceState": "source_failure",
+  "dataMode": "failed",
+  "observations": [],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "GPM (Global Precipitation Measurement)",
+      "agency": "NASA / JAXA",
+      "purpose": "Global precipitation visualization through GIBS IMERG",
+      "selectionReason": "Required Flood precipitation-visualization source",
+      "contributedObservationIds": [],
+      "retrievalStatus": "failed",
+      "keyLimitation": "The source failed. No visualization, numeric rainfall, or safety conclusion is available.",
+      "datasetId": "GIBS IMERG layer alias; version not retrieved"
+    }
+  ],
+  "freshness": {
+    "status": "unknown",
+    "classificationBasis": "no_observation_time",
+    "evaluatedAt": "2026-08-11T12:00:00Z",
+    "note": "No observation time exists because the deterministic source-failure case returned no data."
+  },
+  "confidence": {
+    "level": "insufficient",
+    "rationale": "Required Flood sources failed. Missing evidence is not evidence of no danger."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-flood-source-failure-not-safe-001",
+      "source": "nasa_gibs_imerg",
+      "description": "Source failure is not proof of zero precipitation, no flooding, no property impact, or a safe route.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-flood-source-failure-no-fallback-001",
+      "source": "usgs_instantaneous_values",
+      "description": "No stale, cached, or successful fixture result was substituted for the failed retrieval.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2026-08-11T12:00:00Z"
+}
+

@@ -1,0 +1,94 @@
+{
+  "_fixtureId": "wp02-flood-unsupported-coverage-1990-01-01",
+  "_fixtureDescription": "Unsupported-coverage fixture. NASA GIBS IMERG request with TIME=1990-01-01, Houston-area bounding box. IMERG does not cover the pre-satellite era; the response is a transparent/no-data PNG. This is unsupported_coverage, NOT zero rainfall and NOT no danger.",
+  "_capturedBy": "Imported prior-work fixture; see PRIOR_WORK.md",
+  "_fixtureWarning": "This is a test fixture, not a live data result. unsupported_coverage is NOT zero rainfall and NOT proof of no danger.",
+  "evidenceId": "evd-flood-gibs-1990-unsupported-fixture",
+  "hazardId": "flood_storm",
+  "intentId": "intent-fixture-flood-1990-001",
+  "evidenceState": "unsupported_coverage",
+  "dataMode": "fixture",
+  "observations": [
+    {
+      "observationId": "obs-gibs-imerg-1990-001",
+      "provenance": {
+        "sourceId": "nasa_gibs_imerg",
+        "sourceUrl": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=IMERG_Precipitation_Rate&SRS=EPSG%3A4326&STYLES=&WIDTH=512&HEIGHT=512&TIME=1990-01-01&BBOX=-97,28,-94,31",
+        "retrievedAt": "2026-08-03T23:00:00Z",
+        "observedAt": "unknown",
+        "product": "GIBS IMERG_Precipitation_Rate — pre-IMERG era (unsupported)",
+        "payloadHash": "074065F07E35265D9695CCED0F42844DBB02E5766C4ED185D0A372B2D033B093",
+        "requestParameters": {
+          "SERVICE": "WMS",
+          "VERSION": "1.1.1",
+          "REQUEST": "GetMap",
+          "LAYERS": "IMERG_Precipitation_Rate",
+          "SRS": "EPSG:4326",
+          "TIME": "1990-01-01",
+          "BBOX": "-97,28,-94,31",
+          "WIDTH": "512",
+          "HEIGHT": "512",
+          "FORMAT": "image/png"
+        }
+      },
+      "variableName": "GIBS IMERG Precipitation Rate visualization PNG (pre-IMERG era)",
+      "textValue": "Transparent/no-data PNG returned. IMERG does not cover dates before approximately 2000.",
+      "unit": "PNG tile (transparent/no-data)",
+      "dataMode": "fixture",
+      "qualifiers": ["unsupported_era"],
+      "metadata": {
+        "httpStatus": "200",
+        "contentType": "image/png",
+        "bytes": "1096",
+        "requestedTime": "1990-01-01",
+        "boundingBox": "-97,28,-94,31",
+        "interpretation": "Transparent/no-data. Pre-IMERG era request. This is unsupported coverage, not zero rainfall."
+      }
+    }
+  ],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "GPM (Global Precipitation Measurement)",
+      "agency": "NASA / JAXA",
+      "purpose": "Global precipitation measurement via IMERG multi-satellite product",
+      "selectionReason": "WP-02 Flood gate unsupported-coverage case: GIBS returns transparent tile for pre-IMERG era",
+      "contributedObservationIds": ["obs-gibs-imerg-1990-001"],
+      "retrievalStatus": "partial",
+      "keyLimitation": "IMERG does not cover dates before approximately 2000. A transparent/no-data tile is unsupported_coverage, not zero rainfall, and not proof of no danger.",
+      "datasetId": "GPM_3IMERGHH_v07"
+    }
+  ],
+  "freshness": {
+    "status": "unknown",
+    "classificationBasis": "no_observation_time",
+    "evaluatedAt": "2026-08-03T23:00:00Z",
+    "note": "Unsupported-coverage fixture. No observation timestamp is available because the IMERG product does not cover the requested date."
+  },
+  "confidence": {
+    "level": "insufficient",
+    "rationale": "The requested date (1990-01-01) is outside IMERG coverage. The transparent/no-data PNG cannot be interpreted as a precipitation observation. No precipitation conclusion can be drawn from this response."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-gibs-pre-imerg-001",
+      "source": "nasa_gibs_imerg",
+      "description": "IMERG does not cover dates before approximately 2000. A transparent/no-data tile for a pre-IMERG date is unsupported_coverage, NOT zero rainfall and NOT proof of no precipitation hazard.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-gibs-unsupported-not-safe-001",
+      "source": "nasa_gibs_imerg",
+      "description": "Unsupported coverage does not mean no danger. It means the data source cannot provide evidence for this time period.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-flood-fixture-unsupported-001",
+      "source": "nasa_gibs_imerg",
+      "description": "This is a deterministic test fixture. It does not represent current or live conditions.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2026-08-03T23:00:00Z"
+}

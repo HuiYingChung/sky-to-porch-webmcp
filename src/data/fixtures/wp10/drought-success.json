@@ -1,0 +1,172 @@
+{
+  "_fixtureId": "wp10-drought-synthetic-success-arizona-gibs-2024-05-24-usdm-2024-06-04",
+  "_fixtureDescription": "Synthetic source-contract fixture for the prepared NASA GIBS NDVI visualization plus USDM Arizona regional statistics path. No source endpoint or payload was accessed.",
+  "_fixtureHashBasis": "The GIBS hash identifies synthetic-contract-fixture:nasa_gibs_modis_ndvi_16day:MODIS_Terra_L3_NDVI_16Day_v6.1_STD:2024-05-24:-115,31,-109,37:250m:no-source-payload, not a NASA response payload.",
+  "_fixtureWarning": "FIXTURE ONLY. Percentages are deliberately synthetic and must never be presented as an observed historical or current Arizona drought result.",
+  "evidenceId": "evd-wp10-drought-synthetic-success",
+  "hazardId": "drought_land",
+  "intentId": "intent-wp10-drought-synthetic-success",
+  "evidenceState": "observations_returned",
+  "dataMode": "fixture",
+  "observations": [
+    {
+      "observationId": "obs-wp10-gibs-synthetic-20240524",
+      "provenance": {
+        "sourceId": "nasa_gibs_modis_ndvi_16day",
+        "sourceUrl": "https://gibs.earthdata.nasa.gov/wms/epsg4326/std/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=MODIS_Terra_L3_NDVI_16Day_v6.1_STD&STYLES=&SRS=EPSG%3A4326&BBOX=-115%2C31%2C-109%2C37&WIDTH=256&HEIGHT=256&TIME=2024-05-24&FORMAT=image%2Fpng&TRANSPARENT=TRUE",
+        "retrievedAt": "2026-08-12T22:30:00Z",
+        "observedAt": "2024-05-24T00:00:00Z",
+        "product": "NASA GIBS MODIS Terra L3 NDVI 16-Day v6.1 Standard visualization",
+        "payloadHash": "ad1fd88ad02d9ed2a160cb187b534f8d9532bd9a4d41b4246c245ee60dffcba9",
+        "requestParameters": {
+          "SERVICE": "WMS",
+          "REQUEST": "GetMap",
+          "VERSION": "1.1.1",
+          "LAYERS": "MODIS_Terra_L3_NDVI_16Day_v6.1_STD",
+          "STYLES": "",
+          "SRS": "EPSG:4326",
+          "BBOX": "-115,31,-109,37",
+          "WIDTH": "256",
+          "HEIGHT": "256",
+          "TIME": "2024-05-24",
+          "FORMAT": "image/png",
+          "TRANSPARENT": "TRUE"
+        }
+      },
+      "variableName": "16-day NDVI visualization",
+      "textValue": "synthetic_visualization_contract_fixture",
+      "dataMode": "fixture",
+      "qualifiers": [
+        "synthetic_fixture",
+        "visualization_only",
+        "numeric_ndvi_not_inferred",
+        "regional_not_property"
+      ],
+      "metadata": {
+        "droughtRole": "satellite_vegetation_visualization",
+        "layerId": "MODIS_Terra_L3_NDVI_16Day_v6.1_STD",
+        "contentType": "image/png",
+        "imageWidth": 256,
+        "imageHeight": 256,
+        "nativeScaleMeters": 250,
+        "compositePeriodDays": 16,
+        "boundingBox": "-115,31,-109,37",
+        "byteLength": 0,
+        "opaqueSampleCount": 0,
+        "distinctColorCount": 0,
+        "fixtureKind": "synthetic_contract_fixture_no_source_payload"
+      }
+    },
+    {
+      "observationId": "obs-wp10-usdm-synthetic-20240604",
+      "provenance": {
+        "sourceId": "us_drought_monitor_rest",
+        "sourceUrl": "https://usdmdataservices.unl.edu/api/StateStatistics/GetDroughtSeverityStatisticsByAreaPercent?aoi=04&startdate=6%2F4%2F2024&enddate=6%2F4%2F2024&statisticsType=1",
+        "sourceRecordId": "synthetic-contract-fixture#StateStatistics#04#2024-06-04",
+        "retrievedAt": "2026-08-12T22:30:00Z",
+        "observedAt": "2024-06-04T00:00:00Z",
+        "product": "U.S. Drought Monitor percent-of-area statistics",
+        "payloadHash": "15737f7fb6a242cf28afeb9f33e009ec589cec07f8c4948ac90cc571ebe96369",
+        "requestParameters": {
+          "areaType": "StateStatistics",
+          "aoi": "04",
+          "startDate": "6/4/2024",
+          "endDate": "6/4/2024",
+          "statisticsType": "1",
+          "accept": "application/json"
+        }
+      },
+      "variableName": "Regional drought area statistics",
+      "textValue": "synthetic_regional_statistics_contract_fixture",
+      "dataMode": "fixture",
+      "qualifiers": [
+        "synthetic_fixture",
+        "regional_state_scale",
+        "weekly_product",
+        "d0_is_not_drought",
+        "property_inference_not_supported"
+      ],
+      "metadata": {
+        "droughtRole": "regional_drought_statistics",
+        "areaType": "StateStatistics",
+        "stateFips": "04",
+        "areaName": "Arizona",
+        "statisticsFormat": "traditional_cumulative_percent_of_area",
+        "unit": "percent",
+        "mapValidDay": "Tuesday",
+        "releaseDay": "Thursday",
+        "cadenceDays": 7,
+        "nonePct": 40,
+        "d0Pct": 60,
+        "d1Pct": 45,
+        "d2Pct": 25,
+        "d3Pct": 10,
+        "d4Pct": 0,
+        "fixtureKind": "synthetic_contract_fixture_no_source_payload"
+      }
+    }
+  ],
+  "derivedMetrics": [],
+  "missionAttributions": [
+    {
+      "missionName": "Terra synthetic fixture scenario",
+      "agency": "NASA",
+      "purpose": "Exercise the prepared GIBS MODIS Terra 16-day NDVI visualization contract without a source request.",
+      "selectionReason": "Credential-free vegetation-visualization candidate for WP-10 contract tests.",
+      "contributedObservationIds": ["obs-wp10-gibs-synthetic-20240524"],
+      "retrievalStatus": "success",
+      "keyLimitation": "Fixture success is simulated contract state, not evidence that a GIBS image was retrieved or inspected.",
+      "datasetId": "MODIS_Terra_L3_NDVI_16Day_v6.1_STD"
+    },
+    {
+      "missionName": "U.S. Drought Monitor synthetic fixture scenario",
+      "agency": "NDMC / USDA / NOAA",
+      "purpose": "Exercise the prepared weekly Arizona percent-area statistics contract without a source request.",
+      "selectionReason": "Regional confirmation candidate kept separate from satellite vegetation visualization.",
+      "contributedObservationIds": ["obs-wp10-usdm-synthetic-20240604"],
+      "retrievalStatus": "success",
+      "keyLimitation": "All percentages are synthetic; no actual Arizona USDM row was retrieved.",
+      "datasetId": "USDM_StateStatistics_PercentArea"
+    }
+  ],
+  "freshness": {
+    "status": "historical",
+    "classificationBasis": "historical_context",
+    "mostRecentObservationAt": "2024-06-04T00:00:00Z",
+    "evaluatedAt": "2026-08-12T22:30:00Z",
+    "ageSeconds": 69114600,
+    "note": "Pinned historical dates are used only to exercise contracts; this fixture does not describe observed conditions."
+  },
+  "confidence": {
+    "level": "low",
+    "rationale": "The fixture contains two separated synthetic source roles. It cannot establish any real drought, property, crop, soil-moisture, or water-supply condition."
+  },
+  "limitations": [
+    {
+      "limitationId": "lim-wp10-gibs-visual-only",
+      "source": "nasa_gibs_modis_ndvi_16day",
+      "description": "GIBS NDVI imagery is visualization only; numeric NDVI, vegetation trend, drought cause, or crop condition cannot be inferred from PNG colors.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-wp10-usdm-regional",
+      "source": "us_drought_monitor_rest",
+      "description": "USDM percentages are weekly regional context; D0 is not drought and no category establishes property or household water conditions.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-wp10-scale-mismatch",
+      "source": "nasa_gibs_modis_ndvi_16day",
+      "description": "The satellite visualization envelope and statewide USDM statistics use different scales and cannot be treated as property-level agreement.",
+      "required": true
+    },
+    {
+      "limitationId": "lim-wp10-synthetic-fixture",
+      "source": "us_drought_monitor_rest",
+      "description": "This is synthetic contract data. No science payload was requested, observed, downloaded, or persisted.",
+      "required": true
+    }
+  ],
+  "explanations": [],
+  "assembledAt": "2026-08-12T22:30:00Z"
+}
