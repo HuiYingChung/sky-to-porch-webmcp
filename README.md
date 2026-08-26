@@ -78,8 +78,14 @@ rate limits.
   cancellation through geocoding and evidence retrieval.
 - Rejects unknown fields, invalid coordinates, invalid or incomplete dates,
   and out-of-range radii.
-- Returns up to three place candidates when a name is ambiguous; it never
-  silently chooses one.
+- Returns up to three card-ready place choices when a name is ambiguous. Each
+  choice has a human-readable label and exact retry coordinates; the Agent
+  keeps every other input unchanged and never silently chooses one.
+- Shows an Agent action receipt after a shared-view update, keeps Evidence one
+  click away, and offers a one-step restore when another result was visible.
+- Opens Meaning with a compact evidence-state, source-count, and limitation-count
+  trust strip; incomplete or quiet evidence repeats that it does not mean no
+  danger.
 - Marks source-derived output as untrusted content and does not claim the tool
   is read-only because it intentionally changes the visible page state.
 - Keeps the compact tool result within the current approximately 1.5K-character

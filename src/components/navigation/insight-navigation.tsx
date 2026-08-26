@@ -28,6 +28,11 @@ import { PipelineLoading } from "@/components/states/pipeline-loading";
 import { RadiusScopeNote } from "@/components/states/radius-scope-note";
 import type { MissionSelectionState } from "@/components/missions/mission-selection";
 import { HAZARD_LABELS } from "@/lib/ui/query-draft";
+import {
+  formatAnalysisPlace,
+  formatAnalysisTime,
+  summarizeAnalysisTrust,
+} from "@/lib/analysis/presentation";
 
 export type InsightTab = "meaning" | "evidence" | "missions";
 
@@ -75,7 +80,13 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
     coverageGapResult,
     placeSelection,
     activeAnalysis,
+    previousAnalysis,
+    restorePreviousAnalysis,
   } = useQueryDraft();
+  const trustSummary = useMemo(
+    () => activeAnalysis ? summarizeAnalysisTrust(activeAnalysis) : null,
+    [activeAnalysis]
+  );
   const results = useMemo(
     () => [fireResult, floodResult, heatResult, droughtResult, coverageGapResult],
     [
@@ -116,11 +127,15 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
     }
   }
 
+  function handleRestorePreviousView() {
+    if (restorePreviousAnalysis()) handleTabClick("meaning");
+  }
+
   return (
     <div data-testid="insight-navigation">
       {activeAnalysis?.origin === "agent" && (
-        <div
-          role="status"
+        <section
+          aria-label="Agent action"
           data-testid="agent-analysis-notice"
           style={{
             margin: "10px 12px 0",
@@ -133,11 +148,55 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
             lineHeight: 1.45,
           }}
         >
-          <strong style={{ color: "var(--text-primary)" }}>Agent updated this view.</strong>{" "}
-          {HAZARD_LABELS[activeAnalysis.request.hazardId]} evidence for{" "}
-          {activeAnalysis.request.placeSelection.label} is now shared across the map,
-          Meaning, Evidence, and Missions. Review the sources and limitations here.
-        </div>
+          <p role="status" style={{ margin: 0 }}>
+            <strong style={{ color: "var(--text-primary)" }}>Agent updated this view</strong>
+          </p>
+          <p
+            data-testid="agent-analysis-receipt"
+            style={{ margin: "3px 0 0", color: "var(--text-primary)" }}
+          >
+            {HAZARD_LABELS[activeAnalysis.request.hazardId]} ·{" "}
+            {formatAnalysisPlace(activeAnalysis)} · {formatAnalysisTime(activeAnalysis)}
+          </p>
+          <p style={{ margin: "3px 0 0" }}>
+            The map and Insight now share this result. Review the evidence and limitations
+            before relying on it.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", marginTop: "8px" }}>
+            <button
+              type="button"
+              data-testid="agent-view-evidence"
+              onClick={() => handleTabClick("evidence")}
+              style={{
+                padding: "5px 8px",
+                border: "1px solid var(--border-default)",
+                borderRadius: "6px",
+                background: "var(--surface-1)",
+                color: "var(--text-link)",
+                cursor: "pointer",
+              }}
+            >
+              View evidence
+            </button>
+            {previousAnalysis && (
+              <button
+                type="button"
+                data-testid="agent-restore-previous"
+                onClick={handleRestorePreviousView}
+                style={{
+                  padding: "5px 8px",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: "6px",
+                  background: "transparent",
+                  color: "var(--text-secondary)",
+                  cursor: "pointer",
+                }}
+              >
+                Restore previous view
+              </button>
+            )}
+          </div>
+        </section>
       )}
       {/* Tab list */}
       <div
@@ -192,6 +251,55 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
         >
           {visited.has(tab.id) && (
             <>
+              {tab.id === "meaning" && trustSummary && (
+                <section
+                  aria-label="Evidence status"
+                  data-testid="analysis-trust-strip"
+                  style={{
+                    display: "grid",
+                    gap: "5px",
+                    marginBottom: "12px",
+                    padding: "9px 10px",
+                    border: "1px solid var(--border-default)",
+                    borderRadius: "8px",
+                    background: "var(--surface-2)",
+                    color: "var(--text-secondary)",
+                    fontSize: "13px",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <p style={{ margin: 0 }}>
+                    <strong style={{ color: "var(--text-primary)" }}>
+                      {trustSummary.stateLabel}
+                    </strong>{" "}
+                    · {trustSummary.sourceCount}{" "}
+                    {trustSummary.sourceCount === 1 ? "source" : "sources"} ·{" "}
+                    {trustSummary.limitationCount}{" "}
+                    {trustSummary.limitationCount === 1 ? "limitation" : "limitations"}
+                  </p>
+                  {trustSummary.showNoDangerReminder && (
+                    <p data-testid="analysis-no-danger-reminder" style={{ margin: 0 }}>
+                      Missing, incomplete, or quiet evidence does not mean no danger.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    data-testid="trust-strip-view-evidence"
+                    onClick={() => handleTabClick("evidence")}
+                    style={{
+                      justifySelf: "start",
+                      padding: 0,
+                      border: 0,
+                      background: "transparent",
+                      color: "var(--text-link)",
+                      textDecoration: "underline",
+                      cursor: "pointer",
+                    }}
+                  >
+                    View complete evidence
+                  </button>
+                </section>
+              )}
               <InsightPanelContent
                 key={resultEpoch}
                 tab={tab.id}

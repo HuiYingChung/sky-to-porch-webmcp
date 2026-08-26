@@ -60,6 +60,15 @@ interface GeocodeCandidate {
   lat: number;
 }
 
+export interface AgentPlaceChoice {
+  choice_id: string;
+  label: string;
+  retry_with: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
 interface ToolFailure {
   status:
     | "invalid_input"
@@ -70,7 +79,7 @@ interface ToolFailure {
   message: string;
   ui_updated: false;
   no_data_is_not_no_danger: true;
-  candidates?: GeocodeCandidate[];
+  choices?: AgentPlaceChoice[];
 }
 
 interface CompactObservation {
@@ -168,15 +177,26 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
 function failure(
   status: ToolFailure["status"],
   message: string,
-  candidates?: GeocodeCandidate[]
+  choices?: AgentPlaceChoice[]
 ): ToolFailure {
   return {
     status,
     message,
     ui_updated: false,
     no_data_is_not_no_danger: true,
-    ...(candidates ? { candidates } : {}),
+    ...(choices ? { choices } : {}),
   };
+}
+
+function placeChoices(candidates: GeocodeCandidate[]): AgentPlaceChoice[] {
+  return candidates.map((candidate, index) => ({
+    choice_id: `place-${index + 1}`,
+    label: candidate.label,
+    retry_with: {
+      latitude: candidate.lat,
+      longitude: candidate.lon,
+    },
+  }));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -421,8 +441,8 @@ async function resolvePlace(
   if (candidates.length > 1) {
     return failure(
       "needs_place_choice",
-      "Ask the user which place they mean, then call again with that candidate's latitude and longitude.",
-      candidates
+      `I found ${candidates.length} possible places for “${input.place}”. Ask the person to choose one by label. Keep every other input unchanged, then retry with that choice's coordinates.`,
+      placeChoices(candidates)
     );
   }
   return candidates[0];

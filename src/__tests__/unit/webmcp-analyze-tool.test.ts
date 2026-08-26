@@ -117,7 +117,22 @@ describe("WebMCP environmental hazard tool", () => {
     expect(output.status).toBe("needs_place_choice");
     expect(output.ui_updated).toBe(false);
     expect(output.no_data_is_not_no_danger).toBe(true);
-    expect("candidates" in output ? output.candidates : undefined).toHaveLength(2);
+    expect("choices" in output ? output.choices : undefined).toEqual([
+      {
+        choice_id: "place-1",
+        label: "Springfield, Illinois",
+        retry_with: { latitude: 39.78, longitude: -89.65 },
+      },
+      {
+        choice_id: "place-2",
+        label: "Springfield, Missouri",
+        retry_with: { latitude: 37.21, longitude: -93.29 },
+      },
+    ]);
+    expect("message" in output ? output.message : "").toContain(
+      "Keep every other input unchanged"
+    );
+    expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
     expect(runAnalysis).not.toHaveBeenCalled();
   });
 

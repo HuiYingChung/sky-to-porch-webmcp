@@ -15,6 +15,7 @@
 - W4 provider cleanup: complete; deterministic-only application runtime
 - W5 verification: local deterministic gates pass, including 220 browser
   journeys; supported-browser and model eval runs pending
+- W5a shared-view UX: complete; full deterministic and browser regression pass
 - W6 release and submission: pending explicit authorization
 
 ## 1. Goal
@@ -138,13 +139,15 @@ are easy to call in the wrong order.
 
 ## 6. Product decision checkpoints
 
-The user will be asked to rule on:
+The product owner has ruled on the first three checkpoints:
 
-1. whether an agent analysis immediately changes the map or first previews the
-   change;
-2. how location ambiguity is resolved between the person and agent;
-3. which evidence summary remains visible after an agent action;
-4. the final three-minute demonstration journey.
+1. an Agent analysis immediately updates the shared view, with a visible action
+   receipt and a one-step restore instead of a mandatory preview;
+2. ambiguous locations are returned as card-ready choices and require the
+   person to choose; the Agent never guesses;
+3. mobile opens Meaning, where a trust strip exposes evidence state, source
+   count, limitations, and a direct Evidence action;
+4. the final three-minute demonstration journey remains pending.
 
 Technical WebMCP details remain Codex's responsibility.
 

@@ -106,11 +106,15 @@ interface QueryContextValue {
   coverageGapLoading: boolean;
   /** One provider-neutral snapshot shared by human UI and WebMCP. */
   activeAnalysis: ActiveAnalysis | null;
+  /** Single previous snapshot retained only for one-step Agent undo. */
+  previousAnalysis: ActiveAnalysis | null;
   analysisLoading: boolean;
   /** Current browser-native WebMCP discovery/registration state. */
   webMcpStatus: WebMcpStatus;
   /** Cancel any active request and clear all displayed analysis results. */
   clearAnalysis: () => void;
+  /** Restore the snapshot that was visible immediately before the Agent update. */
+  restorePreviousAnalysis: () => boolean;
   /**
    * Execute the shared analysis pipeline and synchronize the visible query,
    * map selection, and legacy result renderers.
@@ -144,23 +148,77 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [coverageGapResult, setCoverageGapResultState] = useState<CoverageGapQueryResult | null>(null);
   const [coverageGapLoading, setCoverageGapLoadingState] = useState(false);
   const [activeAnalysis, setActiveAnalysis] = useState<ActiveAnalysis | null>(null);
+  const [previousAnalysis, setPreviousAnalysis] = useState<ActiveAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [webMcpStatus, setWebMcpStatus] = useState<WebMcpStatus>("checking");
   // Mutable ref for the unified query generation (never triggers render).
   const analysisQueryGenRef = useRef(0);
   const analysisAbortRef = useRef<AbortController | null>(null);
+  const activeAnalysisRef = useRef<ActiveAnalysis | null>(null);
+  const previousAnalysisRef = useRef<ActiveAnalysis | null>(null);
 
-  function invalidateEvidenceQueries() {
-    analysisQueryGenRef.current += 1;
-    analysisAbortRef.current?.abort();
-    analysisAbortRef.current = null;
-    setActiveAnalysis(null);
-    setAnalysisLoading(false);
+  const commitActiveAnalysis = useCallback((analysis: ActiveAnalysis | null) => {
+    activeAnalysisRef.current = analysis;
+    setActiveAnalysis(analysis);
+  }, []);
+
+  const commitPreviousAnalysis = useCallback((analysis: ActiveAnalysis | null) => {
+    previousAnalysisRef.current = analysis;
+    setPreviousAnalysis(analysis);
+  }, []);
+
+  const clearResultState = useCallback(() => {
     setFireResultState(null);
     setFloodResultState(null);
     setHeatResultState(null);
     setDroughtResultState(null);
     setCoverageGapResultState(null);
+  }, []);
+
+  const commitOutcome = useCallback((analysis: ActiveAnalysis) => {
+    clearResultState();
+    const outcome = analysis.outcome;
+    if (outcome.hazardId === "fire_smoke") {
+      setFireResultState(outcome.result);
+    } else if (outcome.hazardId === "flood_storm") {
+      setFloodResultState(outcome.result);
+    } else if (outcome.hazardId === "extreme_heat") {
+      setHeatResultState(outcome.result);
+    } else if (outcome.hazardId === "drought_land") {
+      setDroughtResultState(outcome.result);
+    } else {
+      setCoverageGapResultState(outcome.result);
+    }
+  }, [clearResultState]);
+
+  const synchronizeRequestState = useCallback((request: AnalysisRequest) => {
+    setPlaceSelectionState(request.placeSelection);
+    dispatchState({ type: "SET_HAZARD", value: request.hazardId });
+    dispatchState({ type: "SET_CONCERN", value: request.concern });
+    dispatchState({
+      type: "SET_OPTIONAL_QUESTION",
+      value: request.optionalQuestion ?? "",
+    });
+    if (!request.evidenceMode) return;
+    if (request.hazardId === "fire_smoke") {
+      setFireEvidenceModeState(request.evidenceMode);
+    } else if (request.hazardId === "flood_storm") {
+      setFloodEvidenceModeState(request.evidenceMode);
+    } else if (request.hazardId === "extreme_heat") {
+      setHeatEvidenceModeState(request.evidenceMode);
+    } else if (request.hazardId === "drought_land") {
+      setDroughtEvidenceModeState(request.evidenceMode);
+    }
+  }, []);
+
+  function invalidateEvidenceQueries() {
+    analysisQueryGenRef.current += 1;
+    analysisAbortRef.current?.abort();
+    analysisAbortRef.current = null;
+    commitActiveAnalysis(null);
+    commitPreviousAnalysis(null);
+    setAnalysisLoading(false);
+    clearResultState();
     setFireLoadingState(false);
     setFloodLoadingState(false);
     setHeatLoadingState(false);
@@ -211,6 +269,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     analysisQueryGenRef.current += 1;
     const generation = analysisQueryGenRef.current;
     analysisAbortRef.current?.abort();
+    commitPreviousAnalysis(origin === "agent" ? activeAnalysisRef.current : null);
 
     const controller = new AbortController();
     analysisAbortRef.current = controller;
@@ -223,11 +282,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    setFireResultState(null);
-    setFloodResultState(null);
-    setHeatResultState(null);
-    setDroughtResultState(null);
-    setCoverageGapResultState(null);
+    clearResultState();
     setFireLoadingState(request.hazardId === "fire_smoke");
     setFloodLoadingState(request.hazardId === "flood_storm");
     setHeatLoadingState(request.hazardId === "extreme_heat");
@@ -236,45 +291,16 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       request.hazardId === "air_quality" ||
       request.hazardId === "earth_volcanoes"
     );
-    setActiveAnalysis(null);
+    commitActiveAnalysis(null);
     setAnalysisLoading(true);
 
-    setPlaceSelectionState(request.placeSelection);
-    dispatchState({ type: "SET_HAZARD", value: request.hazardId });
-    dispatchState({ type: "SET_CONCERN", value: request.concern });
-    dispatchState({
-      type: "SET_OPTIONAL_QUESTION",
-      value: request.optionalQuestion ?? "",
-    });
-    if (request.evidenceMode) {
-      if (request.hazardId === "fire_smoke") {
-        setFireEvidenceModeState(request.evidenceMode);
-      } else if (request.hazardId === "flood_storm") {
-        setFloodEvidenceModeState(request.evidenceMode);
-      } else if (request.hazardId === "extreme_heat") {
-        setHeatEvidenceModeState(request.evidenceMode);
-      } else if (request.hazardId === "drought_land") {
-        setDroughtEvidenceModeState(request.evidenceMode);
-      }
-    }
+    synchronizeRequestState(request);
 
     try {
       const outcome = await executeAnalysisRequest(request, {
         signal: controller.signal,
       });
       if (generation !== analysisQueryGenRef.current) return null;
-
-      if (outcome.hazardId === "fire_smoke") {
-        setFireResultState(outcome.result);
-      } else if (outcome.hazardId === "flood_storm") {
-        setFloodResultState(outcome.result);
-      } else if (outcome.hazardId === "extreme_heat") {
-        setHeatResultState(outcome.result);
-      } else if (outcome.hazardId === "drought_land") {
-        setDroughtResultState(outcome.result);
-      } else {
-        setCoverageGapResultState(outcome.result);
-      }
 
       const snapshot: ActiveAnalysis = {
         analysisId: `analysis-${generation}-${request.hazardId}`,
@@ -283,7 +309,8 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         outcome,
         completedAt: new Date().toISOString(),
       };
-      setActiveAnalysis(snapshot);
+      commitOutcome(snapshot);
+      commitActiveAnalysis(snapshot);
       return snapshot;
     } catch (error) {
       if (
@@ -309,7 +336,38 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
-  }, []);
+  }, [
+    clearResultState,
+    commitActiveAnalysis,
+    commitOutcome,
+    commitPreviousAnalysis,
+    synchronizeRequestState,
+  ]);
+
+  const restorePreviousAnalysis = useCallback(() => {
+    const snapshot = previousAnalysisRef.current;
+    if (!snapshot) return false;
+
+    analysisQueryGenRef.current += 1;
+    analysisAbortRef.current?.abort();
+    analysisAbortRef.current = null;
+    setAnalysisLoading(false);
+    setFireLoadingState(false);
+    setFloodLoadingState(false);
+    setHeatLoadingState(false);
+    setDroughtLoadingState(false);
+    setCoverageGapLoadingState(false);
+    synchronizeRequestState(snapshot.request);
+    commitOutcome(snapshot);
+    commitActiveAnalysis(snapshot);
+    commitPreviousAnalysis(null);
+    return true;
+  }, [
+    commitActiveAnalysis,
+    commitOutcome,
+    commitPreviousAnalysis,
+    synchronizeRequestState,
+  ]);
 
   return (
     <QueryContext.Provider
@@ -338,9 +396,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         coverageGapResult,
         coverageGapLoading,
         activeAnalysis,
+        previousAnalysis,
         analysisLoading,
         webMcpStatus,
         clearAnalysis: invalidateEvidenceQueries,
+        restorePreviousAnalysis,
         runAnalysis,
       }}
     >

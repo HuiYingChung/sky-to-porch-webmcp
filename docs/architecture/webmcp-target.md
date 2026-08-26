@@ -52,10 +52,21 @@ A source-coverage or current-analysis tool will be added only if evals show it
 improves tool selection or the shared user journey. It must not introduce a
 fragile required call order.
 
-When no coordinates are supplied, place search returns at most three
-candidates. One result proceeds; multiple results return
-`needs_place_choice` and require the agent to ask the person before calling
-again with the chosen coordinates.
+When no coordinates are supplied, place search returns at most three choices.
+One result proceeds; multiple results return `needs_place_choice` with
+card-ready labels and exact retry coordinates. The agent keeps the hazard,
+concern, dates, radius, and question unchanged and asks the person before
+calling again.
+
+After a successful Agent analysis, the visible product shows an action receipt
+with the place, hazard, and time. Evidence is one action away. If another
+completed result was visible before the Agent update, one previous snapshot is
+retained so the person can restore the entire shared view without maintaining
+an unbounded history.
+
+Meaning begins with a deterministic trust strip derived from the active result:
+evidence state, unique observed-source count, limitation count, and a no-danger
+reminder for missing, incomplete, quiet, stale, or failed evidence.
 
 ## Registration lifecycle
 
