@@ -6,6 +6,7 @@ const PUBLIC_SOURCE_URLS: Readonly<Record<string, string>> = {
   nasa_gibs_modis_lst_day: "https://worldview.earthdata.nasa.gov/",
   nasa_gibs_modis_ndvi_16day: "https://worldview.earthdata.nasa.gov/",
   usgs_instantaneous_values: "https://waterdata.usgs.gov/nwis",
+  canada_geomet: "https://api.weather.gc.ca/",
   noaa_uscrn_heat_exposure: "https://www.ncei.noaa.gov/access/crn/",
   nws_station_observations: "https://www.weather.gov/documentation/services-web-api",
   noaa_ncei_global_hourly:

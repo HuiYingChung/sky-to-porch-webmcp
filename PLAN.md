@@ -16,6 +16,8 @@
 - W5 verification: local deterministic gates pass, including 220 browser
   journeys; supported-browser and model eval runs pending
 - W5a shared-view UX: complete; full deterministic and browser regression pass
+- W5b Canadian Flood ground evidence: complete; bounded ECCC GeoMet live smoke
+  and the full 220-journey browser regression passed
 - W6 release and submission: pending explicit authorization
 
 ## 1. Goal
@@ -126,6 +128,17 @@ are easy to call in the wrong order.
   journeys;
 - ChatGPT in-app-browser and supported-Chrome verification;
 - full CI, clean-clone build, and exact-candidate evidence.
+
+### W5b — Canadian Flood ground evidence
+
+- activate only the ECCC GeoMet `hydrometric-daily-mean` collection;
+- query one bounded selected-area/date request with no credentials or retries;
+- accept only exact-schema station coordinates inside the selected geometry;
+- contribute validated daily-mean water level to the existing ground-gage
+  evidence role without inferring flood thresholds, route status, or property
+  impact;
+- preserve no observation, source failure, pagination overflow, and
+  non-applicable coverage as separate deterministic outcomes.
 
 ### W6 — Release and submission
 

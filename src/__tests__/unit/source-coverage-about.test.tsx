@@ -26,7 +26,7 @@ describe("evidence coverage catalog and About surface", () => {
     }
   });
 
-  it("does not mislabel smoke polygons as AQI and has one combined Canada GeoMet profile", () => {
+  it("does not mislabel smoke polygons as AQI and scopes live Canada GeoMet to Flood", () => {
     expect(
       SOURCE_COVERAGE_PROFILES.find((profile) => profile.sourceId === "noaa_hms_smoke_polygons")?.hazardIds
     ).toEqual(["fire_smoke"]);
@@ -35,7 +35,10 @@ describe("evidence coverage catalog and About surface", () => {
     ).toHaveLength(1);
     expect(
       SOURCE_COVERAGE_PROFILES.find((profile) => profile.sourceId === "canada_geomet")?.hazardIds
-    ).toEqual(expect.arrayContaining(["flood_storm", "extreme_heat", "air_quality"]));
+    ).toEqual(["flood_storm"]);
+    expect(
+      SOURCE_COVERAGE_PROFILES.find((profile) => profile.sourceId === "canada_geomet")
+    ).toMatchObject({ integrationStatus: "live_integrated", countryCodes: ["CA"] });
   });
 
   it("separates the global drought satellite path from nationwide regional confirmation", () => {

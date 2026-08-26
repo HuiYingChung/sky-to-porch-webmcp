@@ -231,7 +231,12 @@ describe("ResultFailureGapBoundary evidence-first ordering", () => {
   it("keeps each Flood source outcome visible beside partial evidence", () => {
     const result = {
       kind: "inconclusive_evidence",
-      sourceOutcomes: { imerg: "success", floodExtent: "failed", usgs: "no_observation" },
+      sourceOutcomes: {
+        imerg: "success",
+        floodExtent: "failed",
+        usgs: "no_observation",
+        canadaGeomet: "failed",
+      },
       evidence: evidence({ evidenceState: "inconclusive_evidence" }),
       assessments: [],
     } as FloodQueryResult;
@@ -246,7 +251,8 @@ describe("ResultFailureGapBoundary evidence-first ordering", () => {
     const outcomes = rendered.container.querySelector("[data-testid='flood-source-outcomes']");
     expect(outcomes?.textContent).toContain("satellite precipitation succeeded");
     expect(outcomes?.textContent).toContain("flood-extent imagery failed");
-    expect(outcomes?.textContent).toContain("ground gage returned nothing");
+    expect(outcomes?.textContent).toContain("USGS gage returned nothing");
+    expect(outcomes?.textContent).toContain("Canadian hydrometric gage failed");
     cleanup(rendered.container, rendered.root);
   });
 

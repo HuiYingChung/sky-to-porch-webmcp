@@ -11,13 +11,15 @@
  * Safety rules enforced:
  *   - Fails closed on invalid input (validateEvidenceObject).
  *   - Requires hazardId === "flood_storm".
- *   - Shape validation for every matching GIBS/USGS observation runs before
+ *   - Shape validation for every matching GIBS/USGS/ECCC observation runs before
  *     any blocked-state suppression; an invalid shape fails closed regardless
  *     of evidenceState or dataMode.
  *   - A GIBS observation must carry textValue (not numeric value) and its
  *     dataMode must match the parent EvidenceObject.
  *   - A USGS observation must carry numeric value, unit exactly "ft", and
  *     metadata with a non-whitespace siteId and parameterCd === "00065".
+ *   - An ECCC hydrometric observation must carry a numeric daily mean in
+ *     metres plus the exact collection, station, and selection-basis metadata.
  *   - source_failure, no_observation, unsupported_coverage, stale_data,
  *     inconclusive_evidence, failed, and unavailable yield not_provided only
  *     after all matching observations pass shape validation.
@@ -136,6 +138,26 @@ function assertUsgsShape(obs: Observation): void {
   }
 }
 
+function assertCanadaHydrometricShape(obs: Observation): void {
+  if (obs.value === undefined || obs.unit !== "m") {
+    throw new Error(
+      `ECCC hydrometric observation ${obs.observationId} must be a numeric water level in metres`
+    );
+  }
+  const metadata = obs.metadata;
+  if (
+    !metadata ||
+    typeof metadata.stationNumber !== "string" ||
+    !/^[0-9A-Z]{7}$/u.test(metadata.stationNumber) ||
+    metadata.collection !== "hydrometric-daily-mean" ||
+    metadata.stationSelectionBasis !== "bbox_nearest_valid_level"
+  ) {
+    throw new Error(
+      `ECCC hydrometric observation ${obs.observationId} lacks its locked station, collection, or bbox-selection metadata`
+    );
+  }
+}
+
 function assertFloodExtentShape(obs: Observation, parentDataMode: string): void {
   if (obs.value !== undefined || obs.textValue === undefined) {
     throw new Error(
@@ -186,6 +208,9 @@ export function separateFloodEvidence(evidence: EvidenceObject): FloodEvidenceAs
   const usgsObs = evidence.observations.filter(
     (obs) => obs.provenance.sourceId === "usgs_instantaneous_values"
   );
+  const canadaHydrometricObs = evidence.observations.filter(
+    (obs) => obs.provenance.sourceId === "canada_geomet"
+  );
   const floodExtentObs = evidence.observations.filter(
     (obs) => obs.provenance.sourceId === "nasa_lance_flood_extent"
   );
@@ -198,6 +223,9 @@ export function separateFloodEvidence(evidence: EvidenceObject): FloodEvidenceAs
   }
   for (const obs of usgsObs) {
     assertUsgsShape(obs);
+  }
+  for (const obs of canadaHydrometricObs) {
+    assertCanadaHydrometricShape(obs);
   }
   for (const obs of floodExtentObs) {
     assertFloodExtentShape(obs, evidence.dataMode);
@@ -237,25 +265,28 @@ export function separateFloodEvidence(evidence: EvidenceObject): FloodEvidenceAs
   }
 
   // --- ground_gage_height ---
-  let usgsAssessment: FloodEvidenceAssessment;
+  const groundGageObs = [...usgsObs, ...canadaHydrometricObs];
+  let groundGageAssessment: FloodEvidenceAssessment;
   if (stateBlocked || evidence.evidenceState !== "observations_returned") {
-    usgsAssessment = {
+    groundGageAssessment = {
       code: "ground_gage_height",
       status: "not_provided",
       observationIds: [],
       sourceIds: [],
     };
-  } else if (usgsObs.length === 0) {
-    usgsAssessment = {
+  } else if (groundGageObs.length === 0) {
+    groundGageAssessment = {
       code: "ground_gage_height",
       status: "not_provided",
       observationIds: [],
       sourceIds: [],
     };
   } else {
-    const ids = [...new Set(usgsObs.map((o) => o.observationId))].sort();
-    const srcIds = [...new Set(usgsObs.map((o) => o.provenance.sourceId as SourceId))].sort() as SourceId[];
-    usgsAssessment = {
+    const ids = [...new Set(groundGageObs.map((o) => o.observationId))].sort();
+    const srcIds = [...new Set(
+      groundGageObs.map((o) => o.provenance.sourceId as SourceId)
+    )].sort() as SourceId[];
+    groundGageAssessment = {
       code: "ground_gage_height",
       status: "evidence_present",
       observationIds: ids,
@@ -281,7 +312,7 @@ export function separateFloodEvidence(evidence: EvidenceObject): FloodEvidenceAs
   // Official warnings remain absent; route and property claims remain unsupported.
   return [
     gibsAssessment,
-    usgsAssessment,
+    groundGageAssessment,
     surfaceWaterAssessment,
     { code: "official_warning", status: "not_provided",   observationIds: [], sourceIds: [] },
     { code: "route_disruption", status: "not_supported",  observationIds: [], sourceIds: [] },

@@ -9,8 +9,11 @@ export function FloodMapCoverageLabel({ result }: { result: FloodQueryResult }) 
     (observation) => observation.provenance.sourceId === "nasa_gibs_imerg"
   );
   const gage = evidence.observations.find(
-    (observation) => observation.provenance.sourceId === "usgs_instantaneous_values"
+    (observation) =>
+      observation.provenance.sourceId === "usgs_instantaneous_values" ||
+      observation.provenance.sourceId === "canada_geomet"
   );
+  const gageLabel = gage?.provenance.sourceId === "canada_geomet" ? "ECCC gage" : "USGS gage";
   return (
     <div
       data-testid="flood-map-coverage-label"
@@ -29,11 +32,10 @@ export function FloodMapCoverageLabel({ result }: { result: FloodQueryResult }) 
       <strong>Regional Flood evidence area</strong>
       <div>{gibs?.metadata?.boundingBox ?? "Houston demonstration bounds"}</div>
       <div>GIBS: {gibs?.provenance.observedAt ?? "not provided"}</div>
-      <div>USGS gage: {gage ? `${gage.value} ${gage.unit}` : "not provided"}</div>
+      <div>{gageLabel}: {gage ? `${gage.value} ${gage.unit}` : "not provided"}</div>
       <div style={{ color: "var(--status-warning-fg)", marginTop: "4px" }}>
         No surface-water, road-closure, route-safety, or property-impact geometry is shown.
       </div>
     </div>
   );
 }
-

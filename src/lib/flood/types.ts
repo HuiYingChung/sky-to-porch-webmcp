@@ -63,6 +63,7 @@ export interface FloodSourceOutcomes {
   imerg: FloodSourceOutcome;
   floodExtent: FloodSourceOutcome;
   usgs: FloodSourceOutcome;
+  canadaGeomet?: FloodSourceOutcome;
 }
 
 export type FloodQueryResultKind =

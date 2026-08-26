@@ -13,6 +13,7 @@ const NOW = new Date("2026-08-11T15:00:00Z");
 // ADR-0043: the live adapter accepts only the canonical map-selected area;
 // this box covers central Houston and contains the mocked gage coordinate.
 const HOUSTON_AREA = { west: -95.6, south: 29.5, east: -95.2, north: 30.0 };
+const VANCOUVER_AREA = { west: -123.4, south: 49, east: -122.8, north: 49.5 };
 const LIVE_INPUT = {
   placeId: "custom-area",
   area: HOUSTON_AREA,
@@ -20,6 +21,7 @@ const LIVE_INPUT = {
   endDate: "2024-07-08",
   mode: "live" as const,
 };
+const VANCOUVER_LIVE_INPUT = { ...LIVE_INPUT, area: VANCOUVER_AREA };
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
@@ -78,6 +80,33 @@ const DISCOVERY = {
   ],
 };
 
+const CANADA_HYDROMETRIC = {
+  type: "FeatureCollection",
+  numberMatched: 1,
+  numberReturned: 1,
+  links: [],
+  features: [
+    {
+      type: "Feature",
+      id: "08MH032.2024-07-08",
+      geometry: { type: "Point", coordinates: [-123.08864, 49.20536] },
+      properties: {
+        IDENTIFIER: "08MH032.2024-07-08",
+        STATION_NAME: "NORTH ARM FRASER RIVER AT VANCOUVER",
+        STATION_NUMBER: "08MH032",
+        PROV_TERR_STATE_LOC: "BC",
+        DATE: "2024-07-08",
+        LEVEL: 2.968,
+        DISCHARGE: null,
+        DISCHARGE_SYMBOL_EN: null,
+        DISCHARGE_SYMBOL_FR: null,
+        LEVEL_SYMBOL_EN: null,
+        LEVEL_SYMBOL_FR: null,
+      },
+    },
+  ],
+};
+
 async function png(alpha: number): Promise<Buffer> {
   return sharp({
     create: {
@@ -95,6 +124,8 @@ async function mockFloodFetch(options: {
   features?: number;
   gibsStatus?: number;
   continuous?: Record<string, unknown>;
+  canadaStatus?: number;
+  canadaHydrometric?: Record<string, unknown>;
 } = {}): Promise<typeof fetch> {
   const tile = await png(options.alpha ?? 255);
   return vi.fn(async (input: RequestInfo | URL) => {
@@ -111,6 +142,12 @@ async function mockFloodFetch(options: {
     if (url.pathname.includes("/collections/continuous/items")) {
       return jsonResponse(
         options.continuous ?? continuousCollection(options.unit, options.features ?? 1)
+      );
+    }
+    if (url.hostname === "api.weather.gc.ca") {
+      return jsonResponse(
+        options.canadaHydrometric ?? CANADA_HYDROMETRIC,
+        options.canadaStatus ?? 200
       );
     }
     // ADR-0043: the only monitoring-locations request is the bbox discovery;
@@ -228,6 +265,56 @@ describe("WP-08 live adapter with mocked official-source responses", () => {
     expect(result.kind).toBe("inconclusive_evidence");
     expect(result.evidence?.observations).toHaveLength(2);
     expect(result.evidence?.confidence.level).toBe("insufficient");
+  });
+
+  it("adds Canadian in-area ground evidence to the shared Flood result and claim separation", async () => {
+    const fetchImpl = await mockFloodFetch();
+    const result = await queryLiveFloodEvidence(VANCOUVER_LIVE_INPUT, {
+      fetchImpl,
+      now: () => NOW,
+    });
+
+    expect(result.kind).toBe("success");
+    expect(result.sourceOutcomes).toMatchObject({
+      imerg: "success",
+      floodExtent: "success",
+      usgs: "no_observation",
+      canadaGeomet: "success",
+    });
+    expect(result.evidence?.observations).toHaveLength(3);
+    expect(result.evidence?.observations[2]).toMatchObject({
+      variableName: "Daily mean water level",
+      value: 2.968,
+      unit: "m",
+      provenance: { sourceId: "canada_geomet" },
+    });
+    expect(result.evidence?.limitations.some(
+      (limitation) => limitation.source === "canada_geomet" && limitation.required
+    )).toBe(true);
+    validateEvidenceObject(result.evidence);
+
+    const finalized = await finalizeFloodQueryResult(result, "home");
+    expect(finalized.assessments?.find(
+      (assessment) => assessment.code === "ground_gage_height"
+    )).toMatchObject({
+      status: "evidence_present",
+      sourceIds: ["canada_geomet"],
+    });
+  });
+
+  it("keeps a Canadian source failure distinct without discarding returned satellite evidence", async () => {
+    const result = await queryLiveFloodEvidence(VANCOUVER_LIVE_INPUT, {
+      fetchImpl: await mockFloodFetch({ canadaStatus: 503 }),
+      now: () => NOW,
+    });
+
+    expect(result.kind).toBe("inconclusive_evidence");
+    expect(result.sourceOutcomes?.canadaGeomet).toBe("failed");
+    expect(result.evidence?.observations).toHaveLength(2);
+    expect(result.evidence?.limitations.some(
+      (limitation) => limitation.limitationId === "lim-webmcp-canada-geomet-failure"
+    )).toBe(true);
+    validateEvidenceObject(result.evidence);
   });
 
   it("fails closed on a wrong USGS unit or a rate limit", async () => {

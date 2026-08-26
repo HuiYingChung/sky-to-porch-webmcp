@@ -173,19 +173,21 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "canada_geomet",
-    hazardIds: ["flood_storm", "extreme_heat", "air_quality"],
+    hazardIds: ["flood_storm"],
     level: "national",
     kind: "ground_station",
-    integrationStatus: "prepared_for_live",
+    integrationStatus: "live_integrated",
     evidenceRole: "supporting",
     regionLabel: "Canada",
     countryCodes: ["CA"],
-    temporalCoverage: "Collection-specific recent and archived data",
-    updateCadence: "Near-real-time to daily, depending on collection",
-    spatialResolution: "Stations, point forecasts, and national grids",
+    temporalCoverage: "Archived daily means and recent completed daily records",
+    updateCadence: "Daily; publication and quality-review timing varies by station",
+    spatialResolution: "In-area hydrometric stations",
     coverageNote:
-      "One official anonymous API family for Canadian water, weather, and outdoor AQHI; collection-specific claims remain separate.",
-    liveGateNote: "Collection IDs are documented; per-collection fixture schemas and bounded smoke are pending.",
+      "Official Canadian hydrometric daily-mean station levels; a station value is not a flood threshold or property-level finding.",
+    liveGateNote:
+      "Integrated with bounded bbox/date retrieval, exact schema and in-area coordinate validation, deterministic nearest-station selection, and fail-closed pagination limits.",
+    lastVerifiedDate: "2026-08-26",
   },
   {
     sourceId: "mexico_conagua_hydrology",

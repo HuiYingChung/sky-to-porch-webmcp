@@ -79,6 +79,7 @@ export const QUERYABLE_SOURCE_IDS = [
   "airnow_daily_data",
   "nasa_gibs_modis_aod",
   "nasa_lance_flood_extent",
+  "canada_geomet",
   "nasa_gibs_omps_so2",
   "usgs_earthquake_geojson",
   "usgs_volcano_hans",

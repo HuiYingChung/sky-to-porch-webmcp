@@ -52,6 +52,20 @@ professional decision system.
 - Earthquake and eruption timing are not predicted.
 - Official alerts and local authorities remain authoritative.
 
+## Flood evidence coverage
+
+Live Flood analysis combines NASA GIBS precipitation visualization, NASA
+VIIRS flood-extent visualization, and available ground-station evidence. USGS
+gage observations cover supported U.S. selections. For a selected area within
+the coarse Canadian request envelope, the application also makes one bounded,
+credential-free request to the ECCC GeoMet `hydrometric-daily-mean`
+collection and accepts only a station coordinate inside that exact selection.
+
+The Canadian value is a station daily mean in metres, not a universal flood
+threshold. Missing or failed GeoMet evidence remains visible and never becomes
+a claim of no flooding, safe travel, or no property impact. Other GeoMet
+weather and AQHI collections are not part of this integration.
+
 ## Architecture
 
 Human UI and WebMCP tools share one application layer:

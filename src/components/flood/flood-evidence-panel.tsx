@@ -90,7 +90,10 @@ function EvidencePanel({
       {result.sourceOutcomes && (
         <p data-testid="flood-source-outcomes" style={{ margin: "0 0 10px", lineHeight: 1.55 }}>
           <strong>Source outcomes:</strong> satellite precipitation {sourceOutcomeLabel(result.sourceOutcomes.imerg)};
-          flood-extent imagery {sourceOutcomeLabel(result.sourceOutcomes.floodExtent)}; ground gage {sourceOutcomeLabel(result.sourceOutcomes.usgs)}.
+          flood-extent imagery {sourceOutcomeLabel(result.sourceOutcomes.floodExtent)}; USGS gage {sourceOutcomeLabel(result.sourceOutcomes.usgs)}
+          {result.sourceOutcomes.canadaGeomet && result.sourceOutcomes.canadaGeomet !== "not_attempted"
+            ? `; Canadian hydrometric gage ${sourceOutcomeLabel(result.sourceOutcomes.canadaGeomet)}`
+            : ""}.
         </p>
       )}
       <ProgressiveDisclosure
@@ -194,7 +197,7 @@ function MissionsPanel({
           </article>
         ))}
       <p style={{ color: "var(--text-muted)" }}>
-        The USGS gage is a ground monitoring source, not a space mission.
+        USGS and ECCC hydrometric gages are ground monitoring sources, not space missions.
       </p>
       </ProgressiveDisclosure>
     </div>

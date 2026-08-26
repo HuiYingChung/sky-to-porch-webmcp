@@ -18,6 +18,10 @@ import {
   type FloodSourceOutcomes,
 } from "./types";
 import { queryFloodExtent, type FloodExtentResult } from "./extent-live-adapter";
+import {
+  queryCanadaHydrometricDailyMean,
+  type CanadaHydrometricResult,
+} from "./canada-hydrometric-live-adapter";
 import type { BoundingBox } from "@/contracts/common";
 import {
   CUSTOM_AREA_PLACE_ID,
@@ -578,9 +582,9 @@ const GIBS_LIMITATION: Limitation = {
 
 const NO_GAGE_LIMITATION: Limitation = {
   limitationId: "lim-uxfix02-live-no-gage-in-area",
-  source: "usgs_instantaneous_values",
+  source: "ground_gage_sources",
   description:
-    "No USGS gage inside the selected area returned observations for the requested dates. " +
+    "No applicable USGS or ECCC gage inside the selected area returned an observation for the requested dates. " +
     "Absent ground data is not evidence of no flooding.",
   required: true,
 };
@@ -590,6 +594,30 @@ const USGS_LIMITATION: Limitation = {
   source: "usgs_instantaneous_values",
   description:
     "A provisional station-level gage reading is not a universal Flood threshold and does not establish property-level flooding or route status.",
+  required: true,
+};
+
+const CANADA_GEOMET_LIMITATION: Limitation = {
+  limitationId: "lim-webmcp-canada-geomet-station-only",
+  source: "canada_geomet",
+  description:
+    "The ECCC daily mean is one station-level water-level observation in metres. It is not a universal flood threshold and does not establish property flooding, route status, or safety.",
+  required: true,
+};
+
+const CANADA_GEOMET_NO_OBSERVATION_LIMITATION: Limitation = {
+  limitationId: "lim-webmcp-canada-geomet-no-observation",
+  source: "canada_geomet",
+  description:
+    "No valid ECCC hydrometric daily-mean water level was returned inside the selected area for the requested end date. Missing ground data is not evidence of no flooding.",
+  required: true,
+};
+
+const CANADA_GEOMET_FAILURE_LIMITATION: Limitation = {
+  limitationId: "lim-webmcp-canada-geomet-failure",
+  source: "canada_geomet",
+  description:
+    "The ECCC hydrometric request failed. Other returned sources do not replace Canadian ground evidence, and the failure is not evidence of no flooding or no danger.",
   required: true,
 };
 
@@ -671,6 +699,24 @@ function gpmAttribution(observations: Observation[], anyTransparent: boolean): M
   };
 }
 
+function canadaHydrometricAttribution(
+  result: Extract<CanadaHydrometricResult, { kind: "observation" | "source_failure" }>
+): MissionAttribution {
+  return {
+    missionName: "ECCC Water Survey of Canada",
+    agency: "Environment and Climate Change Canada",
+    purpose: "In-area hydrometric daily-mean water-level context",
+    selectionReason:
+      "Official anonymous Canadian ground-station evidence queried by the validated selected bounding box and end date",
+    contributedObservationIds:
+      result.kind === "observation" ? [result.observation.observationId] : [],
+    retrievalStatus: result.kind === "observation" ? "success" : "failed",
+    keyLimitation:
+      "One station daily mean is not a universal flood threshold and does not establish property flooding or route safety.",
+    datasetId: "hydrometric-daily-mean",
+  };
+}
+
 function buildFailureEvidence(evaluatedAt: string, reason: FloodFailureReason): EvidenceObject {
   const evidence: EvidenceObject = {
     evidenceId: `evd-flood-live-failure-${reason}-${evaluatedAt}`,
@@ -722,6 +768,7 @@ export async function queryLiveFloodEvidence(
     imerg: "not_attempted",
     floodExtent: "not_attempted",
     usgs: "not_attempted",
+    canadaGeomet: "not_attempted",
   };
   const now = dependencies.now?.() ?? new Date();
   const rejection = validateInput(input, now);
@@ -784,20 +831,45 @@ export async function queryLiveFloodEvidence(
     }
     if (usgs) sourceOutcomes.usgs = "success";
 
+    // Canada ground coverage is a supporting role. The coarse geographic
+    // gate only avoids clearly irrelevant requests; the adapter accepts an
+    // observation only when the station coordinate is inside this exact box.
+    const canadaHydrometric = await queryCanadaHydrometricDailyMean(
+      box,
+      input.endDate,
+      { fetchImpl, now: () => now }
+    );
+    sourceOutcomes.canadaGeomet = canadaHydrometric.kind === "observation"
+      ? "success"
+      : canadaHydrometric.kind === "no_observation"
+        ? "no_observation"
+        : canadaHydrometric.kind === "source_failure"
+          ? "failed"
+          : "not_attempted";
+
     const gibsObservations = gibsDays.map((day) => day.observation);
     const floodExtentObservation = floodExtent.kind !== "source_failure"
       ? floodExtent.observation as Observation
       : null;
+    const canadaObservation = canadaHydrometric.kind === "observation"
+      ? canadaHydrometric.observation
+      : null;
+    const groundObservations = [
+      ...(usgs ? [usgs] : []),
+      ...(canadaObservation ? [canadaObservation] : []),
+    ];
     const observations = [
       ...gibsObservations,
       ...(floodExtentObservation ? [floodExtentObservation] : []),
-      ...(usgs ? [usgs] : []),
+      ...groundObservations,
     ];
     const satelliteUnsupported =
       gibsDays.every((day) => day.transparent) && floodExtent.kind === "no_observation";
-    const unsupported = satelliteUnsupported && usgs === null;
+    const unsupported = satelliteUnsupported && groundObservations.length === 0;
     const inconclusive = !unsupported && (
-      usgs === null || floodExtent.kind === "source_failure" || satelliteUnsupported
+      groundObservations.length === 0 ||
+      floodExtent.kind === "source_failure" ||
+      satelliteUnsupported
     );
     const evidence: EvidenceObject = {
       evidenceId: `evd-flood-${areaTag}-live-${input.startDate}-${input.endDate}`,
@@ -814,6 +886,9 @@ export async function queryLiveFloodEvidence(
       missionAttributions: [
         gpmAttribution(gibsObservations, gibsDays.some((day) => day.transparent)),
         floodExtentAttribution(floodExtent),
+        ...(canadaHydrometric.kind === "observation" || canadaHydrometric.kind === "source_failure"
+          ? [canadaHydrometricAttribution(canadaHydrometric)]
+          : []),
       ],
       freshness: freshnessFor(observations, assembledAt),
       confidence: {
@@ -825,8 +900,8 @@ export async function queryLiveFloodEvidence(
               ? "The returned precipitation or gage context cannot replace the failed flood-extent source."
               : satelliteUnsupported
                 ? "A ground gage observation is available, but both satellite roles returned no usable regional observation."
-                : "The regional visualization was retrieved but no USGS gage in the selected area returned observations for these dates."
-            : "Regional visualization and one station reading are available but do not establish property or route conditions.",
+                : "The regional visualization was retrieved but no applicable USGS or ECCC gage in the selected area returned an observation for these dates."
+            : "Regional visualization and in-area station evidence are available but do not establish property or route conditions.",
       },
       limitations: [
         GIBS_LIMITATION,
@@ -836,7 +911,15 @@ export async function queryLiveFloodEvidence(
           : floodExtent.kind === "source_failure"
             ? [FLOOD_EXTENT_FAILURE_LIMITATION]
             : []),
-        ...(usgs ? [USGS_LIMITATION] : [NO_GAGE_LIMITATION]),
+        ...(usgs ? [USGS_LIMITATION] : []),
+        ...(canadaHydrometric.kind === "observation"
+          ? [CANADA_GEOMET_LIMITATION]
+          : canadaHydrometric.kind === "no_observation"
+            ? [CANADA_GEOMET_NO_OBSERVATION_LIMITATION]
+            : canadaHydrometric.kind === "source_failure"
+              ? [CANADA_GEOMET_FAILURE_LIMITATION]
+              : []),
+        ...(groundObservations.length === 0 ? [NO_GAGE_LIMITATION] : []),
       ],
       explanations: [],
       assembledAt,

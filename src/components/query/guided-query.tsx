@@ -769,7 +769,7 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
               }}
             >
               <option value="">Choose a data mode...</option>
-              <option value="live">Live retrieval - NASA GIBS and USGS Water Data</option>
+              <option value="live">Live retrieval - NASA GIBS plus U.S./Canada ground data</option>
               <option value="fixture">Fixture - deterministic Houston cases</option>
             </select>
             <p style={{ fontSize: "14px", color: "var(--text-muted)", margin: "3px 0 0" }}>
