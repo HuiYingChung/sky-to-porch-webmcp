@@ -72,31 +72,20 @@ import {
   tsToDateInput,
 } from "@/lib/ui/date-input";
 import { useDevMode, useDevUrlMode } from "@/lib/ui/dev-mode";
-import {
-  CUSTOM_AREA_PLACE_ID,
-  canonicalAreaQueryForSelection,
-} from "@/lib/location/query-area";
 import { normalizeOptionalQuestion } from "@/lib/ai/optional-question";
-import { PINNED_FIXTURE_DATE } from "@/lib/fire/types";
-import type {
-  FireQueryResult,
-  FireEvidenceMode,
-  FireLiveTimeSelection,
-} from "@/lib/fire/types";
+import type { FireEvidenceMode } from "@/lib/fire/types";
 import {
   FLOOD_MAX_RANGE_DAYS,
   FLOOD_PINNED_FIXTURE_DATE,
   FLOOD_UNSUPPORTED_FIXTURE_DATE,
 } from "@/lib/flood/types";
-import type { FloodEvidenceMode, FloodQueryResult } from "@/lib/flood/types";
+import type { FloodEvidenceMode } from "@/lib/flood/types";
 import {
   HEAT_PINNED_FIXTURE_DATE,
   HEAT_UNSUPPORTED_FIXTURE_DATE,
 } from "@/lib/heat/types";
-import type { HeatEvidenceMode, HeatQueryResult } from "@/lib/heat/types";
-import { DROUGHT_PINNED_FIXTURE_DATE } from "@/lib/drought/types";
-import type { DroughtEvidenceMode, DroughtQueryResult } from "@/lib/drought/types";
-import type { CoverageGapQueryResult } from "@/lib/coverage-gap/types";
+import type { HeatEvidenceMode } from "@/lib/heat/types";
+import type { DroughtEvidenceMode } from "@/lib/drought/types";
 
 interface GuidedQueryProps {
   /** Prefix for all element IDs; keeps IDs unique across desktop/mobile instances. */
@@ -115,84 +104,6 @@ const quickNavChipStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-/**
- * Resolves only the registered identity needed by deterministic fixture and
- * labelled failure cases. Live product retrieval never uses this identity;
- * it uses canonicalAreaQuery() for every selection method.
- */
-function resolveRegisteredPlaceId(placeSelection: PlaceSelection): string {
-  // Map clicks and geocoded place results share one validated bounding box.
-  if (
-    placeSelection.isMapSelection ||
-    placeSelection.selectionMethod === "place_search"
-  ) return CUSTOM_AREA_PLACE_ID;
-  // ADR-0044: demo selections carry their registered id explicitly; label
-  // text is never parsed for identity.
-  return placeSelection.demoPlaceId ?? "__unknown__";
-}
-
-/**
- * Derives the date to send to the server from a PlaceSelection's time selection.
- * Returns the pinned date only when both custom range endpoints parse to that
- * exact UTC date. Returns null for every other mode or malformed range.
- */
-function resolveDate(placeSelection: PlaceSelection): string | null {
-  const ts = placeSelection.timeSelection;
-  if (ts.type !== "custom" || !ts.startTs || !ts.endTs) return null;
-
-  const start = new Date(ts.startTs);
-  const end = new Date(ts.endTs);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-
-  const startDate = start.toISOString().slice(0, 10);
-  const endDate = end.toISOString().slice(0, 10);
-  return startDate === PINNED_FIXTURE_DATE && endDate === PINNED_FIXTURE_DATE
-    ? PINNED_FIXTURE_DATE
-    : null;
-}
-
-function resolveLiveTime(placeSelection: PlaceSelection): FireLiveTimeSelection | null {
-  const selection = placeSelection.timeSelection;
-  if (selection.type === "latest") return { kind: "latest", days: 1 };
-  if (selection.type === "past_7d") return { kind: "latest", days: 7 };
-  if (selection.type !== "custom" || !selection.startTs || !selection.endTs) return null;
-  const start = new Date(selection.startTs);
-  const end = new Date(selection.endTs);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-  return {
-    kind: "range",
-    startDate: start.toISOString().slice(0, 10),
-    endDate: end.toISOString().slice(0, 10),
-  };
-}
-
-function resolveFloodDates(placeSelection: PlaceSelection): { startDate: string; endDate: string } | null {
-  const selection = placeSelection.timeSelection;
-  if (selection.type !== "custom" || !selection.startTs || !selection.endTs) return null;
-  const start = new Date(selection.startTs);
-  const end = new Date(selection.endTs);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-  return {
-    startDate: start.toISOString().slice(0, 10),
-    endDate: end.toISOString().slice(0, 10),
-  };
-}
-
-function queryFailureReason(
-  response: Response,
-  payload: { error?: string; retryAfterSeconds?: number },
-  hazardLabel: string
-): string {
-  if (response.status === 429 || payload.error === "rate_limited") {
-    const retry = payload.retryAfterSeconds ? ` Try again in about ${payload.retryAfterSeconds} seconds.` : "";
-    return `Too many requests in a short time. No paid AI call or data request was made.${retry}`;
-  }
-  if (response.status === 403 || payload.error === "origin_rejected") {
-    return "This request came from an unexpected origin and was blocked. No paid AI call was made.";
-  }
-  return `The request couldn't be validated, so no ${hazardLabel} evidence was returned.`;
-}
-
 export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
   const {
     draft,
@@ -200,39 +111,17 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
     placeSelection,
     setPlaceSelection,
     clearPlaceSelection,
-    setFireResultForGen,
-    clearFireResult,
-    setFireLoadingForGen,
-    fireLoading,
-    bumpFireQueryGen,
     fireEvidenceMode,
     setFireEvidenceMode,
-    setFloodResultForGen,
-    clearFloodResult,
-    setFloodLoadingForGen,
-    floodLoading,
-    bumpFloodQueryGen,
     floodEvidenceMode,
     setFloodEvidenceMode,
-    setHeatResultForGen,
-    clearHeatResult,
-    setHeatLoadingForGen,
-    heatLoading,
-    bumpHeatQueryGen,
     heatEvidenceMode,
     setHeatEvidenceMode,
-    setDroughtResultForGen,
-    clearDroughtResult,
-    setDroughtLoadingForGen,
-    droughtLoading,
-    bumpDroughtQueryGen,
     droughtEvidenceMode,
     setDroughtEvidenceMode,
-    setCoverageGapResultForGen,
-    clearCoverageGapResult,
-    setCoverageGapLoadingForGen,
-    coverageGapLoading,
-    bumpCoverageGapQueryGen,
+    clearAnalysis,
+    analysisLoading,
+    runAnalysis,
   } = useQueryDraft();
   // UXFIX-01: fixture mode is a dev/test harness — its selector renders only
   // in development or with ?dev=1. Live is the pre-selected product default.
@@ -338,8 +227,10 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
     modeSelect:       `${idPrefix}evidence-mode-select`,
   };
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!draft.hazardId || !draft.concern || !placeSelection) return;
+
     let optionalQuestion: string | undefined;
     try {
       optionalQuestion = normalizeOptionalQuestion(draft.optionalQuestion);
@@ -350,494 +241,35 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
       );
       return;
     }
-    const explanationInput = optionalQuestion ? { optionalQuestion } : {};
 
-    if (
-      (draft.hazardId === "air_quality" || draft.hazardId === "earth_volcanoes") &&
-      placeSelection
-    ) {
-      if (!draft.concern) return;
-      const dates = resolveFloodDates(placeSelection);
-      const date = dates && dates.startDate === dates.endDate ? dates.startDate : null;
-      if (date === null) {
-        const gen = bumpCoverageGapQueryGen();
-        setCoverageGapResultForGen({
-          kind: "unsupported_date",
+    const evidenceMode =
+      draft.hazardId === "fire_smoke"
+        ? fireEvidenceMode
+        : draft.hazardId === "flood_storm"
+          ? floodEvidenceMode
+          : draft.hazardId === "extreme_heat"
+            ? heatEvidenceMode
+            : draft.hazardId === "drought_land"
+              ? droughtEvidenceMode
+              : null;
+
+    try {
+      await runAnalysis(
+        {
           hazardId: draft.hazardId,
-          date: "unresolved",
-          area: placeSelection.analysisArea.boundingBox,
-          retrievalAttempted: false,
-          sourceOutcomes: draft.hazardId === "air_quality"
-              ? {
-                  nasa_gibs_modis_aod: "not_attempted",
-                  airnow_daily_data: "not_attempted",
-                }
-            : {
-                nasa_gibs_omps_so2: "not_attempted",
-                usgs_volcano_hans: "not_attempted",
-                usgs_earthquake_geojson: "not_attempted",
-                earthquake_prediction: "out_of_scope",
-              },
-          meaning: {
-            concern: draft.concern,
-            summary: "Choose one completed UTC date first; coverage can only be checked for a finished day.",
-            optionalQuestionAcknowledged: optionalQuestion !== undefined,
-          },
-          limitations: ["No observation was queried, and missing evidence is not evidence of no danger."],
-          rejectionReason: "Choose exactly one completed UTC date.",
-        }, gen);
-        return;
-      }
-      const gen = bumpCoverageGapQueryGen();
-      setCoverageGapLoadingForGen(true, gen);
-      const route = draft.hazardId === "air_quality" ? "/api/air/query" : "/api/volcano/query";
-      fetch(route, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...canonicalAreaQueryForSelection(placeSelection),
-          date,
           concern: draft.concern,
-          ...explanationInput,
-        }),
-      })
-        .then(async (response) => {
-          const json = (await response.json()) as {
-            ok: boolean;
-            result?: CoverageGapQueryResult;
-          };
-          if (json.ok && json.result) {
-            setCoverageGapResultForGen(json.result, gen);
-            return;
-          }
-          setCoverageGapResultForGen({
-            kind: "source_failure",
-            hazardId: draft.hazardId as "air_quality" | "earth_volcanoes",
-            date,
-            area: placeSelection.analysisArea.boundingBox,
-            retrievalAttempted: false,
-            sourceOutcomes: {},
-            meaning: {
-              concern: draft.concern as ConcernType,
-              summary: "Something went wrong before any data was requested. No sources were contacted.",
-              optionalQuestionAcknowledged: optionalQuestion !== undefined,
-            },
-            limitations: ["A route failure is not evidence of safe conditions or no danger."],
-            rejectionReason: "The request couldn't be completed, so no data was retrieved.",
-          }, gen);
-        })
-        .catch(() => {
-          setCoverageGapResultForGen({
-            kind: "source_failure",
-            hazardId: draft.hazardId as "air_quality" | "earth_volcanoes",
-            date,
-            area: placeSelection.analysisArea.boundingBox,
-            retrievalAttempted: false,
-            sourceOutcomes: {},
-            meaning: {
-              concern: draft.concern as ConcernType,
-              summary: "The local request failed. No source retrieval or fixture fallback occurred.",
-              optionalQuestionAcknowledged: optionalQuestion !== undefined,
-            },
-            limitations: ["A request failure is not evidence of safe conditions or no danger."],
-            rejectionReason: "The request couldn't be completed, so no data was retrieved.",
-          }, gen);
-        })
-        .finally(() => setCoverageGapLoadingForGen(false, gen));
-      return;
-    }
-
-    if (draft.hazardId === "drought_land" && placeSelection) {
-      if (!draft.concern || !droughtEvidenceMode) return;
-      const registeredPlaceId = resolveRegisteredPlaceId(placeSelection);
-      const placeId = droughtEvidenceMode === "live"
-        ? CUSTOM_AREA_PLACE_ID
-        : registeredPlaceId;
-      const dates = resolveFloodDates(placeSelection);
-      const date = dates && dates.startDate === dates.endDate ? dates.startDate : null;
-
-      if (droughtEvidenceMode === "fixture" && placeId === CUSTOM_AREA_PLACE_ID) {
-        const gen = bumpDroughtQueryGen();
-        setDroughtResultForGen({
-          kind: "unsupported_place",
-          sourceOutcomes: { gibs: "not_attempted", usdm: "not_attempted" },
-          rejectionReason:
-            "Fixture mode uses the labelled Tucson case. Live mode uses the global satellite baseline for a selected area.",
-        }, gen);
-        return;
-      }
-      if (droughtEvidenceMode === "live" && registeredPlaceId === "demo-source-failure") {
-        const gen = bumpDroughtQueryGen();
-        setDroughtResultForGen({
-          kind: "unsupported_place",
-          sourceOutcomes: { gibs: "not_attempted", usdm: "not_attempted" },
-          rejectionReason: "The source-failure case is fixture-only; no live Drought request was sent.",
-        }, gen);
-        return;
-      }
-      if (
-        date === null ||
-        (droughtEvidenceMode === "fixture" && date !== DROUGHT_PINNED_FIXTURE_DATE)
-      ) {
-        const gen = bumpDroughtQueryGen();
-        setDroughtResultForGen({
-          kind: "unsupported_date",
-          sourceOutcomes: { gibs: "not_attempted", usdm: "not_attempted" },
-          rejectionReason: droughtEvidenceMode === "fixture"
-            ? `Drought fixture mode accepts one UTC date: ${DROUGHT_PINNED_FIXTURE_DATE}.`
-            : "Drought needs exactly one completed UTC date (up to yesterday).",
-        }, gen);
-        return;
-      }
-
-      const gen = bumpDroughtQueryGen();
-      setDroughtLoadingForGen(true, gen);
-      fetch("/api/drought/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(droughtEvidenceMode === "live"
-          ? {
-              ...canonicalAreaQueryForSelection(placeSelection),
-              date,
-              mode: "live",
-              concern: draft.concern,
-              ...explanationInput,
-            }
-          : {
-              placeId,
-              date,
-              mode: droughtEvidenceMode,
-              concern: draft.concern,
-              ...explanationInput,
-            }),
-      })
-        .then(async (response) => {
-          const json = (await response.json()) as {
-            ok: boolean;
-            result?: DroughtQueryResult;
-            error?: string;
-            retryAfterSeconds?: number;
-          };
-          setDroughtResultForGen(json.ok && json.result ? json.result : {
-            kind: "source_failure",
-            sourceOutcomes: { gibs: "failed", usdm: "failed" },
-            rejectionReason: queryFailureReason(response, json, "Drought"),
-          }, gen);
-        })
-        .catch(() => {
-          setDroughtResultForGen({
-            kind: "source_failure",
-            sourceOutcomes: { gibs: "failed", usdm: "failed" },
-            rejectionReason: "Drought request failed. No stale or fixture evidence was substituted.",
-          }, gen);
-        })
-        .finally(() => setDroughtLoadingForGen(false, gen));
-      return;
-    }
-
-    if (draft.hazardId === "extreme_heat" && placeSelection) {
-      if (!draft.concern || !heatEvidenceMode) return;
-      const registeredPlaceId = resolveRegisteredPlaceId(placeSelection);
-      const placeId = heatEvidenceMode === "live"
-        ? CUSTOM_AREA_PLACE_ID
-        : registeredPlaceId;
-      const dates = resolveFloodDates(placeSelection);
-      const date = dates?.startDate === dates?.endDate ? dates?.startDate : null;
-      const fixtureDateAllowed =
-        date === HEAT_PINNED_FIXTURE_DATE || date === HEAT_UNSUPPORTED_FIXTURE_DATE;
-
-      if (heatEvidenceMode === "fixture" && placeId === CUSTOM_AREA_PLACE_ID) {
-        const gen = bumpHeatQueryGen();
-        setHeatResultForGen({
-          kind: "unsupported_place",
-          rejectionReason: "Fixture mode uses registered demo places. Live mode supports map-selected areas.",
-        }, gen);
-        return;
-      }
-      if (heatEvidenceMode === "live" && registeredPlaceId === "demo-source-failure") {
-        const gen = bumpHeatQueryGen();
-        setHeatResultForGen({
-          kind: "unsupported_place",
-          rejectionReason: "The source-failure case is fixture-only; no live Heat request was sent.",
-        }, gen);
-        return;
-      }
-      if (date === null || (heatEvidenceMode === "fixture" && !fixtureDateAllowed)) {
-        const gen = bumpHeatQueryGen();
-        setHeatResultForGen({
-          kind: "unsupported_date",
-          rejectionReason: heatEvidenceMode === "fixture"
-            ? `Heat fixture mode accepts one UTC date: ${HEAT_PINNED_FIXTURE_DATE} or the labelled unsupported case ${HEAT_UNSUPPORTED_FIXTURE_DATE}.`
-            : "Extreme Heat needs exactly one completed UTC date (up to yesterday).",
-        }, gen);
-        return;
-      }
-
-      const gen = bumpHeatQueryGen();
-      setHeatLoadingForGen(true, gen);
-      fetch("/api/heat/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(heatEvidenceMode === "live"
-          ? {
-              ...canonicalAreaQueryForSelection(placeSelection),
-              date,
-              mode: "live",
-              concern: draft.concern,
-              ...explanationInput,
-            }
-          : {
-              placeId,
-              date,
-              mode: heatEvidenceMode,
-              concern: draft.concern,
-              ...explanationInput,
-            }),
-      })
-        .then(async (response) => {
-          const json = (await response.json()) as {
-            ok: boolean;
-            result?: HeatQueryResult;
-            error?: string;
-            retryAfterSeconds?: number;
-          };
-          setHeatResultForGen(json.ok && json.result ? json.result : {
-            kind: "source_failure",
-            rejectionReason: queryFailureReason(response, json, "Extreme Heat"),
-          }, gen);
-        })
-        .catch(() => {
-          setHeatResultForGen({
-            kind: "source_failure",
-            rejectionReason: "Heat request failed. No stale or fixture evidence was substituted.",
-          }, gen);
-        })
-        .finally(() => setHeatLoadingForGen(false, gen));
-      return;
-    }
-
-    if (draft.hazardId === "flood_storm" && placeSelection) {
-      if (!draft.concern || !floodEvidenceMode) return;
-      const registeredPlaceId = resolveRegisteredPlaceId(placeSelection);
-      const placeId = floodEvidenceMode === "live"
-        ? CUSTOM_AREA_PLACE_ID
-        : registeredPlaceId;
-      const dates = resolveFloodDates(placeSelection);
-      const fixtureDate = dates?.startDate === dates?.endDate ? dates?.startDate : null;
-      const fixtureDateAllowed =
-        fixtureDate === FLOOD_PINNED_FIXTURE_DATE ||
-        fixtureDate === FLOOD_UNSUPPORTED_FIXTURE_DATE;
-
-      if (floodEvidenceMode === "fixture" && placeId === CUSTOM_AREA_PLACE_ID) {
-        const gen = bumpFloodQueryGen();
-        setFloodResultForGen({
-          kind: "unsupported_place",
-          rejectionReason: "Fixture mode uses registered demo places. Live mode supports map-selected areas.",
-        }, gen);
-        return;
-      }
-      if (floodEvidenceMode === "live" && registeredPlaceId === "demo-source-failure") {
-        const gen = bumpFloodQueryGen();
-        setFloodResultForGen({
-          kind: "unsupported_place",
-          rejectionReason: "The source-failure case is fixture-only; no live request was sent.",
-        }, gen);
-        return;
-      }
-
-      // ADR-0043 (B4): the announced 1-7 day live rule is enforced before any
-      // request, matching the input-level cap.
-      const liveSpanDays = dates
-        ? (Date.parse(`${dates.endDate}T00:00:00Z`) - Date.parse(`${dates.startDate}T00:00:00Z`)) /
-            86_400_000 + 1
-        : 0;
-      if (
-        dates === null ||
-        (floodEvidenceMode === "fixture" && !fixtureDateAllowed) ||
-        (floodEvidenceMode === "live" && liveSpanDays > FLOOD_MAX_RANGE_DAYS)
-      ) {
-        const gen = bumpFloodQueryGen();
-        setFloodResultForGen({
-          kind: "unsupported_date",
-          rejectionReason: floodEvidenceMode === "fixture"
-            ? `Flood fixture mode accepts only a one-day custom range on ${FLOOD_PINNED_FIXTURE_DATE} or ${FLOOD_UNSUPPORTED_FIXTURE_DATE}.`
-            : `Flood needs a date range of 1 to ${FLOOD_MAX_RANGE_DAYS} completed UTC days.`,
-        }, gen);
-        return;
-      }
-
-      const gen = bumpFloodQueryGen();
-      setFloodLoadingForGen(true, gen);
-      fetch("/api/flood/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(floodEvidenceMode === "fixture"
-          ? {
-              placeId,
-              date: fixtureDate,
-              mode: "fixture",
-              concern: draft.concern,
-              ...explanationInput,
-            }
-          : {
-              ...canonicalAreaQueryForSelection(placeSelection),
-              startDate: dates.startDate,
-              endDate: dates.endDate,
-              mode: "live",
-              concern: draft.concern,
-              ...explanationInput,
-            }),
-      })
-        .then(async (response) => {
-          const json = (await response.json()) as {
-            ok: boolean;
-            result?: FloodQueryResult;
-            error?: string;
-            retryAfterSeconds?: number;
-          };
-          setFloodResultForGen(json.ok && json.result ? json.result : {
-            kind: "source_failure",
-            rejectionReason: queryFailureReason(response, json, "Flood"),
-          }, gen);
-        })
-        .catch(() => {
-          setFloodResultForGen({
-            kind: "source_failure",
-            rejectionReason: "Flood request failed. No stale or fixture evidence was substituted.",
-          }, gen);
-        })
-        .finally(() => setFloodLoadingForGen(false, gen));
-      return;
-    }
-
-    // WP-05: fire_smoke is connected to the server-side adapter.
-    // Other hazards retain an honest not-connected state.
-    if (draft.hazardId === "fire_smoke" && placeSelection) {
-      if (!draft.concern) return;
-      // WP-05-004: require explicit mode choice before querying.
-      if (!fireEvidenceMode) {
-        // Should not be reachable if submittable gate is correct, but be safe.
-        const rejectionResult: FireQueryResult = {
-          kind: "unsupported_date",
-          rejectionReason:
-            "Please select a data mode (Live or Fixture) before submitting.",
-        };
-        const gen = bumpFireQueryGen();
-        setFireResultForGen(rejectionResult, gen);
-        return;
-      }
-
-      const registeredPlaceId = resolveRegisteredPlaceId(placeSelection);
-      const placeId = fireEvidenceMode === "live"
-        ? CUSTOM_AREA_PLACE_ID
-        : registeredPlaceId;
-
-      // Fixture mode uses registered demo places only.
-      if (fireEvidenceMode === "fixture" && placeId === CUSTOM_AREA_PLACE_ID) {
-        const gen = bumpFireQueryGen();
-        setFireResultForGen({
-          kind: "unsupported_place",
-          rejectionReason: "Fixture mode uses registered demo places. Live mode supports map-selected areas.",
-        }, gen);
-        return;
-      }
-      // Reject demo-source-failure in live mode (no external request).
-      if (fireEvidenceMode === "live" && registeredPlaceId === "demo-source-failure") {
-        const rejectionResult: FireQueryResult = {
-          kind: "unsupported_place",
-          rejectionReason:
-            "demo-source-failure is a labelled fixture test case and is not available in live mode.",
-        };
-        const gen = bumpFireQueryGen();
-        setFireResultForGen(rejectionResult, gen);
-        return;
-      }
-
-      // Fixture uses the exact pinned range; live uses a bounded source time selection.
-      const date = fireEvidenceMode === "fixture" ? resolveDate(placeSelection) : null;
-      const liveTime = fireEvidenceMode === "live" ? resolveLiveTime(placeSelection) : null;
-      if (
-        (fireEvidenceMode === "fixture" && date === null) ||
-        (fireEvidenceMode === "live" && liveTime === null)
-      ) {
-        // Unsupported or incomplete time selection — reject visibly, no evidence.
-        const rejectionResult: FireQueryResult = {
-          kind: "unsupported_date",
-          rejectionReason: fireEvidenceMode === "fixture"
-            ? `Fixture mode accepts only a custom range whose start and end are ${PINNED_FIXTURE_DATE}.`
-            : "Fire supports Latest completed day, Past 7 days, or a range of 1 to 7 completed UTC days.",
-        };
-        // Bump generation so any prior in-flight request is discarded, then set result.
-        const gen = bumpFireQueryGen();
-        setFireResultForGen(rejectionResult, gen);
-        return;
-      }
-
-      // Send to the server-only validation boundary with explicit mode.
-      // The server validates mode, date, place, and concern, then evaluates
-      // evidence and returns one runtime-validated explanation.
-      const gen = bumpFireQueryGen();
-      setFireLoadingForGen(true, gen);
-
-      fetch("/api/fire/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fireEvidenceMode === "fixture"
-          ? {
-              placeId,
-              date,
-              mode: "fixture",
-              concern: draft.concern,
-              ...explanationInput,
-            }
-          : {
-              ...canonicalAreaQueryForSelection(placeSelection),
-              time: liveTime,
-              mode: "live",
-              concern: draft.concern,
-              ...explanationInput,
-            }),
-      })
-        .then(async (res) => {
-          const json = (await res.json()) as {
-            ok: boolean;
-            result?: FireQueryResult;
-            error?: string;
-            retryAfterSeconds?: number;
-          };
-          if (json.ok && json.result) {
-            // Blocker 3: only apply if generation still matches (no newer query started).
-            setFireResultForGen(json.result, gen);
-          } else {
-            // Server returned a validation failure — fail closed.
-            const failResult: FireQueryResult = {
-              kind: "source_failure",
-              rejectionReason: queryFailureReason(res, json, "Fire & Smoke"),
-            };
-            setFireResultForGen(failResult, gen);
-          }
-        })
-        .catch(() => {
-          // Network error — fail closed, no stale data.
-          const failResult: FireQueryResult = {
-            kind: "source_failure",
-            rejectionReason: "Request failed. No evidence returned.",
-          };
-          setFireResultForGen(failResult, gen);
-        })
-        .finally(() => {
-          setFireLoadingForGen(false, gen);
-        });
-    } else if (draft.hazardId !== "fire_smoke") {
-      // Clear any prior fire result when switching to a different hazard.
-      clearFireResult();
-      clearFloodResult();
-      clearHeatResult();
-      clearDroughtResult();
-      clearCoverageGapResult();
+          placeSelection,
+          ...(optionalQuestion ? { optionalQuestion } : {}),
+          ...(evidenceMode ? { evidenceMode } : {}),
+        },
+        "human"
+      );
+    } catch {
+      setQuestionError(
+        "The analysis could not be completed. No stale or fixture evidence was substituted."
+      );
     }
   }
-
   function handleSelection(sel: PlaceSelection) {
     setSelectionError(null);
     // Keep the editor draft and canonical selection in the same event update.
@@ -856,11 +288,7 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
   }
 
   function clearAllResults() {
-    clearFireResult();
-    clearFloodResult();
-    clearHeatResult();
-    clearDroughtResult();
-    clearCoverageGapResult();
+    clearAnalysis();
   }
 
   // ADR-0045: quick-nav targets inside the left column's own scrollport.
@@ -949,7 +377,7 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
     (draft.hazardId !== "flood_storm" || floodEvidenceMode !== null) &&
     (draft.hazardId !== "extreme_heat" || heatEvidenceMode !== null) &&
     (draft.hazardId !== "drought_land" || droughtEvidenceMode !== null);
-  const evidenceLoading = fireLoading || floodLoading || heatLoading || droughtLoading || coverageGapLoading;
+  const evidenceLoading = analysisLoading;
   const submitEnabled = submittable && !evidenceLoading;
   // UXFIX-01: tell the user WHY the button is disabled instead of leaving a
   // silently dead control.
@@ -1146,29 +574,17 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
             maxDate={dateBounds.maxDate}
             maxRangeDays={draft.hazardId === "flood_storm" ? FLOOD_MAX_RANGE_DAYS : undefined}
             onTimeTypeChange={(value) => {
-              clearFireResult();
-              clearFloodResult();
-              clearHeatResult();
-              clearDroughtResult();
-              clearCoverageGapResult();
+              clearAnalysis();
               setTimeType(value);
             }}
             customStart={customStart}
             onCustomStartChange={(value) => {
-              clearFireResult();
-              clearFloodResult();
-              clearHeatResult();
-              clearDroughtResult();
-              clearCoverageGapResult();
+              clearAnalysis();
               setCustomStart(value);
             }}
             customEnd={customEnd}
             onCustomEndChange={(value) => {
-              clearFireResult();
-              clearFloodResult();
-              clearHeatResult();
-              clearDroughtResult();
-              clearCoverageGapResult();
+              clearAnalysis();
               setCustomEnd(value);
             }}
             currentSelection={placeSelection}

@@ -1,7 +1,7 @@
 /**
  * ADR-0045: attach the guarded evidence explanation chain to an assembled
  * Air Quality / Earth & Volcanoes result. Mirrors finalizeFloodQueryResult:
- * evaluation → guarded explainEvaluatedEvidence → validated re-assembly.
+ * evaluation → deterministic explanation → validated re-assembly.
  * Server-only (evaluator + explainer): never import from client components.
  */
 
@@ -9,10 +9,7 @@ import { validateEvidenceObject } from "@/contracts/evidence";
 import type { ConcernType } from "@/contracts/common";
 import {
   explainEvaluatedEvidence,
-  type EvidenceProviderAccessFactory,
-  type EvidenceExplanationStatus,
 } from "@/lib/ai/evidence-explainer";
-import type { ProviderConfig } from "@/lib/ai/provider-router";
 import { evaluateEvidence, type EvidenceEvaluationResult } from "@/lib/evidence/evaluator";
 import type { CoverageGapQueryResult } from "./types";
 
@@ -40,10 +37,7 @@ function evaluateCoverageGapEvidence(result: CoverageGapQueryResult): EvidenceEv
 export async function finalizeCoverageGapQueryResult(
   adapterResult: CoverageGapQueryResult,
   concern: ConcernType,
-  providerConfig: ProviderConfig | null,
-  optionalQuestion?: string,
-  deterministicReason?: Extract<EvidenceExplanationStatus, { mode: "deterministic" }>["reason"],
-  providerAccessFactory?: EvidenceProviderAccessFactory
+  optionalQuestion?: string
 ): Promise<CoverageGapQueryResult> {
   if (!adapterResult.evidence) return adapterResult;
 
@@ -52,10 +46,7 @@ export async function finalizeCoverageGapQueryResult(
   const explained = await explainEvaluatedEvidence(
     evaluation,
     concern,
-    providerConfig,
-    optionalQuestion,
-    deterministicReason,
-    providerAccessFactory
+    optionalQuestion
   );
   const finalEvidence = {
     ...evaluation.evidence,

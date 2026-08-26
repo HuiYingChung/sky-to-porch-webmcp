@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
 import { CONCERN_TYPES, type ConcernType } from "@/contracts/common";
-import { loadProviderConfig } from "@/lib/ai/provider-router";
 import { normalizeOptionalQuestion } from "@/lib/ai/optional-question";
 import { queryDroughtFixture } from "@/lib/drought/fixture-adapter";
 import { queryLiveDroughtEvidence } from "@/lib/drought/live-adapter";
 import { finalizeDroughtQueryResult } from "@/lib/drought/service";
 import type { DroughtQueryInput, DroughtQueryRequest } from "@/lib/drought/types";
 import { validateCanonicalAreaQuery } from "@/lib/location/query-area";
-import {
-  acquireGuardedProviderAccess,
-} from "@/lib/security/ai-abuse-control";
 
 export const runtime = "nodejs";
 
@@ -96,7 +92,6 @@ export async function POST(request: Request) {
 
   try {
     const adapterInput = toAdapterInput(input);
-    const rawProviderConfig = input.mode === "fixture" ? null : loadProviderConfig();
     const adapterResult =
       adapterInput.mode === "fixture"
         ? queryDroughtFixture(adapterInput)
@@ -104,12 +99,7 @@ export async function POST(request: Request) {
     const result = await finalizeDroughtQueryResult(
       adapterResult,
       input.concern,
-      rawProviderConfig,
-      input.optionalQuestion,
-      undefined,
-      input.mode === "live"
-        ? () => acquireGuardedProviderAccess(request, input, rawProviderConfig)
-        : undefined
+      input.optionalQuestion
     );
     return NextResponse.json({ ok: true, result });
   } catch {

@@ -11,14 +11,14 @@ describe("finalizeDroughtQueryResult", () => {
       mode: "fixture",
     });
 
-    const result = await finalizeDroughtQueryResult(input, "home", null);
+    const result = await finalizeDroughtQueryResult(input, "home");
 
     expect(result).not.toBe(input);
     expect(result.sourceOutcomes).not.toBe(input.sourceOutcomes);
     expect(result.evidence).not.toBe(input.evidence);
     expect(result.evidence?.observations).not.toBe(input.evidence?.observations);
     expect(result.evidence?.limitations).not.toBe(input.evidence?.limitations);
-    expect(result.explanationStatus).toEqual({ mode: "deterministic", reason: "ai_unavailable" });
+    expect(result.explanationStatus).toEqual({ mode: "deterministic", reason: "validated_evidence" });
     expect(result.explanation?.plainSummary).toBeTruthy();
     expect(result.evidence?.explanations).toEqual([result.explanation]);
   });
@@ -30,7 +30,7 @@ describe("finalizeDroughtQueryResult", () => {
       rejectionReason: "unsupported",
     };
 
-    const result = await finalizeDroughtQueryResult(input, "home", null);
+    const result = await finalizeDroughtQueryResult(input, "home");
 
     expect(result).toEqual(input);
     expect(result).not.toBe(input);

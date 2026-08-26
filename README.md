@@ -7,10 +7,16 @@ an AI agent can work from the same map, evidence, provenance, and limitations.
 
 ## Challenge status
 
-The pre-existing product has been imported and its deterministic regression
-baseline is being preserved. WebMCP implementation is currently in progress;
-this README will not claim a tool or live experience until it has been
-implemented and verified.
+The pre-existing product has been imported behind a documented prior-work
+boundary. A browser-native WebMCP vertical slice is now implemented and
+verified locally with deterministic unit, integration, and browser tests.
+
+The current tool is `analyze_environmental_hazard`. It resolves a place or
+accepts selected coordinates, runs the same hazard-analysis application layer
+as the human form, updates the map and Insight panel, and returns a compact
+evidence result. Supported-browser discovery with the challenge agent and
+model-backed tool-selection evals remain release gates; this repository does
+not yet claim a public live WebMCP experience.
 
 The original application and the exact prior-work boundary are documented in
 [PRIOR_WORK.md](PRIOR_WORK.md).
@@ -23,8 +29,8 @@ then synchronize the visible map and evidence panel. The person can inspect
 the observations, source coverage, freshness, limitations, and verification
 links before deciding what the evidence means for them.
 
-The agent does not replace the evidence pipeline. Deterministic code continues
-to own:
+The agent does not replace the evidence pipeline. Deterministic code
+continues to own:
 
 - location and time validation;
 - source coverage and request construction;
@@ -46,9 +52,9 @@ professional decision system.
 - Earthquake and eruption timing are not predicted.
 - Official alerts and local authorities remain authoritative.
 
-## Architecture direction
+## Architecture
 
-Human UI and WebMCP tools will share one application layer:
+Human UI and WebMCP tools share one application layer:
 
     Human form -----\\
                      > Analysis service -> validated evidence -> shared UI
@@ -57,6 +63,32 @@ Human UI and WebMCP tools will share one application layer:
 
 The imported hazard adapters, source registry, evidence contracts, evaluator,
 map, and failure-state UI remain the evidence-first foundation.
+
+The application does not call an internal language-model provider. Its
+plain-language Meaning panel is deterministic; the browser agent reasons over
+the compact validated WebMCP result. This avoids an Agent → website model
+round trip and makes evidence retrieval independent of model keys, cost, and
+rate limits.
+
+## WebMCP behavior
+
+- Feature-detects `document.modelContext` and registers from a client
+  component.
+- Uses an `AbortController` for registration lifecycle and forwards tool-call
+  cancellation through geocoding and evidence retrieval.
+- Rejects unknown fields, invalid coordinates, invalid or incomplete dates,
+  and out-of-range radii.
+- Returns up to three place candidates when a name is ambiguous; it never
+  silently chooses one.
+- Marks source-derived output as untrusted content and does not claim the tool
+  is read-only because it intentionally changes the visible page state.
+- Keeps the compact tool result within the current approximately 1.5K-character
+  guidance while leaving complete evidence in the UI.
+
+See [the target architecture](docs/architecture/webmcp-target.md) and
+[the evaluation boundary](docs/testing/webmcp-evals.md). The dated
+[architecture audit](docs/architecture/audit-2026-08-26.md) records the
+findings, completed refactors, and remaining release gates.
 
 ## Local development
 
@@ -88,8 +120,9 @@ and may require source-specific credentials or network authorization.
 ## Environment variables
 
 Most deterministic development and fixture tests need no credentials. See
-.env.example for optional server-side source configuration. Never expose
-source or model credentials through NEXT_PUBLIC_*.
+.env.example for optional server-side source configuration. The application
+has no internal model credential. Never expose source credentials through
+NEXT_PUBLIC_*.
 
 ## Prior work and attribution
 

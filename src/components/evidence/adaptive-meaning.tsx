@@ -146,11 +146,7 @@ export function AdaptiveMeaningPanel({
         </ProgressiveDisclosure>
       )}
 
-      {/*
-        PR: ui-polish — the provenance line is now a badge so "Granite wrote
-        this" is scannable, not fine print. Same testid, same label text; the
-        dot is green only for an AI-assisted answer.
-      */}
+      {/* The provenance badge makes deterministic authorship easy to audit. */}
       <p
         role="status"
         data-testid="explanation-provider-status"
@@ -178,8 +174,7 @@ export function AdaptiveMeaningPanel({
             flexShrink: 0,
             alignSelf: "center",
             borderRadius: "50%",
-            background:
-              explanationStatus?.mode === "ai_assisted" ? "#22c55e" : "var(--text-muted)",
+            background: "var(--text-muted)",
           }}
         />
         <span>{explanationStatusLabel(explanationStatus)}</span>

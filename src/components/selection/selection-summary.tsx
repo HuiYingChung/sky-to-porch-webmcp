@@ -31,6 +31,7 @@ const METHOD_LABELS = {
   demo_place: "Registered place selection",
   place_search: "Place search result",
   map_click: "Direct map click",
+  agent_coordinate: "Agent-supplied coordinate",
 } as const;
 
 export function SelectionSummary({

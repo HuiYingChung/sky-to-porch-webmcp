@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
 import { CONCERN_TYPES, type ConcernType } from "@/contracts/common";
-import { loadProviderConfig } from "@/lib/ai/provider-router";
 import { queryFloodFixture } from "@/lib/flood/fixture-adapter";
 import { queryLiveFloodEvidence } from "@/lib/flood/live-adapter";
 import { finalizeFloodQueryResult } from "@/lib/flood/service";
 import type { FloodQueryInput, FloodQueryRequest } from "@/lib/flood/types";
 import { validateCanonicalAreaQuery } from "@/lib/location/query-area";
 import { normalizeOptionalQuestion } from "@/lib/ai/optional-question";
-import {
-  acquireGuardedProviderAccess,
-} from "@/lib/security/ai-abuse-control";
 
 export const runtime = "nodejs";
 
@@ -116,19 +112,13 @@ export async function POST(request: Request) {
 
   try {
     const adapterInput = toAdapterInput(input);
-    const rawProviderConfig = input.mode === "fixture" ? null : loadProviderConfig();
     const adapterResult = adapterInput.mode === "fixture"
       ? queryFloodFixture(adapterInput)
       : await queryLiveFloodEvidence(adapterInput);
     const result = await finalizeFloodQueryResult(
       adapterResult,
       input.concern,
-      rawProviderConfig,
-      input.optionalQuestion,
-      undefined,
-      input.mode === "live"
-        ? () => acquireGuardedProviderAccess(request, input, rawProviderConfig)
-        : undefined
+      input.optionalQuestion
     );
     return NextResponse.json({ ok: true, result });
   } catch (error) {

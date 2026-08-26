@@ -32,18 +32,18 @@ const EXPLANATION: Explanation = {
 };
 
 describe("adaptive Meaning and map-alternative UX", () => {
-  it("renders a direct question answer with a fixed official checker URL and visible fallback status", () => {
+  it("renders a direct question answer with a fixed official checker URL and deterministic status", () => {
     const html = renderToStaticMarkup(
       <AdaptiveMeaningPanel
         explanation={EXPLANATION}
-        explanationStatus={{ mode: "deterministic", reason: "ai_unavailable" }}
+        explanationStatus={{ mode: "deterministic", reason: "validated_evidence" }}
       />
     );
     expect(html).toContain("your dog&#x27;s outdoor walk");
     expect(html).toContain("Check conditions at walk time");
     expect(html).toContain('href="https://www.airnow.gov/"');
     expect(html).toContain(
-      "AI explanation is not configured · showing the rule-based explanation"
+      "rule-based explanation · derived from validated evidence"
     );
   });
 

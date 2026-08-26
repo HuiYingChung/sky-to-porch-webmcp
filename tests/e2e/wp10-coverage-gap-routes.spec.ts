@@ -64,7 +64,7 @@ test("Air Quality composes separate live satellite and outdoor AQI evidence", as
   await expect(meaning.getByTestId("meaning-direct-answer"))
     .toContainText("\"Good\" on the official U.S. EPA Air Quality Index scale");
   await expect(meaning.getByTestId("explanation-provider-status"))
-    .toContainText(/Rule-based explanation|AI explanation is not configured/);
+    .toContainText(/rule-based explanation|AI explanation is not configured/);
   await expect(meaning.getByTestId("explanation-provider-status"))
     .not.toContainText("Explained by");
 

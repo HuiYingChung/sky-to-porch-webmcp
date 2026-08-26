@@ -2,10 +2,7 @@ import { validateEvidenceObject } from "@/contracts/evidence";
 import type { ConcernType } from "@/contracts/common";
 import {
   explainEvaluatedEvidence,
-  type EvidenceProviderAccessFactory,
-  type EvidenceExplanationStatus,
 } from "@/lib/ai/evidence-explainer";
-import type { ProviderConfig } from "@/lib/ai/provider-router";
 import { evaluateEvidence, type EvidenceEvaluationResult } from "@/lib/evidence/evaluator";
 import { separateFloodEvidence } from "./claim-separation";
 import type { FloodQueryResult } from "./types";
@@ -35,10 +32,7 @@ function evaluateFloodEvidence(result: FloodQueryResult): EvidenceEvaluationResu
 export async function finalizeFloodQueryResult(
   adapterResult: FloodQueryResult,
   concern: ConcernType,
-  providerConfig: ProviderConfig | null,
-  optionalQuestion?: string,
-  deterministicReason?: Extract<EvidenceExplanationStatus, { mode: "deterministic" }>["reason"],
-  providerAccessFactory?: EvidenceProviderAccessFactory
+  optionalQuestion?: string
 ): Promise<FloodQueryResult> {
   if (!adapterResult.evidence) return adapterResult;
 
@@ -48,10 +42,7 @@ export async function finalizeFloodQueryResult(
   const explained = await explainEvaluatedEvidence(
     evaluation,
     concern,
-    providerConfig,
-    optionalQuestion,
-    deterministicReason,
-    providerAccessFactory
+    optionalQuestion
   );
   const finalEvidence = {
     ...evaluation.evidence,

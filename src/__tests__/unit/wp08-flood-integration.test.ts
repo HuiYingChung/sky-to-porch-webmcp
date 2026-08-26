@@ -1,7 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it, vi } from "vitest";
 import { validateEvidenceObject } from "@/contracts/evidence";
-import { assembleIntent, validateModelCandidate, type ModelCandidate } from "@/lib/ai/intent-parser";
 import { queryFloodFixture } from "@/lib/flood/fixture-adapter";
 import { queryLiveFloodEvidence } from "@/lib/flood/live-adapter";
 import { finalizeFloodQueryResult } from "@/lib/flood/service";
@@ -130,7 +129,7 @@ describe("WP-08 fixture and service integration", () => {
       date: FLOOD_PINNED_FIXTURE_DATE,
       mode: "fixture",
     });
-    const result = await finalizeFloodQueryResult(adapterResult, "home", null);
+    const result = await finalizeFloodQueryResult(adapterResult, "home");
 
     expect(result.kind).toBe("success");
     expect(result.assessments).toHaveLength(6);
@@ -148,7 +147,7 @@ describe("WP-08 fixture and service integration", () => {
       "not_supported",
       "not_supported",
     ]);
-    expect(result.explanationStatus).toEqual({ mode: "deterministic", reason: "ai_unavailable" });
+    expect(result.explanationStatus).toEqual({ mode: "deterministic", reason: "validated_evidence" });
     expect(result.explanation?.notSupported.join(" ")).toMatch(/property|route/i);
     validateEvidenceObject(result.evidence);
   });
@@ -203,7 +202,7 @@ describe("WP-08 live adapter with mocked official-source responses", () => {
     expect(new Set(hosts)).toEqual(new Set(["gibs.earthdata.nasa.gov", "api.waterdata.usgs.gov"]));
     validateEvidenceObject(result.evidence);
 
-    const finalized = await finalizeFloodQueryResult(result, "home", null);
+    const finalized = await finalizeFloodQueryResult(result, "home");
     expect(finalized.assessments?.[2]).toMatchObject({
       code: "surface_water",
       status: "evidence_present",
@@ -322,7 +321,7 @@ describe("WP-08 live adapter with mocked official-source responses", () => {
     );
     expect(result.kind).toBe("success");
     expect(result.evidence?.observations.length).toBeGreaterThanOrEqual(9);
-    const finalized = await finalizeFloodQueryResult(result, "home", null);
+    const finalized = await finalizeFloodQueryResult(result, "home");
     const observedSection = finalized.explanation?.meaning?.sections.find(
       (section) => section.kind === "observed"
     );
@@ -341,46 +340,5 @@ describe("WP-08 live adapter with mocked official-source responses", () => {
     );
     expect(visualOnly?.description).toContain("2024-07-06 through 2024-07-08 UTC");
     expect(visualOnly?.description).toMatch(/any day in that window/i);
-  });
-});
-
-describe("WP-08 bounded Flood intent", () => {
-  it("accepts only the Houston Flood route with its exact source set", () => {
-    const candidate: ModelCandidate & { status: "parsed" } = {
-      status: "parsed",
-      placeId: "demo-houston",
-      hazardId: "flood_storm",
-      timeRange: {
-        type: "custom",
-        startTs: "2024-07-08T00:00:00Z",
-        endTs: "2024-07-08T23:59:59Z",
-      },
-      concern: "home",
-      sourceIds: [
-        "nasa_gibs_imerg",
-        "nasa_lance_flood_extent",
-        "usgs_instantaneous_values",
-      ],
-      reasonCode: null,
-    };
-    validateModelCandidate(candidate);
-    const intent = assembleIntent(candidate, "What Flood evidence exists for Houston?");
-    expect(intent).toMatchObject({
-      hazardId: "flood_storm",
-      place: { label: expect.stringMatching(/Houston/i) },
-    });
-  });
-
-  it("rejects a Houston Flood candidate carrying Fire sources", () => {
-    const candidate = {
-      status: "parsed",
-      placeId: "demo-houston",
-      hazardId: "flood_storm",
-      timeRange: { type: "custom", startTs: "2024-07-08T00:00:00Z", endTs: "2024-07-08T23:59:59Z" },
-      concern: "home",
-      sourceIds: ["noaa_hms_fire_points", "noaa_hms_smoke_polygons"],
-      reasonCode: null,
-    };
-    expect(() => validateModelCandidate(candidate)).toThrow(/registered for hazard|exact approved source/i);
   });
 });

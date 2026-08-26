@@ -1,9 +1,10 @@
 /**
- * WP-07 bounded AI evidence interpretation and deterministic explanation.
+ * Evidence interpretation and deterministic explanation.
  *
- * The provider may propose bounded prose and validated IDs. Deterministic code
- * canonicalizes every ID-bearing field and owns the final display decision,
- * limitations, safety boundaries, confidence, and freshness.
+ * Deterministic code owns every displayed claim, limitation, safety boundary,
+ * confidence state, and freshness classification. The browser WebMCP agent
+ * receives compact validated evidence separately; this server module never
+ * calls an internal language-model provider.
  */
 
 import type { ConcernType, HazardId } from "@/contracts/common";
@@ -26,17 +27,7 @@ import {
 } from "@/contracts/evidence";
 import type { EvidenceEvaluationResult } from "@/lib/evidence/evaluator";
 import { getRegistryEntry } from "@/data/dataset-registry";
-import {
-  routeStructuredTask,
-  type ProviderConfig,
-  type ProviderFailureReason,
-  type ProviderId,
-} from "@/lib/ai/provider-router";
 import { normalizeOptionalQuestion } from "@/lib/ai/optional-question";
-import {
-  denialExplanationReason,
-  type GuardedProviderAccess,
-} from "@/lib/security/ai-abuse-control";
 import {
   defaultVerificationSourceIds,
   eligibleVerificationSources,
@@ -67,15 +58,6 @@ export type EvidenceSelectionReason =
   | "conflicting_evidence"
   | "stale_evidence";
 
-/**
- * ADR-0055: the guard consults a distributed limiter over the network, so it
- * may answer asynchronously. Synchronous factories still satisfy this type,
- * which is why no route or service had to change.
- */
-export type EvidenceProviderAccessFactory = () =>
-  | GuardedProviderAccess
-  | Promise<GuardedProviderAccess>;
-
 export interface EvidenceSelectionCandidate {
   status: "selected" | "insufficient";
   observationIds: string[];
@@ -94,33 +76,10 @@ export interface EvidenceAnswerCandidate extends EvidenceSelectionCandidate {
   _plainSummaryFallback?: boolean;
 }
 
-export type EvidenceExplanationStatus =
-  | {
-      mode: "ai_assisted";
-      provider: "ibm" | "openai";
-      modelId: string;
-      fallbackUsed: boolean;
-      fallbackReason?: string;
-      plainSummaryMode?: "ai" | "deterministic_fallback";
-      plainSummaryFallbackReason?: "ai_unavailable" | "ai_output_rejected";
-    }
-  | {
-      mode: "deterministic";
-      reason:
-        | "insufficient_evidence"
-        | "ai_unavailable"
-        | "ai_output_rejected"
-        | "abuse_controls_unconfigured"
-        | "request_rate_limited"
-        | "budget_exhausted";
-      /** Present only when an AI provider was actually attempted or completed. */
-      provider?: ProviderId;
-      modelId?: string;
-      fallbackUsed?: boolean;
-      fallbackReason?: ProviderFailureReason;
-      /** Safe allowlisted outcome for the final provider attempt. */
-      providerFailureReason?: ProviderFailureReason;
-    };
+export interface EvidenceExplanationStatus {
+  mode: "deterministic";
+  reason: "validated_evidence" | "insufficient_evidence";
+}
 
 export interface EvidenceExplanationResult {
   explanation: Explanation;
@@ -1418,7 +1377,7 @@ function normalizeCandidateProse(
   }
 }
 
-function parseSelectionCandidate(
+export function parseSelectionCandidate(
   text: string,
   evaluation: EvidenceEvaluationResult,
   context: ModelContext,
@@ -1745,17 +1704,12 @@ function selectionEligible(evaluation: EvidenceEvaluationResult): boolean {
 export async function explainEvaluatedEvidence(
   evaluation: EvidenceEvaluationResult,
   concern: ConcernType,
-  config: ProviderConfig | null,
-  optionalQuestion?: string,
-  deterministicReason: Extract<EvidenceExplanationStatus, { mode: "deterministic" }>["reason"] =
-    "ai_unavailable",
-  providerAccessFactory?: EvidenceProviderAccessFactory
+  optionalQuestion?: string
 ): Promise<EvidenceExplanationResult> {
   validateEvidenceObject(evaluation.evidence);
   const normalizedQuestion = normalizeOptionalQuestion(optionalQuestion);
-  // UXFIX-02: every explanation carries a plain-language summary. The
-  // deterministic summary is the guaranteed fallback; an AI-drafted summary
-  // replaces it only after passing the deterministic guardrails.
+  // Every explanation carries a bounded plain-language summary derived from
+  // the already validated EvidenceObject.
   const fallbackSummary = deterministicPlainSummary(evaluation, concern, normalizedQuestion);
   if (!selectionEligible(evaluation)) {
     return {
@@ -1769,131 +1723,14 @@ export async function explainEvaluatedEvidence(
       status: { mode: "deterministic", reason: "insufficient_evidence" },
     };
   }
-  if (!config) {
-    return {
-      explanation: renderExplanation(
-        evaluation,
-        concern,
-        undefined,
-        fallbackSummary,
-        normalizedQuestion
-      ),
-      status: { mode: "deterministic", reason: deterministicReason },
-    };
-  }
-
-  let providerConfig = config;
-  let releaseProviderAccess: (() => void) | undefined;
-  if (providerAccessFactory) {
-    const providerAccess = await providerAccessFactory();
-    if (!providerAccess.allowed) {
-      return {
-        explanation: renderExplanation(
-          evaluation,
-          concern,
-          undefined,
-          fallbackSummary,
-          normalizedQuestion
-        ),
-        status: {
-          mode: "deterministic",
-          reason: denialExplanationReason(providerAccess.reason),
-        },
-      };
-    }
-    providerConfig = providerAccess.config;
-    releaseProviderAccess = providerAccess.release;
-  }
-
-  const context = buildEvidenceSelectionContext(evaluation, concern, normalizedQuestion);
-  const contextJson = JSON.stringify(context);
-  let providerResult;
-  try {
-    providerResult = await routeStructuredTask(contextJson, providerConfig, {
-      systemPrompt: EVIDENCE_SELECTION_SYSTEM_PROMPT,
-      schemaName: "evidence_answer",
-      openAiSchema: buildOpenAiEvidenceSelectionSchema(context),
-      // ADR-0042: 1,024 tokens truncated larger Granite evidence answers
-      // (finish_reason "length" → fallback). 2,048 is the router's cap.
-      maxOutputTokens: 2_048,
-      parseCandidate: (text) => parseSelectionCandidate(
-        text,
-        evaluation,
-        context,
-        normalizedQuestion
-      ),
-    });
-  } finally {
-    releaseProviderAccess?.();
-  }
-
-  if (providerResult.kind === "unavailable") {
-    return {
-      explanation: renderExplanation(
-        evaluation,
-        concern,
-        undefined,
-        fallbackSummary,
-        normalizedQuestion
-      ),
-      status: {
-        mode: "deterministic",
-        reason: providerResult.reason,
-        provider: providerResult.provider,
-        ...(providerResult.modelId ? { modelId: providerResult.modelId } : {}),
-        fallbackUsed: providerResult.fallbackUsed,
-        ...(providerResult.fallbackReason
-          ? { fallbackReason: providerResult.fallbackReason }
-          : {}),
-        providerFailureReason: providerResult.providerFailureReason,
-      },
-    };
-  }
-  try {
-    return {
-      explanation: renderExplanation(
-        evaluation,
-        concern,
-        providerResult.candidate,
-        providerResult.candidate.directAnswer,
-        normalizedQuestion
-      ),
-      status: {
-        mode: "ai_assisted",
-        provider: providerResult.provider,
-        modelId: providerResult.modelId,
-        fallbackUsed: providerResult.fallbackUsed,
-        ...(providerResult.fallbackReason
-          ? { fallbackReason: providerResult.fallbackReason }
-          : {}),
-        plainSummaryMode: providerResult.candidate._plainSummaryFallback
-          ? "deterministic_fallback"
-          : "ai",
-        ...(providerResult.candidate._plainSummaryFallback
-          ? { plainSummaryFallbackReason: "ai_output_rejected" as const }
-          : {}),
-      },
-    };
-  } catch {
-    return {
-      explanation: renderExplanation(
-        evaluation,
-        concern,
-        undefined,
-        fallbackSummary,
-        normalizedQuestion
-      ),
-      status: {
-        mode: "deterministic",
-        reason: "ai_output_rejected",
-        provider: providerResult.provider,
-        modelId: providerResult.modelId,
-        fallbackUsed: providerResult.fallbackUsed,
-        ...(providerResult.fallbackReason
-          ? { fallbackReason: providerResult.fallbackReason }
-          : {}),
-        providerFailureReason: "semantic_invalid",
-      },
-    };
-  }
+  return {
+    explanation: renderExplanation(
+      evaluation,
+      concern,
+      undefined,
+      fallbackSummary,
+      normalizedQuestion
+    ),
+    status: { mode: "deterministic", reason: "validated_evidence" },
+  };
 }

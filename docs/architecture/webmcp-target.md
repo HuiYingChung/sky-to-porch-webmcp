@@ -21,9 +21,9 @@ The service owns:
 5. deterministic evaluation;
 6. compact result shaping.
 
-## Provisional tool surface
+## Implemented tool surface
 
-### analyze_hazard_evidence
+### analyze_environmental_hazard
 
 Runs the complete safe analysis path and synchronizes the visible UI.
 
@@ -52,6 +52,11 @@ A source-coverage or current-analysis tool will be added only if evals show it
 improves tool selection or the shared user journey. It must not introduce a
 fragile required call order.
 
+When no coordinates are supplied, place search returns at most three
+candidates. One result proceeds; multiple results return
+`needs_place_choice` and require the agent to ask the person before calling
+again with the chosen coordinates.
+
 ## Registration lifecycle
 
 Register tools from a client component after feature detection. Tie
@@ -61,13 +66,23 @@ state through safe closures.
 
 ## Security and failure behavior
 
-- Analysis tools are read-only with respect to persistent or external state.
+- The tool does not mutate persistent or external state, but its
+  `readOnlyHint` is false because synchronizing the visible page is an
+  intentional state change.
 - External observations are marked as untrusted content.
 - Cross-origin exposure is disabled unless an exact trusted origin is
   explicitly required.
 - Invalid input, ambiguity, unsupported coverage, no observation, source
   failure, and internal failure return distinct compact error states.
 - Tool output must not turn missing evidence into reassurance.
+
+## Internal-model decision
+
+The application has no internal model-provider route. Evidence retrieval and
+the Human UI therefore do not depend on model credentials, paid-call budgets,
+or a nested model round trip. The external browser agent may explain the
+compact result; deterministic code remains authoritative for evidence and
+safety states.
 
 ## Verification
 

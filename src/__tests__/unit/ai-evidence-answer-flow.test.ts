@@ -41,64 +41,16 @@ describe("optional Plain English question boundary", () => {
   });
 });
 
-describe("Plain English fallback provenance", () => {
-  it("keeps provider/model/fallback visibility while naming a deterministic summary fallback", () => {
-    expect(explanationStatusLabel({
-      mode: "ai_assisted",
-      provider: "openai",
-      modelId: "test-model",
-      fallbackUsed: true,
-      plainSummaryMode: "deterministic_fallback",
-      plainSummaryFallbackReason: "ai_output_rejected",
-    })).toBe(
-      "Explained by OpenAI · test-model · fallback used · Deterministic Plain English fallback · ai output rejected"
-    );
-  });
-
-  it("names WHY the primary provider failed on a successful fallback (ADR-0042)", () => {
-    expect(explanationStatusLabel({
-      mode: "ai_assisted",
-      provider: "openai",
-      modelId: "gpt-4o-mini",
-      fallbackUsed: true,
-      fallbackReason: "timeout",
-    })).toBe(
-      "Explained by OpenAI · gpt-4o-mini · fallback used · primary timeout"
-    );
-  });
-
-  it("names the IBM Granite provider and model for an AI-assisted explanation", () => {
-    expect(explanationStatusLabel({
-      mode: "ai_assisted",
-      provider: "ibm",
-      modelId: "ibm/granite-4-h-small",
-      fallbackUsed: false,
-    })).toBe("Explained by IBM Granite (watsonx) · ibm/granite-4-h-small");
-  });
-
-  it("plainly says AI is not configured when no provider was even attempted", () => {
+describe("deterministic explanation provenance", () => {
+  it("names validated and insufficient deterministic explanations", () => {
     expect(explanationStatusLabel({
       mode: "deterministic",
-      reason: "ai_unavailable",
-    })).toBe("AI explanation is not configured · showing the rule-based explanation");
+      reason: "validated_evidence",
+    })).toBe("rule-based explanation · derived from validated evidence");
     expect(explanationStatusLabel({
       mode: "deterministic",
       reason: "insufficient_evidence",
-    })).toBe("Rule-based explanation · insufficient evidence");
-  });
-
-  it("names the attempted provider, model, bounded failure, and fallback on AI unavailability", () => {
-    expect(explanationStatusLabel({
-      mode: "deterministic",
-      reason: "ai_unavailable",
-      provider: "openai",
-      modelId: "test-model",
-      providerFailureReason: "rate_limited",
-      fallbackUsed: true,
-      fallbackReason: "unconfigured",
-    })).toBe(
-      "Rule-based explanation · ai unavailable · attempted OpenAI · test-model · rate limited · fallback used · primary unconfigured"
-    );
+    })).toBe("rule-based explanation · evidence is insufficient");
   });
 });
 
@@ -158,7 +110,7 @@ describe("question-aware hazard route contracts", () => {
     expect(body.ok).toBe(true);
     expect(body.result?.explanationStatus).toEqual({
       mode: "deterministic",
-      reason: "ai_unavailable",
+      reason: "validated_evidence",
     });
     expect(body.result?.explanation?.plainSummary).toMatch(/cannot confirm.*power outage/iu);
     expect(body.result?.explanation?.plainSummary).toMatch(/official utility outage/iu);

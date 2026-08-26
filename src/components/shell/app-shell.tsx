@@ -31,6 +31,7 @@ import { SkyToPorchMark } from "@/components/brand/sky-to-porch-mark";
 import { GuidedQuery } from "@/components/query/guided-query";
 import { InsightNavigation } from "@/components/navigation/insight-navigation";
 import { AnalysisMap } from "@/components/map/analysis-map";
+import { useQueryDraft } from "@/components/query/query-provider";
 
 const AboutDialog = dynamic(
   () => import("@/components/about/about-dialog").then((module) => module.AboutDialog),
@@ -68,8 +69,26 @@ const PANEL_LIMITS: Record<DesktopPanel, { min: number; max: number }> = {
 };
 
 function HeaderControls({ onOpenAbout }: { onOpenAbout: () => void }) {
+  const { webMcpStatus } = useQueryDraft();
   return (
     <div className="app-header-controls">
+      {webMcpStatus === "ready" && (
+        <span
+          role="status"
+          data-testid="webmcp-ready-badge"
+          title="This browser can discover the Sky to Porch WebMCP tool"
+          style={{
+            padding: "3px 7px",
+            border: "1px solid var(--border-default)",
+            borderRadius: "999px",
+            color: "var(--text-secondary)",
+            fontSize: "12px",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Agent-ready
+        </span>
+      )}
       <button type="button" className="app-about-button" onClick={onOpenAbout}>
         About
       </button>
@@ -140,6 +159,7 @@ function constrainPanelWidths(shellWidth: number, widths: DesktopPanelWidths) {
 
 export function AppShell() {
   const [mobileView, setMobileView] = useState<MobileView>("ask");
+  const { activeAnalysis } = useQueryDraft();
   const [aboutOpen, setAboutOpen] = useState(false);
   const [desktopPanelWidths, setDesktopPanelWidths] =
     useState<DesktopPanelWidths>({
@@ -184,6 +204,15 @@ export function AppShell() {
       document.body.style.userSelect = "";
     };
   }, []);
+
+  // On narrow screens the map and evidence are separate views. After an
+  // agent completes a query, reveal the shared result instead of leaving it
+  // hidden behind the Ask tab. The user remains free to navigate away.
+  useEffect(() => {
+    if (activeAnalysis?.origin === "agent") {
+      setMobileView("insight");
+    }
+  }, [activeAnalysis?.analysisId, activeAnalysis?.origin]);
 
   // Input events dispatched before hydration are silently dropped by React;
   // this attribute lets automation (tests/e2e/helpers.ts gotoHydrated) wait

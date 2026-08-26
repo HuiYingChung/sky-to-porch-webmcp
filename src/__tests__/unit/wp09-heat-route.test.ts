@@ -16,7 +16,7 @@ describe("WP-09 Heat route", () => {
     vi.unstubAllGlobals();
   });
 
-  it("returns the validated fixed Tucson fixture without a provider", async () => {
+  it("returns the validated fixed Tucson fixture with a deterministic explanation", async () => {
     const response = await POST(request({
       placeId: "demo-tucson",
       date: HEAT_PINNED_FIXTURE_DATE,
@@ -29,7 +29,7 @@ describe("WP-09 Heat route", () => {
       ok: true,
       result: {
         kind: "success",
-        explanationStatus: { mode: "deterministic", reason: "ai_unavailable" },
+        explanationStatus: { mode: "deterministic", reason: "validated_evidence" },
       },
     });
     expect(body.result.assessments).toHaveLength(6);

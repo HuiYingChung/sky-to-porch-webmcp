@@ -2,10 +2,7 @@ import { validateEvidenceObject } from "@/contracts/evidence";
 import type { ConcernType } from "@/contracts/common";
 import {
   explainEvaluatedEvidence,
-  type EvidenceProviderAccessFactory,
-  type EvidenceExplanationStatus,
 } from "@/lib/ai/evidence-explainer";
-import type { ProviderConfig } from "@/lib/ai/provider-router";
 import { evaluateEvidence, type EvidenceEvaluationResult } from "@/lib/evidence/evaluator";
 import type { DroughtQueryResult } from "./types";
 
@@ -29,10 +26,7 @@ function evaluateDroughtEvidence(result: DroughtQueryResult): EvidenceEvaluation
 export async function finalizeDroughtQueryResult(
   adapterResult: DroughtQueryResult,
   concern: ConcernType,
-  providerConfig: ProviderConfig | null,
-  optionalQuestion?: string,
-  deterministicReason?: Extract<EvidenceExplanationStatus, { mode: "deterministic" }>["reason"],
-  providerAccessFactory?: EvidenceProviderAccessFactory
+  optionalQuestion?: string
 ): Promise<DroughtQueryResult> {
   const result = structuredClone(adapterResult);
   if (!result.evidence) return result;
@@ -41,10 +35,7 @@ export async function finalizeDroughtQueryResult(
   const explained = await explainEvaluatedEvidence(
     evaluation,
     concern,
-    providerConfig,
-    optionalQuestion,
-    deterministicReason,
-    providerAccessFactory
+    optionalQuestion
   );
   const finalEvidence = {
     ...evaluation.evidence,

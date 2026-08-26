@@ -1,7 +1,7 @@
 /**
  * WP-07 route integration through the immutable Fire fixture adapter,
  * deterministic evaluator, server-side explainer, and response contract.
- * Provider and external-source network access are prohibited in this suite.
+ * External-source network access is prohibited in this suite.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,21 +18,12 @@ function fireRequest(body: unknown): Request {
 }
 
 beforeEach(() => {
-  vi.stubEnv("AI_PRIMARY_PROVIDER", "ibm");
-  vi.stubEnv("AI_FALLBACK_PROVIDER", "openai");
-  vi.stubEnv("IBM_WATSONX_URL", "");
-  vi.stubEnv("IBM_WATSONX_API_KEY", "");
-  vi.stubEnv("IBM_WATSONX_PROJECT_ID", "");
-  vi.stubEnv("IBM_WATSONX_MODEL_ID", "");
-  vi.stubEnv("OPENAI_API_KEY", "");
-  vi.stubEnv("OPENAI_MODEL", "");
   vi.stubGlobal("fetch", vi.fn(() => {
     throw new Error("WP-07 integration tests must not access the network");
   }));
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
@@ -53,7 +44,7 @@ describe("POST /api/fire/query WP-07 explanation integration", () => {
     expect(body.result.evidence?.confidence.level).toBe("low");
     expect(body.result.explanationStatus).toEqual({
       mode: "deterministic",
-      reason: "ai_unavailable",
+      reason: "validated_evidence",
     });
     expect(body.result.explanation?.aiGenerated).toBe(false);
     expect(body.result.explanation?.notSupported).toContain(
@@ -101,24 +92,4 @@ describe("POST /api/fire/query WP-07 explanation integration", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("fails to deterministic explanation when the provider mode pair is invalid", async () => {
-    vi.stubEnv("AI_PRIMARY_PROVIDER", "ibm");
-    vi.stubEnv("AI_FALLBACK_PROVIDER", "none");
-
-    const response = await POST(fireRequest({
-      placeId: "demo-los-angeles",
-      date: PINNED_FIXTURE_DATE,
-      mode: "fixture",
-      concern: "community",
-    }));
-    const body = await response.json() as { ok: true; result: FireQueryResult };
-
-    expect(response.status).toBe(200);
-    expect(body.result.explanationStatus).toEqual({
-      mode: "deterministic",
-      reason: "ai_unavailable",
-    });
-    expect(body.result.explanation?.aiGenerated).toBe(false);
-    expect(fetch).not.toHaveBeenCalled();
-  });
 });

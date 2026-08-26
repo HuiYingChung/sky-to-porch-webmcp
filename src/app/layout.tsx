@@ -6,9 +6,9 @@ import { QueryProvider } from "@/components/query/query-provider";
 import { ThemeProvider } from "@/components/theme/theme-selector";
 
 export const metadata: Metadata = {
-  title: "Sky to Porch",
+  title: "Sky to Porch WebMCP",
   description:
-    "Satellite-data interpretation for ordinary people — what space observations mean for you at home.",
+    "Human-agent environmental evidence analysis on one shared map, with provenance and limitations.",
 };
 
 export default function RootLayout({

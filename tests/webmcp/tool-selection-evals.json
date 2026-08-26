@@ -1,0 +1,110 @@
+[
+  {
+    "id": "direct-fire-place",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Show me the latest fire and smoke evidence around Tucson and update the Sky to Porch map."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Tucson",
+          "hazard": "fire_smoke"
+        }
+      }
+    ]
+  },
+  {
+    "id": "implicit-heat-pets",
+    "messages": [
+      {
+        "role": "user",
+        "content": "I am worried about walking my dog in the heat near Phoenix. Check the evidence with me."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Phoenix",
+          "hazard": "extreme_heat",
+          "concern": "pets"
+        }
+      }
+    ]
+  },
+  {
+    "id": "explicit-coordinate-air",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Check air-quality evidence within 15 km of 41.8781, -87.6298 for health planning."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "41.8781, -87.6298",
+          "hazard": "air_quality",
+          "concern": "health",
+          "latitude": 41.8781,
+          "longitude": -87.6298,
+          "radius_km": 15
+        }
+      }
+    ]
+  },
+  {
+    "id": "completed-flood-date",
+    "messages": [
+      {
+        "role": "user",
+        "content": "For travel planning, examine flood and storm evidence around Houston on 2024-07-08."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Houston",
+          "hazard": "flood_storm",
+          "concern": "travel",
+          "start_date": "2024-07-08",
+          "end_date": "2024-07-08"
+        }
+      }
+    ]
+  },
+  {
+    "id": "ambiguous-place-first-call",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Check wildfire evidence for Springfield."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Springfield",
+          "hazard": "fire_smoke"
+        }
+      }
+    ]
+  },
+  {
+    "id": "out-of-scope-no-call",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Reserve a hotel room in Tucson for Friday night."
+      }
+    ],
+    "expectedCall": []
+  }
+]

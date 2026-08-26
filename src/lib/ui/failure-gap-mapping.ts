@@ -2,7 +2,6 @@ import type { FailureGapStatusState } from "@/components/states/failure-gap-stat
 import type { EvidenceObject } from "@/contracts/evidence";
 import type { CoverageGapQueryResult } from "@/lib/coverage-gap/types";
 import type { DroughtQueryResult } from "@/lib/drought/types";
-import type { EvidenceExplanationStatus } from "@/lib/ai/evidence-explainer";
 import type { FireQueryResult } from "@/lib/fire/types";
 import type { FloodQueryResult } from "@/lib/flood/types";
 import type { HeatQueryResult } from "@/lib/heat/types";
@@ -27,12 +26,6 @@ function resultEvidence(result: FailureGapMappableResult): EvidenceObject | unde
 
 function resultFailureReason(result: FailureGapMappableResult): string | undefined {
   return "failureReason" in result ? result.failureReason : undefined;
-}
-
-function resultExplanationStatus(
-  result: FailureGapMappableResult
-): EvidenceExplanationStatus | undefined {
-  return "explanationStatus" in result ? result.explanationStatus : undefined;
 }
 
 function hasExplicitPartialSourceFailure(result: FailureGapMappableResult): boolean {
@@ -98,23 +91,6 @@ function primaryResultState(
   return stateWithEvidenceMode("source_failure", evidence);
 }
 
-function explanationState(
-  status: EvidenceExplanationStatus | undefined,
-  evidence: EvidenceObject | undefined
-): FailureGapStatusState | null {
-  if (!status || status.mode !== "deterministic") return null;
-  if (status.providerFailureReason === "timeout") {
-    return stateWithEvidenceMode("ai_timeout", evidence);
-  }
-  if (
-    status.reason === "request_rate_limited" ||
-    status.providerFailureReason === "rate_limited"
-  ) {
-    return stateWithEvidenceMode("rate_limited", evidence);
-  }
-  return null;
-}
-
 function pushUnique(
   states: FailureGapStatusState[],
   candidate: FailureGapStatusState | null
@@ -153,7 +129,6 @@ export function mapFailureGapStates(
     pushUnique(states, stateWithEvidenceMode("conflicting_sources", evidence));
   }
   if (tab === "meaning") {
-    pushUnique(states, explanationState(resultExplanationStatus(result), evidence));
   }
   if (
     tab === "missions" &&

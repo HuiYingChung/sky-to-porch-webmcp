@@ -29,10 +29,10 @@ describe("WP-09 deterministic Extreme Heat product flow", () => {
       placeId: "demo-tucson",
       date: HEAT_PINNED_FIXTURE_DATE,
       mode: "fixture",
-    }), "home", null);
+    }), "home");
     expect(result.kind).toBe("success");
     expect(result.assessments).toHaveLength(6);
-    expect(result.explanationStatus).toEqual({ mode: "deterministic", reason: "ai_unavailable" });
+    expect(result.explanationStatus).toEqual({ mode: "deterministic", reason: "validated_evidence" });
     expect(result.assessments?.find((item) => item.code === "indoor_temperature")?.status)
       .toBe("not_supported");
     expect(result.assessments?.find((item) => item.code === "household_heat_certainty")?.status)
@@ -46,7 +46,7 @@ describe("WP-09 deterministic Extreme Heat product flow", () => {
       { placeId: "demo-tucson", date: HEAT_UNSUPPORTED_FIXTURE_DATE, mode: "fixture" as const },
       { placeId: "demo-source-failure", date: HEAT_PINNED_FIXTURE_DATE, mode: "fixture" as const },
     ]) {
-      const result = await finalizeHeatQueryResult(queryHeatFixture(input), "health", null);
+      const result = await finalizeHeatQueryResult(queryHeatFixture(input), "health");
       expect(result.assessments?.every((item) => item.status !== "evidence_present")).toBe(true);
       expect(result.explanation?.notSupported.join(" ")).toMatch(/not|cannot|does not/i);
     }

@@ -32,12 +32,12 @@ describe("WP-08 deterministic Flood product flow", () => {
       placeId: "demo-houston",
       date: FLOOD_PINNED_FIXTURE_DATE,
       mode: "fixture",
-    }), "travel", null);
+    }), "travel");
 
     expect(result.kind).toBe("success");
     expect(result.evidence?.explanations).toHaveLength(1);
     expect(result.assessments).toHaveLength(6);
-    expect(result.explanationStatus).toEqual({ mode: "deterministic", reason: "ai_unavailable" });
+    expect(result.explanationStatus).toEqual({ mode: "deterministic", reason: "validated_evidence" });
     expect(result.assessments?.find((item) => item.code === "route_disruption")?.status)
       .toBe("not_supported");
     expect(result.assessments?.find((item) => item.code === "property_impact")?.status)
@@ -50,7 +50,7 @@ describe("WP-08 deterministic Flood product flow", () => {
       placeId: "demo-houston",
       date: FLOOD_UNSUPPORTED_FIXTURE_DATE,
       mode: "fixture",
-    }), "home", null);
+    }), "home");
     expect(result.kind).toBe("unsupported_coverage");
     expect(result.evidence?.evidenceState).toBe("unsupported_coverage");
     expect(result.assessments?.every((item) => item.status !== "evidence_present")).toBe(true);
@@ -61,7 +61,7 @@ describe("WP-08 deterministic Flood product flow", () => {
       placeId: "demo-source-failure",
       date: FLOOD_PINNED_FIXTURE_DATE,
       mode: "fixture",
-    }), "home", null);
+    }), "home");
     expect(result.kind).toBe("source_failure");
     expect(result.evidence?.dataMode).toBe("failed");
     expect(result.evidence?.observations).toEqual([]);

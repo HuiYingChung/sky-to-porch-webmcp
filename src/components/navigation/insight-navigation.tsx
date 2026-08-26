@@ -16,7 +16,7 @@
  * Other hazards retain the not-connected placeholder.
  */
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useQueryDraft } from "@/components/query/query-provider";
 import { FireEvidenceInsightPanel } from "@/components/fire/fire-evidence-panel";
 import { FloodEvidenceInsightPanel } from "@/components/flood/flood-evidence-panel";
@@ -27,6 +27,7 @@ import { ResultFailureGapBoundary } from "@/components/states/result-failure-gap
 import { PipelineLoading } from "@/components/states/pipeline-loading";
 import { RadiusScopeNote } from "@/components/states/radius-scope-note";
 import type { MissionSelectionState } from "@/components/missions/mission-selection";
+import { HAZARD_LABELS } from "@/lib/ui/query-draft";
 
 export type InsightTab = "meaning" | "evidence" | "missions";
 
@@ -73,8 +74,18 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
     droughtResult,
     coverageGapResult,
     placeSelection,
+    activeAnalysis,
   } = useQueryDraft();
-  const results = [fireResult, floodResult, heatResult, droughtResult, coverageGapResult];
+  const results = useMemo(
+    () => [fireResult, floodResult, heatResult, droughtResult, coverageGapResult],
+    [
+      fireResult,
+      floodResult,
+      heatResult,
+      droughtResult,
+      coverageGapResult,
+    ]
+  );
   // ADR-0049: the active result backs the Meaning-tab radius note. Only one
   // hazard result is ever populated for a given query.
   const activeResult = results.find((result) => result !== null) ?? undefined;
@@ -85,7 +96,7 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
       prevResultsRef.current = results;
       setResultEpoch((epoch) => epoch + 1);
     }
-  });
+  }, [results]);
 
   function handleTabClick(id: InsightTab) {
     setInternalTab(id);
@@ -107,6 +118,27 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
 
   return (
     <div data-testid="insight-navigation">
+      {activeAnalysis?.origin === "agent" && (
+        <div
+          role="status"
+          data-testid="agent-analysis-notice"
+          style={{
+            margin: "10px 12px 0",
+            padding: "9px 10px",
+            border: "1px solid var(--border-default)",
+            borderRadius: "8px",
+            background: "var(--surface-2)",
+            color: "var(--text-secondary)",
+            fontSize: "13px",
+            lineHeight: 1.45,
+          }}
+        >
+          <strong style={{ color: "var(--text-primary)" }}>Agent updated this view.</strong>{" "}
+          {HAZARD_LABELS[activeAnalysis.request.hazardId]} evidence for{" "}
+          {activeAnalysis.request.placeSelection.label} is now shared across the map,
+          Meaning, Evidence, and Missions. Review the sources and limitations here.
+        </div>
+      )}
       {/* Tab list */}
       <div
         role="tablist"

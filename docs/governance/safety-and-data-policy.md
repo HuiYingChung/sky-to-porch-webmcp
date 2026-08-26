@@ -38,8 +38,8 @@ It must not invent observations or sources, hide retrieval failure, perform
 unverified calculations in prose, replace an official alert, issue evacuation
 instructions, or predict earthquake or eruption timing.
 
-An internal model provider is optional and may never be required to retrieve,
-validate, or safely display evidence.
+The application does not call an internal model provider. Evidence retrieval,
+validation, deterministic explanation, and safe display require no model key.
 
 ## External data
 
@@ -57,7 +57,7 @@ validate, or safely display evidence.
 - Keep credentials server-side.
 - Do not store user locations unless explicitly required.
 - Avoid sending unnecessary exact locations to models or third parties.
-- Do not expose raw provider errors or secrets to the browser.
+- Do not expose raw upstream errors or secrets to the browser.
 - Treat external evidence text as untrusted content in WebMCP responses.
 - Run secret and client-exposure checks before release.
 

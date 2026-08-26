@@ -6,6 +6,17 @@
 **Implementation and verification:** Codex
 **Challenge window:** 2026-08-25 11:00 PT through 2026-09-03 13:00 PT
 
+## Current progress
+
+- W0 repository baseline: complete
+- W1 shared analysis application layer: complete for the vertical slice
+- W2 shared client controller and state: complete with renderer compatibility
+- W3 WebMCP tool: implemented; supported-browser agent verification pending
+- W4 provider cleanup: complete; deterministic-only application runtime
+- W5 verification: local deterministic gates pass, including 220 browser
+  journeys; supported-browser and model eval runs pending
+- W6 release and submission: pending explicit authorization
+
 ## 1. Goal
 
 Meaningfully extend the existing Sky to Porch application with WebMCP so a
@@ -18,13 +29,14 @@ the person is viewing.
 
 ## 2. Prior-work boundary
 
-The imported product baseline is the original Sky to Porch commit:
+The last product commit before the challenge window is:
 
 cd8b8b35da82ab3f58091852163da252ff7b3d3e
 
 Existing hazard adapters, evidence contracts, deterministic evaluators, map
 components, UI, and tests are prior work. Work claimed for the WebMCP Challenge
-begins after the sanitized baseline import and is identified in subsequent
+begins after the sanitized single-root baseline commit
+`b35fe49053d9f68856fd8db6a26f4d2e9b40e945` and is identified in subsequent
 commits. See PRIOR_WORK.md.
 
 ## 3. Non-negotiable product boundaries
@@ -34,8 +46,8 @@ commits. See PRIOR_WORK.md.
   distinct program states.
 - Deterministic code owns validation, calculations, provenance, freshness,
   limitations, confidence, and safe-to-present decisions.
-- AI may explain validated evidence but may not manufacture observations or
-  override deterministic safety decisions.
+- An external browser agent may explain the compact validated tool result but
+  may not manufacture observations or override deterministic safety decisions.
 - Regional evidence is not property-level certainty.
 - The product does not replace official alerts or professional advice.
 - Earthquake and eruption timing are out of scope.
@@ -84,9 +96,9 @@ The human and agent paths must not duplicate hazard orchestration.
 
 ### W3 — WebMCP vertical slice
 
-Provisional core tool:
+Core tool:
 
-analyze_hazard_evidence
+analyze_environmental_hazard
 
 It should accept a place or selected area, hazard, time window, concern, and
 optional question; execute the deterministic analysis pipeline; update the
@@ -99,11 +111,10 @@ are easy to call in the wrong order.
 
 ### W4 — Provider cleanup
 
-- remove IBM watsonx/Granite from the product-critical path;
-- keep deterministic explanation as the default;
-- split transport, routing, evidence-context, and validation responsibilities;
-- add an optional provider only if it materially improves the human experience
-  without becoming a WebMCP prerequisite.
+- remove the imported internal-model router and paid-call control path;
+- keep deterministic explanation as the only application-runtime path;
+- let the external WebMCP agent explain only compact validated evidence;
+- retain truthful prior-work attribution separately from active product code.
 
 ### W5 — Verification
 
@@ -140,11 +151,12 @@ Technical WebMCP details remain Codex's responsibility.
 ## 7. Definition of done
 
 - WebMCP tools are discoverable and executable in the required browser
-  environments.
+  environments. (Pending supported-browser release verification.)
 - Human and agent interactions share one evidence pipeline and UI state.
 - The deterministic safety model is unchanged or stronger.
 - Tool descriptions and outputs stay within current implementation guidance.
-- All deterministic tests, evals, CI, and exact-candidate checks pass.
+- All deterministic tests, model evals, CI, and exact-candidate checks pass.
+  (Deterministic local gates pass; model evals and exact CI remain pending.)
 - Prior work and new work are unambiguous.
 - The repository is publicly reproducible under a recognized open-source
   license.

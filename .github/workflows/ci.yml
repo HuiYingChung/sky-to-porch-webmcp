@@ -23,7 +23,6 @@ jobs:
     timeout-minutes: 2
     outputs:
       code: ${{ steps.detect.outputs.code }}
-      records: ${{ steps.detect.outputs.records }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -40,17 +39,15 @@ jobs:
             CHANGED=$(git diff --name-only "${{ github.event.before }}..HEAD")
           fi
           CODE=false
-          RECORDS=false
           while IFS= read -r file; do
             case "$file" in
               src/*|scripts/*|tests/*|*.config.*|package*.json|tsconfig.json|tailwind*|postcss*|next.config*|playwright*|vitest*|.github/*)
                 CODE=true ;;
               docs/*|AGENTS.md|PLAN.md|.gitignore|.gitattributes|.env.example|README.md)
-                RECORDS=true ;;
+                : ;;
             esac
           done <<< "$CHANGED"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
-          echo "records=$RECORDS" >> "$GITHUB_OUTPUT"
 
   # ---- Quick deterministic checks (code path) ----
   quick:

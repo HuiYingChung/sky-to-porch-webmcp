@@ -27,7 +27,11 @@ import type { DemoPlace } from "@/data/places/wp04-demo-places";
 
 export { AREA_RADIUS_MIN_KM, AREA_RADIUS_MAX_KM };
 
-export type SelectionMethod = "demo_place" | "place_search" | "map_click";
+export type SelectionMethod =
+  | "demo_place"
+  | "place_search"
+  | "map_click"
+  | "agent_coordinate";
 
 /**
  * A validated canonical selection. Produced only by factory functions below.
@@ -140,6 +144,36 @@ export function buildGeocodedPlaceSelection(
     label: `${label.trim()} (OSM search)`,
     isMapSelection: true,
     selectionMethod: "place_search",
+    coordinate: coord,
+    analysisArea,
+    timeSelection,
+  };
+}
+
+/**
+ * Creates a selection from coordinates explicitly supplied to the WebMCP
+ * tool. The label remains user/agent supplied and carries an explicit suffix;
+ * it is never presented as a verified geocoder result or administrative area.
+ */
+export function buildAgentCoordinateSelection(
+  label: unknown,
+  coordinate: unknown,
+  radiusKm: unknown,
+  timeType: unknown,
+  startTs?: unknown,
+  endTs?: unknown
+): PlaceSelection {
+  if (typeof label !== "string" || label.trim().length === 0 || label.length > 200) {
+    throw new ValidationError("agent place label must be a non-empty string");
+  }
+  validateCoordinate(coordinate);
+  const coord = coordinate as Coordinate;
+  const analysisArea = validateAndBuildArea(coord, radiusKm);
+  const timeSelection = validateAndBuildTimeSelection(timeType, startTs, endTs);
+  return {
+    label: `${label.trim()} (agent coordinates)`,
+    isMapSelection: true,
+    selectionMethod: "agent_coordinate",
     coordinate: coord,
     analysisArea,
     timeSelection,

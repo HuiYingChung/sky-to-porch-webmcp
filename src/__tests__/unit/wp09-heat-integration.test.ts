@@ -1,11 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it, vi } from "vitest";
 import { validateEvidenceObject } from "@/contracts/evidence";
-import {
-  assembleIntent,
-  validateModelCandidate,
-  type ModelCandidate,
-} from "@/lib/ai/intent-parser";
 import { queryHeatFixture } from "@/lib/heat/fixture-adapter";
 import { queryLiveHeatEvidence } from "@/lib/heat/live-adapter";
 import { finalizeHeatQueryResult } from "@/lib/heat/service";
@@ -117,7 +112,7 @@ describe("WP-09 Heat fixtures and service", () => {
       placeId: "demo-tucson",
       date: HEAT_PINNED_FIXTURE_DATE,
       mode: "fixture",
-    }), "health", null);
+    }), "health");
 
     expect(result.kind).toBe("success");
     expect(result.assessments?.map((assessment) => assessment.code)).toEqual([
@@ -133,7 +128,7 @@ describe("WP-09 Heat fixtures and service", () => {
     expect(result.assessments?.slice(3).every((item) => item.status === "not_supported"))
       .toBe(true);
     expect(result.evidence?.observations[0].value).toBeUndefined();
-    expect(result.explanationStatus).toEqual({ mode: "deterministic", reason: "ai_unavailable" });
+    expect(result.explanationStatus).toEqual({ mode: "deterministic", reason: "validated_evidence" });
     validateEvidenceObject(result.evidence);
   });
 
@@ -167,58 +162,6 @@ describe("WP-09 Heat fixtures and service", () => {
       date: "2024-07-12",
       mode: "fixture",
     }).kind).toBe("unsupported_date");
-  });
-});
-
-describe("WP-09 bounded Extreme Heat intent", () => {
-  const candidate: ModelCandidate & { status: "parsed" } = {
-    status: "parsed",
-    placeId: "demo-tucson",
-    hazardId: "extreme_heat",
-    timeRange: {
-      type: "custom",
-      startTs: "2024-07-11T00:00:00Z",
-      endTs: "2024-07-11T23:59:59Z",
-    },
-    concern: "home",
-    sourceIds: [
-      "nasa_gibs_modis_lst_day",
-      "noaa_uscrn_heat_exposure",
-      "nws_station_observations",
-      "noaa_ncei_global_hourly",
-    ],
-    reasonCode: null,
-  };
-
-  it("accepts only the fixed Tucson route with the exact governed source set", () => {
-    validateModelCandidate(candidate);
-    const intent = assembleIntent(candidate, "What Extreme Heat evidence exists for Tucson?");
-    expect(intent).toMatchObject({
-      hazardId: "extreme_heat",
-      place: {
-        label: expect.stringMatching(/Tucson/i),
-      },
-    });
-    expect(intent.place.coordinate.lat).toBeCloseTo(32.24, 8);
-    expect(intent.place.coordinate.lon).toBeCloseTo(-111.17, 8);
-  });
-
-  it("rejects wrong sources, wrong place, and a multi-day Heat range", () => {
-    expect(() => validateModelCandidate({
-      ...candidate,
-      sourceIds: ["nasa_gibs_imerg", "usgs_instantaneous_values"],
-    })).toThrow();
-    expect(() => assembleIntent({ ...candidate, placeId: "demo-houston" }, "Heat in Houston"))
-      .toThrow();
-    expect(() => assembleIntent({
-      ...candidate,
-      timeRange: {
-        type: "custom",
-        startTs: "2024-07-11T00:00:00Z",
-        endTs: "2024-07-12T23:59:59Z",
-      },
-    }, "Two-day Heat range"))
-      .toThrow();
   });
 });
 

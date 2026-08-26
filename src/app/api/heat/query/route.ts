@@ -5,11 +5,7 @@ import { queryLiveHeatEvidence } from "@/lib/heat/live-adapter";
 import { finalizeHeatQueryResult } from "@/lib/heat/service";
 import type { HeatQueryInput, HeatQueryRequest } from "@/lib/heat/types";
 import { validateCanonicalAreaQuery } from "@/lib/location/query-area";
-import { loadProviderConfig } from "@/lib/ai/provider-router";
 import { normalizeOptionalQuestion } from "@/lib/ai/optional-question";
-import {
-  acquireGuardedProviderAccess,
-} from "@/lib/security/ai-abuse-control";
 
 export const runtime = "nodejs";
 
@@ -81,19 +77,13 @@ export async function POST(request: Request) {
 
   try {
     const adapterInput = toAdapterInput(input);
-    const rawProviderConfig = input.mode === "fixture" ? null : loadProviderConfig();
     const adapterResult = adapterInput.mode === "fixture"
       ? queryHeatFixture(adapterInput)
       : await queryLiveHeatEvidence(adapterInput);
     const result = await finalizeHeatQueryResult(
       adapterResult,
       input.concern as ConcernType,
-      rawProviderConfig,
-      input.optionalQuestion,
-      undefined,
-      input.mode === "live"
-        ? () => acquireGuardedProviderAccess(request, input, rawProviderConfig)
-        : undefined
+      input.optionalQuestion
     );
     return NextResponse.json({ ok: true, result });
   } catch {

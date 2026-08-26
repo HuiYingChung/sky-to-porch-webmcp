@@ -2,10 +2,7 @@ import type { ConcernType } from "@/contracts/common";
 import { validateEvidenceObject } from "@/contracts/evidence";
 import {
   explainEvaluatedEvidence,
-  type EvidenceProviderAccessFactory,
-  type EvidenceExplanationStatus,
 } from "@/lib/ai/evidence-explainer";
-import type { ProviderConfig } from "@/lib/ai/provider-router";
 import { evaluateEvidence, type EvidenceEvaluationResult } from "@/lib/evidence/evaluator";
 import { separateHeatEvidence } from "./claim-separation";
 import type { HeatQueryResult } from "./types";
@@ -30,10 +27,7 @@ function evaluateHeatEvidence(result: HeatQueryResult): EvidenceEvaluationResult
 export async function finalizeHeatQueryResult(
   adapterResult: HeatQueryResult,
   concern: ConcernType,
-  providerConfig: ProviderConfig | null,
-  optionalQuestion?: string,
-  deterministicReason?: Extract<EvidenceExplanationStatus, { mode: "deterministic" }>["reason"],
-  providerAccessFactory?: EvidenceProviderAccessFactory
+  optionalQuestion?: string
 ): Promise<HeatQueryResult> {
   if (!adapterResult.evidence) return adapterResult;
   validateEvidenceObject(adapterResult.evidence);
@@ -42,10 +36,7 @@ export async function finalizeHeatQueryResult(
   const explained = await explainEvaluatedEvidence(
     evaluation,
     concern,
-    providerConfig,
-    optionalQuestion,
-    deterministicReason,
-    providerAccessFactory
+    optionalQuestion
   );
   const finalEvidence = {
     ...evaluation.evidence,

@@ -100,24 +100,6 @@ describe("mapFailureGapStates", () => {
     ]);
   });
 
-  it("maps an AI timeout only on Meaning and never discards validated evidence", () => {
-    const result = {
-      kind: "success",
-      evidence: evidence({ observations: [observation] }),
-      explanationStatus: {
-        mode: "deterministic",
-        reason: "ai_unavailable",
-        provider: "openai",
-        providerFailureReason: "timeout",
-      },
-    } as HeatQueryResult;
-
-    expect(mapFailureGapStates(result, "meaning").states.map((state) => state.kind))
-      .toEqual(["ai_timeout"]);
-    expect(mapFailureGapStates(result, "evidence").states).toEqual([]);
-    expect(mapFailureGapStates(result, "meaning").hasPresentableEvidence).toBe(true);
-  });
-
   it("shows missing mission metadata only when evidence exists on Missions", () => {
     const result = {
       kind: "success",

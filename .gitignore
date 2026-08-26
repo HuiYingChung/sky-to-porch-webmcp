@@ -41,6 +41,7 @@ coverage/
 .vitest/
 test-results/
 playwright-report/
+output/playwright/
 blob-report/
 junit.xml
 

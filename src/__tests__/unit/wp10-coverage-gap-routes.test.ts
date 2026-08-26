@@ -256,10 +256,8 @@ describe("Air Quality and Earth & Volcanoes live query routes", () => {
     expect(result.limitations.join(" ")).toContain("do not predict earthquakes or eruptions");
   });
 
-  // ADR-0045: both coverage-gap routes participate in the guarded explanation
-  // chain. Without provider env the result must carry the deterministic
-  // interpretation and a truthful ai_unavailable status — never a provider call.
-  it("attaches the guarded air explanation with the official EPA category", async () => {
+  // Both coverage-gap routes use deterministic explanation over validated evidence.
+  it("attaches the air explanation with the official EPA category", async () => {
     vi.stubGlobal("fetch", await mockFetch());
     const response = await postAir(new Request("http://localhost/api/air/query", {
       method: "POST",
@@ -270,7 +268,7 @@ describe("Air Quality and Earth & Volcanoes live query routes", () => {
     expect(payload.ok).toBe(true);
     expect(payload.result.explanationStatus).toEqual({
       mode: "deterministic",
-      reason: "ai_unavailable",
+      reason: "validated_evidence",
     });
     const directAnswer = payload.result.explanation.meaning.directAnswer as string;
     expect(directAnswer).toContain("air-quality index at 42");
@@ -279,7 +277,7 @@ describe("Air Quality and Earth & Volcanoes live query routes", () => {
     expect(payload.result.explanation.aiGenerated).toBe(false);
   });
 
-  it("attaches the guarded earth explanation without inventing a prediction", async () => {
+  it("attaches the earth explanation without inventing a prediction", async () => {
     const area = input().area;
     const eventTime = Date.parse("2024-07-08T12:00:00Z");
     const earthquake = {

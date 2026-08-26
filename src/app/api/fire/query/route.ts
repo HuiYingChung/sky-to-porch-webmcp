@@ -24,7 +24,6 @@ import { validateEvidenceObject } from "@/contracts/evidence";
 import { CONCERN_TYPES, type ConcernType } from "@/contracts/common";
 import { evaluateEvidence } from "@/lib/evidence/evaluator";
 import { explainEvaluatedEvidence } from "@/lib/ai/evidence-explainer";
-import { loadProviderConfig } from "@/lib/ai/provider-router";
 import type {
   FireQueryInput,
   FireQueryRequest,
@@ -33,9 +32,6 @@ import type {
 import { CUSTOM_AREA_PLACE_ID, validateCanonicalAreaQuery } from "@/lib/location/query-area";
 import type { BoundingBox } from "@/contracts/common";
 import { normalizeOptionalQuestion } from "@/lib/ai/optional-question";
-import {
-  acquireGuardedProviderAccess,
-} from "@/lib/security/ai-abuse-control";
 
 export const runtime = "nodejs";
 
@@ -174,7 +170,6 @@ export async function POST(request: Request) {
 
   try {
     const adapterInput = toAdapterInput(input);
-    const rawProviderConfig = adapterInput.mode === "fixture" ? null : loadProviderConfig();
     const adapterResult = adapterInput.mode === "live"
       ? await queryLiveFireEvidence(adapterInput)
       : queryFireEvidence(adapterInput);
@@ -196,12 +191,7 @@ export async function POST(request: Request) {
     const explained = await explainEvaluatedEvidence(
       evaluation,
       input.concern,
-      rawProviderConfig,
-      input.optionalQuestion,
-      undefined,
-      adapterInput.mode === "live"
-        ? () => acquireGuardedProviderAccess(request, input, rawProviderConfig)
-        : undefined
+      input.optionalQuestion
     );
     const finalEvidence = {
       ...evaluation.evidence,
