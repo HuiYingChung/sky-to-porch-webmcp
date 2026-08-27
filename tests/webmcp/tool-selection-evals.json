@@ -248,12 +248,10 @@
       }
     ],
     "expectedCall": [
-      {
-        "functionName": "list_environmental_hazards",
-        "arguments": {
-          "demo_id": "tucson-heat-pets"
-        }
-      },
+        {
+          "functionName": "list_environmental_hazards",
+          "arguments": {}
+        },
       {
         "functionName": "analyze_environmental_hazard",
         "arguments": {

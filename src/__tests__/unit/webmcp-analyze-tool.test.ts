@@ -208,9 +208,9 @@ describe("WebMCP environmental hazard tool", () => {
     expect(tool.description).toContain("this task is still unfinished");
     expect(tool.description).toContain("immediately call this tool again");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.latitude.description)
-      .toContain("Never infer it to bypass ambiguity");
+      .toContain("Never geocode or infer coordinates");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.longitude.description)
-      .toContain("Never infer it to bypass ambiguity");
+      .toContain("Never geocode or infer coordinates");
   });
 
   it("continues the analysis after the person selects a returned place", async () => {

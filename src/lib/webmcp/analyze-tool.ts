@@ -237,17 +237,16 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
       type: "string",
       minLength: 2,
       maxLength: 200,
-      description: "Place name to search, or a label for supplied coordinates.",
+      description: "Place name or label for supplied coordinates. Call ambiguous names as written; do not ask until the tool returns its choices.",
     },
     hazard: {
       type: "string",
       enum: HAZARD_IDS,
-      description: "Primary hazard: smoke+air uses fire_smoke; wind+flood wind_storm; heat+drought extreme_heat; volcano+air/heat earth_volcanoes.",
+      description: "Primary hazard, never analysis_scope. Pairs: smoke+air fire_smoke; wind+flood wind_storm; heat+drought extreme_heat; volcano context earth_volcanoes.",
     },
     analysis_scope: {
       type: "string",
       enum: ANALYSIS_SCOPES,
-      default: "related_context",
       description: "Use single_hazard_only for one named hazard or measurement; related_context for broad impact, multiple, or related-condition questions.",
     },
     related_hazards: {
@@ -266,13 +265,13 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
       type: "number",
       minimum: -90,
       maximum: 90,
-      description: "Latitude the person supplied, or from a candidate they selected in a later message; requires longitude. Never infer it to bypass ambiguity.",
+      description: "Only if the person supplied it or selected a returned candidate; requires longitude. Never geocode or infer coordinates from a place name.",
     },
     longitude: {
       type: "number",
       minimum: -180,
       maximum: 180,
-      description: "Longitude the person supplied, or from a candidate they selected in a later message; requires latitude. Never infer it to bypass ambiguity.",
+      description: "Only if the person supplied it or selected a returned candidate; requires latitude. Never geocode or infer coordinates from a place name.",
     },
     radius_km: {
       type: "number",
@@ -1047,7 +1046,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Analyze place/hazard and update shared UI; skip discovery. Never infer coordinates for a named place; use only user-given coordinates or a candidate the user later selects. On needs_place_choice, do not choose or retry before a new user reply: ask and wait. After their choice, this task is still unfinished: immediately call this tool again with the selected label and retry_with coordinates, keep other arguments, and finish the result. Use single_hazard_only for one named hazard/measurement; related_context for broad or multiple conditions. Infer concern when clear; ask once for a broad goal, else general. Answer with evidence, citations, inference, confidence, and separate chains.",
+      "Analyze place/hazard; update UI; skip discovery. If no hazard is named or inferable, ask. Call ambiguous names as given so the tool returns choices. Never infer coordinates for a named place; use only user-given or selected-candidate values. On needs_place_choice, do not choose or retry before a new user reply: ask and wait. After choice, this task is still unfinished: immediately call this tool again with selected label and retry_with coordinates, preserve other args, and finish. Use single_hazard_only for one named hazard/measurement; related_context for broad/multiple conditions. Infer concern if clear; ask once for a broad goal, else general.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

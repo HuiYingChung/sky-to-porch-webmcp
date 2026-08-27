@@ -4,8 +4,6 @@ import { CONCERN_TYPES, HAZARD_IDS, type HazardId } from "@/contracts/common";
 import type { SourceCoverageProfile } from "@/contracts/source-coverage";
 import {
   HAZARD_LABELS,
-  SOURCE_COVERAGE_PROFILES,
-  coverageProfileRegistryEntry,
   coverageProfilesForHazard,
 } from "@/data/source-coverage";
 import { WEBMCP_DEMO_SCENARIOS } from "@/data/places/demo-stories";
@@ -13,21 +11,12 @@ import { DEFAULT_RELATED_HAZARDS } from "@/lib/webmcp/analyze-tool";
 
 export const LIST_HAZARDS_TOOL_NAME = "list_environmental_hazards";
 export const GET_COVERAGE_TOOL_NAME = "get_environmental_source_coverage";
-export const MAX_DISCOVERY_TOOL_OUTPUT_CHARACTERS = 1_500;
-
-const SOURCE_IDS = [...new Set(SOURCE_COVERAGE_PROFILES.map((profile) => profile.sourceId))];
-const DEMO_SCENARIO_IDS = WEBMCP_DEMO_SCENARIOS.map((scenario) => scenario.id);
+export const MAX_DISCOVERY_TOOL_OUTPUT_CHARACTERS = 2_400;
 
 export const LIST_HAZARDS_INPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  properties: {
-    demo_id: {
-      type: "string",
-      enum: DEMO_SCENARIO_IDS,
-      description: "Set only when the person explicitly names or selects one curated demo ID. Omit for capability or demo-list questions.",
-    },
-  },
+  properties: {},
 } as const;
 
 export const GET_COVERAGE_INPUT_SCHEMA = {
@@ -39,11 +28,6 @@ export const GET_COVERAGE_INPUT_SCHEMA = {
       type: "string",
       enum: HAZARD_IDS,
       description: "Hazard whose checked-in source-coverage catalog should be inspected.",
-    },
-    source_id: {
-      type: "string",
-      enum: SOURCE_IDS,
-      description: "Set only when the person names one source or requests one profile. Omit for a hazard-wide region or time-range summary.",
     },
   },
 } as const;
@@ -72,6 +56,7 @@ function coverageSummary(hazard: HazardId, profiles: SourceCoverageProfile[]) {
       integration_status: profile.integrationStatus,
       evidence_role: profile.evidenceRole,
       region: compactText(profile.regionLabel, 80),
+      temporal_coverage: compactText(profile.temporalCoverage, 120),
     })),
     coverage_scope: "pipeline_eligibility_not_observation",
     live_sources_queried: false,
@@ -80,69 +65,18 @@ function coverageSummary(hazard: HazardId, profiles: SourceCoverageProfile[]) {
   } as const;
 }
 
-function coverageDetail(hazard: HazardId, profile: SourceCoverageProfile) {
-  const registry = coverageProfileRegistryEntry(profile.sourceId);
-  return {
-    status: "coverage_profile",
-    hazard,
-    hazard_label: HAZARD_LABELS[hazard],
-    source: {
-      source_id: profile.sourceId,
-      display_name: compactText(registry?.displayName ?? profile.sourceId, 70),
-      integration_status: profile.integrationStatus,
-      evidence_role: profile.evidenceRole,
-      coverage_level: profile.level,
-      region: compactText(profile.regionLabel, 100),
-      country_codes: profile.countryCodes,
-      temporal_coverage: compactText(profile.temporalCoverage, 150),
-      update_cadence: compactText(profile.updateCadence, 110),
-      spatial_resolution: compactText(profile.spatialResolution, 130),
-      coverage_note: compactText(profile.coverageNote, 190),
-      live_gate_note: compactText(profile.liveGateNote, 190),
-      ...(profile.lastVerifiedDate ? { last_verified_date: profile.lastVerifiedDate } : {}),
-      ...(registry ? { documentation_url: registry.documentationUrl } : {}),
-    },
-    coverage_scope: "pipeline_eligibility_not_observation",
-    live_sources_queried: false,
-    actual_observation_not_established: true,
-  } as const;
-}
-
 export function createListEnvironmentalHazardsTool(): WebMCP.ModelContextTool {
   return {
     name: LIST_HAZARDS_TOOL_NAME,
     title: "List environmental hazards",
     description:
-      "List supported hazards and a compact demo index. Omit demo_id for capability or demo-list questions; set it only after the person names or chooses one exact demo. Use for capability questions, genuine hazard ambiguity, or demo selection. Concrete place-and-hazard questions go directly to analyze_environmental_hazard.",
+      "List supported hazards and three curated demos with ready analysis inputs. Use for capability questions, genuine hazard ambiguity, or when the person asks for a demo. It takes no input. Concrete place-and-hazard questions always go directly to analyze_environmental_hazard, even when the place also appears in a demo.",
     inputSchema: LIST_HAZARDS_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute: async (input) => {
-      const unexpected = Object.keys(input).find((key) => key !== "demo_id");
+      const unexpected = Object.keys(input)[0];
       if (unexpected) {
         return invalidInput(`Unexpected input field: ${unexpected}.`);
-      }
-      if (input.demo_id !== undefined) {
-        if (typeof input.demo_id !== "string") {
-          return invalidInput("demo_id must be a curated demo ID.");
-        }
-        const scenario = WEBMCP_DEMO_SCENARIOS.find((item) => item.id === input.demo_id);
-        if (!scenario) {
-          return invalidInput(`demo_id must be one of: ${DEMO_SCENARIO_IDS.join(", ")}.`);
-        }
-        return {
-          status: "demo_scenario",
-          scenario: {
-            id: scenario.id,
-            title: scenario.title,
-            prompt: scenario.prompt,
-            analysis_input: {
-              ...scenario.analysisInput,
-              analysis_scope: "related_context",
-            },
-          },
-          next_step: "Call analyze_environmental_hazard directly with analysis_input when the person chooses this demo.",
-          ui_updated: false,
-        };
       }
       return {
         status: "hazard_catalog",
@@ -157,6 +91,11 @@ export function createListEnvironmentalHazardsTool(): WebMCP.ModelContextTool {
         demo_scenarios: WEBMCP_DEMO_SCENARIOS.map((scenario) => ({
           id: scenario.id,
           title: scenario.title,
+          analysis_input: {
+            ...scenario.analysisInput,
+            analysis_scope: "related_context",
+            question: compactText(scenario.prompt, 120),
+          },
         })),
         default_analysis_scope: "related_context",
         relationship: "related_evidence_for_assessment",
@@ -173,12 +112,12 @@ export function createGetEnvironmentalSourceCoverageTool(): WebMCP.ModelContextT
     name: GET_COVERAGE_TOOL_NAME,
     title: "Get environmental source coverage",
     description:
-      "Read the checked-in source-coverage catalog for one hazard without live requests. Omit source_id for hazard-wide region/time questions; set it only when one source is named or requested. Do not call before every analysis. Coverage is pipeline eligibility, never proof of an observation.",
+      "Read all checked-in source regions and time ranges for one hazard without live requests. It always returns the hazard-wide catalog and takes only hazard. Do not call before every analysis. Coverage is pipeline eligibility, never proof of an observation.",
     inputSchema: GET_COVERAGE_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute: async (input) => {
       const unexpected = Object.keys(input).find(
-        (key) => key !== "hazard" && key !== "source_id"
+        (key) => key !== "hazard"
       );
       if (unexpected) return invalidInput(`Unexpected input field: ${unexpected}.`);
 
@@ -188,18 +127,7 @@ export function createGetEnvironmentalSourceCoverageTool(): WebMCP.ModelContextT
       }
       const typedHazard = hazard as HazardId;
       const profiles = coverageProfilesForHazard(typedHazard);
-      const sourceId = input.source_id;
-      if (sourceId === undefined) {
-        return coverageSummary(typedHazard, profiles);
-      }
-      if (typeof sourceId !== "string") {
-        return invalidInput("source_id must be a supported source ID.");
-      }
-      const profile = profiles.find((item) => item.sourceId === sourceId);
-      if (!profile) {
-        return invalidInput(`source_id ${sourceId} is not registered for hazard ${typedHazard}.`);
-      }
-      return coverageDetail(typedHazard, profile);
+      return coverageSummary(typedHazard, profiles);
     },
   };
 }

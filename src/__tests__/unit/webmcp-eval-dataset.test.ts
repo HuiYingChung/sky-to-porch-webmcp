@@ -221,7 +221,7 @@ describe("WebMCP tool-selection eval dataset", () => {
       LIST_HAZARDS_TOOL_NAME,
       ANALYZE_HAZARD_TOOL_NAME,
     ]);
-    expect(selected?.expectedCall[0].arguments).toEqual({ demo_id: "tucson-heat-pets" });
+    expect(selected?.expectedCall[0].arguments).toEqual({});
   });
 
   it("uses single scope only for explicit asks and defaults broad questions to related context", () => {
