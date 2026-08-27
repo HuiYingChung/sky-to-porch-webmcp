@@ -120,6 +120,8 @@ The private correction evidence is:
   with 1,289 tests, 10 integration files with 132 tests, the production build
   with 14 of 14 pages generated, 228 desktop/mobile Playwright journeys, and
   secret check;
+- the clean local candidate passed the mechanical preflight over every commit
+  and unique path/blob pair reachable from that candidate;
 - the correction has not been pushed, deployed, or rerun in production.
 
 Therefore production proves the corrected one-argument callback and the full

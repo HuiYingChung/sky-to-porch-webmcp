@@ -119,9 +119,10 @@ hidden agent-only transaction.
   in the supported in-app browser at deployed commit `5cc1098`.
 - The published commit passed its exact GitHub Actions run.
 - The current private candidate passes 1,289 unit tests, 132 integration tests,
-  a production build, 228 desktop/mobile browser journeys, and secret checking.
-  Insert the clean-commit reachable-history preflight result from the final
-  candidate record.
+  a production build, 228 desktop/mobile browser journeys, secret checking, and
+  the clean-commit mechanical reachable-history preflight. The preflight remains
+  one release control rather than proof of licensing, public availability, or
+  model-selection quality.
 - Repeated independent model-scored selection runs remain pending and must not
   be described as passed without retained raw outcomes.
 
@@ -144,6 +145,7 @@ attribution requirements.
 1. Owner approval to make the repository public.
 2. Commit, publish, and production-reverify the contextual-output cap fix.
 3. Record and publish the narrated video under three minutes.
-4. Replace placeholders with final exact-candidate gate evidence.
+4. Replace the video placeholder and recheck exact-candidate evidence after any
+   separately authorized publication change.
 5. Run and retain model-backed selection scoring if a backend is deliberately
    configured; otherwise disclose it as unproven rather than implying a pass.

@@ -35,8 +35,10 @@
   Fire/Smoke–Air Quality, and Volcano–Air Quality–Heat, including one parallel
   shared-view transaction; supported-browser Agent verification pending
 - W6 release and submission: private release preparation in progress; the repo
-  remains private, and visibility, deployment, push, video publication, and
-  submission still require explicit authorization
+  remains private; the clean local candidate's mechanical reachable-history
+  preflight passes, and Devpost/video drafts are prepared. Visibility,
+  deployment, push, video publication, and submission still require explicit
+  authorization
 
 The production/local/native evidence split for the current acceptance package
 is recorded in
