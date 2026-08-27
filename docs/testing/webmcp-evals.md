@@ -48,7 +48,7 @@ Before release, run the dataset repeatedly with the challenge agent and record:
 
 1. tool-selection accuracy;
 2. exact required-argument accuracy;
-3. concern, date, radius, and coordinate accuracy;
+3. concern, required time intent, radius, and explicit-coordinate-text accuracy;
 4. whether ambiguous results cause a user question rather than a guessed pick;
 5. whether out-of-scope requests avoid the tool.
 6. whether `single_hazard_only` appears only for an explicitly restricted ask;
@@ -63,8 +63,8 @@ Before release, run the dataset repeatedly with the challenge agent and record:
     analysis tool directly.
 11. whether a narrow factual historical question proceeds without forcing a
     concern, while a broad goal receives one useful clarification question;
-12. whether an explicitly selected demo uses the existing list tool's
-    `demo_id` detail and then the analysis tool, without adding a new tool;
+12. whether an explicitly selected demo uses one ready input from the
+    selector-free list response and then the analysis tool;
 13. whether the final answer leads with the strongest observations, citations,
     evidence-supported inference, and confidence rather than repeated caveats.
 14. whether every registered tool is selected for its distinct natural ask and
@@ -79,28 +79,38 @@ have been retained for the exact tool definition under review.
 
 ## Execution status — 2026-08-27
 
-The full 22-case dataset remains checked in and its deterministic structure
-tests pass. The production in-app-browser work on this date directly invoked
-named tools to verify their execution and shared UI behavior; it was not a
-model-selection run.
+The full 22-case dataset and two multi-turn ambiguity cases remain checked in;
+their deterministic structure tests pass. The owner authorized paid OpenAI
+evaluation with a key stored only in gitignored `.env.local`. The runner loads
+the key without logging or retaining it, sends only public eval prompts and
+tool metadata, and writes raw responses under ignored
+`artifacts/webmcp-evals/`.
 
-No model-eval backend was configured in the private verification environment:
-the OpenAI, Google Generative AI, and Vercel AI Gateway key variables were
-absent, and no local Ollama executable was available. No provider credential
-was requested or read, no paid request was made, and no synthetic score was
-substituted. The model-backed gate therefore remains explicitly unproven until
-a backend is deliberately authorized and the raw outcomes are retained.
+Several calibration runs were deliberately retained. They exposed guessed
+coordinates, optional-date invention, discovery-selector guessing, and one
+overly permissive continuation scorer. Those findings caused the selector-free
+discovery surface, label-only place choices, removal of public coordinate
+fields, required `time` intent, and semantic continuation scoring in
+ADR-0006. Failed calibration scores are not release evidence.
 
-The owner later authorized an explicitly free API boundary. The official
-[Gemini pricing page](https://ai.google.dev/gemini-api/docs/pricing) lists a
-free tier and the official
-[function-calling guide](https://ai.google.dev/gemini-api/docs/function-calling)
-documents structured tool calls, so it is a viable eval-only candidate; its
-free-tier inputs may be used to improve Google's products. No Gemini key is
-present, no request has been made, and the app still has no internal model
-dependency. Any run must use only the public eval prompts and tool metadata,
-keep the key outside the repository, verify zero-cost tier selection, and
-retain the exact model name plus raw outcomes.
+The final-schema one-run baseline used `gpt-5-mini` with minimal reasoning and
+low text verbosity. Raw artifact:
+`2026-08-27T20-36-49.746Z-gpt-5-mini.json`.
+
+- tool selection and argument semantics: **18/22**;
+- exact calls: **6/22**;
+- expected-argument subset: **10/22**;
+- ambiguous result asks and waits: **pass**;
+- selected Springfield label resumes the unfinished analysis with
+  `time=latest_completed`: **pass**;
+- API usage: 25 responses; token totals are retained in the raw artifact.
+
+This is a truthful partial model pass, not a passed 22-case gate. The remaining
+semantic misses were two single-hazard questions expanded to related context,
+one broad no-hazard question that should have asked for clarification, and one
+Volcano question that selected the list tool as an unnecessary preflight.
+Application-owned schema, execution, and browser tests remain separate from
+these model-selection outcomes.
 
 ## Full journeys
 
@@ -108,7 +118,7 @@ The release candidate must also be tested in a supported browser for these
 complete journeys:
 
 - direct place query → evidence → visible map and Insight update;
-- ambiguous place → user choice → coordinate follow-up → evidence;
+- ambiguous place → user choice → selected-label follow-up → evidence;
 - applicable official-source paths exhausted → strongest available evidence;
   only an actually empty result uses the explicit missing-data state;
 - replacement or cancellation → stale result cannot overwrite the current view.

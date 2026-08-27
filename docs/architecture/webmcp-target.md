@@ -30,17 +30,17 @@ tools are registered only while the necessary validated page state exists.
 
 Returns the governed hazard IDs, optional user-concern vocabulary,
 non-recursive related-context defaults, and a compact index of three curated
-historical demos. Supplying `demo_id` returns that scenario's prompt and exact
-analysis input. It is read-only and intended only for capability questions,
-genuine hazard ambiguity, or explicit demo selection; it is not a mandatory
-preflight before a concrete analysis request.
+historical demos with ready analysis inputs. It takes no selector input. It is
+read-only and intended only for capability questions, genuine hazard
+ambiguity, or explicit demo selection; it is not a mandatory preflight before
+a concrete analysis request.
 
 ### get_environmental_source_coverage
 
 Reads the same checked-in source-coverage catalog shown by the human About UI.
-A hazard-only call returns a compact source index; an optional `source_id`
-returns one detailed coverage profile with its official documentation link.
-It makes no live request and labels every result
+A hazard call returns every matching source with compact region and temporal
+coverage. It accepts no source selector. It makes no live request and labels
+every result
 `pipeline_eligibility_not_observation`, so region or time eligibility cannot be
 presented as an actual observation for a selected place and date.
 
@@ -50,12 +50,12 @@ Runs the complete safe analysis path and synchronizes the visible UI.
 
 Inputs:
 
-- place text or selected-area coordinates;
+- place text, or an exact coordinate pair stated by the person inside `place`;
 - hazard;
+- required time (`latest_completed`, one completed UTC date, or a bounded date
+  range copied from the person's request);
 - analysis scope (`related_context` by default, or `single_hazard_only` only
   for an explicitly narrow question);
-- optional additional related hazards named or implied by a broad question;
-- time window;
 - optional everyday concern; omission resolves to neutral `general`;
 - optional question.
 

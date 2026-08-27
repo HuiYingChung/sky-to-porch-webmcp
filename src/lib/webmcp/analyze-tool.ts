@@ -27,6 +27,7 @@ const ANALYSIS_SCOPES = ["single_hazard_only", "related_context"] as const;
 type AnalysisScope = (typeof ANALYSIS_SCOPES)[number];
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/;
+const COORDINATE_PLACE_RE = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/;
 
 /**
  * Product-owned default relationships. These are retrieval companions. Any
@@ -47,11 +48,8 @@ const INPUT_KEYS = new Set([
   "place",
   "hazard",
   "concern",
-  "latitude",
-  "longitude",
   "radius_km",
-  "start_date",
-  "end_date",
+  "time",
   "question",
   "analysis_scope",
 ]);
@@ -93,10 +91,6 @@ interface GeocodeCandidate {
 export interface AgentPlaceChoice {
   choice_id: string;
   label: string;
-  retry_with: {
-    latitude: number;
-    longitude: number;
-  };
 }
 
 interface ToolFailure {
@@ -118,7 +112,6 @@ interface ToolFailure {
     required_next_action: "retry_analysis_with_selected_place";
     continue_task: true;
     set_place_to_selected_label: true;
-    include_selected_retry_with: true;
     preserve_other_arguments: true;
   };
 }
@@ -229,13 +222,13 @@ export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess | ToolEvidenceBu
 export const ANALYZE_HAZARD_INPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["place", "hazard"],
+  required: ["place", "hazard", "time"],
   properties: {
     place: {
       type: "string",
       minLength: 2,
       maxLength: 200,
-      description: "Place name or label for supplied coordinates. Call ambiguous names as written; do not ask until the tool returns its choices.",
+      description: "Place name, or an exact 'latitude, longitude' pair stated by the person. Call ambiguous names as written; wait if choices return.",
     },
     hazard: {
       type: "string",
@@ -252,18 +245,6 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
       enum: CONCERN_TYPES,
       description: "Optional explanation lens. Infer when explicit; ask only if a broad goal needs it. Narrow evidence questions may omit it and use general.",
     },
-    latitude: {
-      type: "number",
-      minimum: -90,
-      maximum: 90,
-      description: "Only if the person supplied it or selected a returned candidate; requires longitude. Never geocode or infer coordinates from a place name.",
-    },
-    longitude: {
-      type: "number",
-      minimum: -180,
-      maximum: 180,
-      description: "Only if the person supplied it or selected a returned candidate; requires latitude. Never geocode or infer coordinates from a place name.",
-    },
     radius_km: {
       type: "number",
       minimum: 1,
@@ -271,15 +252,10 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
       default: DEFAULT_RADIUS_KM,
       description: "Analysis radius in kilometres; defaults to 25.",
     },
-    start_date: {
+    time: {
       type: "string",
-      pattern: "^\\d{4}-\\d{2}-\\d{2}$",
-      description: "Copy the person's exact completed UTC date here. Always supply with end_date; never widen, shift, or omit a stated date.",
-    },
-    end_date: {
-      type: "string",
-      pattern: "^\\d{4}-\\d{2}-\\d{2}$",
-      description: "Copy the person's exact completed UTC date here. Always supply with start_date; never widen, shift, or omit a stated date.",
+      pattern: "^(latest_completed|\\d{4}-\\d{2}-\\d{2}(?:/\\d{4}-\\d{2}-\\d{2})?)$",
+      description: "Use latest_completed unless the person stated dates; otherwise copy YYYY-MM-DD or YYYY-MM-DD/YYYY-MM-DD exactly. Never use today.",
     },
     question: {
       type: "string",
@@ -309,7 +285,7 @@ function placeChoiceFailure(
 ): ToolFailure {
   return {
     status: "needs_place_choice",
-    message: `PAUSE FOR USER: I found ${choices.length} possible places for “${query}”. Do not select a place or retry yet. Ask the person to choose one label below, then wait for a new user message. After the person replies, continue the unfinished task: call this tool again, set place to the selected label, include that choice's retry_with coordinates, and keep every other input unchanged.`,
+    message: `PAUSE FOR USER: I found ${choices.length} possible places for “${query}”. Do not select a place or retry yet. Ask the person to choose one label below, then wait for a new user message. After the person replies, continue the unfinished task: call this tool again, set place to the selected label, and keep every other input unchanged.`,
     ui_updated: false,
     no_data_is_not_no_danger: true,
     requires_user_input: true,
@@ -320,7 +296,6 @@ function placeChoiceFailure(
       required_next_action: "retry_analysis_with_selected_place",
       continue_task: true,
       set_place_to_selected_label: true,
-      include_selected_retry_with: true,
       preserve_other_arguments: true,
     },
     choices,
@@ -331,10 +306,6 @@ function placeChoices(candidates: GeocodeCandidate[]): AgentPlaceChoice[] {
   return candidates.map((candidate, index) => ({
     choice_id: `place-${index + 1}`,
     label: truncate(candidate.label, 120),
-    retry_with: {
-      latitude: candidate.lat,
-      longitude: candidate.lon,
-    },
   }));
 }
 
@@ -355,6 +326,17 @@ function latestCompletedUtcDate(now: Date): string {
     now.getUTCDate() - 1
   ));
   return date.toISOString().slice(0, 10);
+}
+
+function explicitCoordinate(place: string): GeocodeCandidate | ToolFailure | null {
+  const match = COORDINATE_PLACE_RE.exec(place);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lon = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return failure("invalid_input", "The explicit latitude, longitude place is outside the valid WGS-84 range.");
+  }
+  return { label: place, lat, lon };
 }
 
 function parseInput(
@@ -380,6 +362,9 @@ function parseInput(
   ) {
     return failure("invalid_input", `hazard must be one of: ${HAZARD_IDS.join(", ")}.`);
   }
+  const place = raw.place.trim();
+  const coordinate = explicitCoordinate(place);
+  if (coordinate && "status" in coordinate) return coordinate;
   const analysisScope = raw.analysis_scope ?? "related_context";
   if (
     typeof analysisScope !== "string" ||
@@ -395,25 +380,6 @@ function parseInput(
     return failure("invalid_input", `concern must be one of: ${CONCERN_TYPES.join(", ")}.`);
   }
 
-  const hasLatitude = raw.latitude !== undefined;
-  const hasLongitude = raw.longitude !== undefined;
-  if (hasLatitude !== hasLongitude) {
-    return failure("invalid_input", "latitude and longitude must be supplied together.");
-  }
-  if (
-    hasLatitude &&
-    (typeof raw.latitude !== "number" ||
-      !Number.isFinite(raw.latitude) ||
-      raw.latitude < -90 ||
-      raw.latitude > 90 ||
-      typeof raw.longitude !== "number" ||
-      !Number.isFinite(raw.longitude) ||
-      raw.longitude < -180 ||
-      raw.longitude > 180)
-  ) {
-    return failure("invalid_input", "latitude or longitude is outside the valid WGS-84 range.");
-  }
-
   const radiusKm = raw.radius_km ?? DEFAULT_RADIUS_KM;
   if (
     typeof radiusKm !== "number" ||
@@ -424,25 +390,23 @@ function parseInput(
     return failure("invalid_input", "radius_km must be a finite number from 1 to 250.");
   }
 
-  const hasStart = raw.start_date !== undefined;
-  const hasEnd = raw.end_date !== undefined;
-  if (hasStart !== hasEnd) {
-    return failure("invalid_input", "start_date and end_date must be supplied together.");
+  if (typeof raw.time !== "string") {
+    return failure("invalid_input", "time must be latest_completed, YYYY-MM-DD, or YYYY-MM-DD/YYYY-MM-DD.");
   }
+  const timeParts = raw.time === "latest_completed" ? [] : raw.time.split("/");
   if (
-    hasStart &&
-    (typeof raw.start_date !== "string" ||
-      typeof raw.end_date !== "string" ||
-      !isStrictUtcDate(raw.start_date) ||
-      !isStrictUtcDate(raw.end_date))
+    timeParts.length > 2 ||
+    timeParts.some((part) => !isStrictUtcDate(part))
   ) {
-    return failure("invalid_input", "Dates must be real calendar dates in YYYY-MM-DD format.");
+    return failure("invalid_input", "time dates must be real calendar dates in YYYY-MM-DD format.");
   }
+  const startDate = timeParts[0];
+  const endDate = timeParts.at(-1);
   const latestCompleted = latestCompletedUtcDate(now);
   if (
-    typeof raw.start_date === "string" &&
-    typeof raw.end_date === "string" &&
-    (raw.start_date > raw.end_date || raw.end_date > latestCompleted)
+    startDate !== undefined &&
+    endDate !== undefined &&
+    (startDate > endDate || endDate > latestCompleted)
   ) {
     return failure(
       "invalid_input",
@@ -450,11 +414,11 @@ function parseInput(
     );
   }
   if (
-    typeof raw.start_date === "string" &&
-    typeof raw.end_date === "string" &&
+    startDate !== undefined &&
+    endDate !== undefined &&
     (analysisScope === "related_context" ||
       (raw.hazard !== "fire_smoke" && raw.hazard !== "flood_storm")) &&
-    raw.start_date !== raw.end_date
+    startDate !== endDate
   ) {
     return failure(
       "invalid_input",
@@ -475,19 +439,14 @@ function parseInput(
   }
 
   return {
-    place: raw.place.trim(),
+    place,
     hazard: raw.hazard as HazardId,
     analysisScope: analysisScope as AnalysisScope,
     concern: concern as ConcernType,
-    ...(hasLatitude
-      ? {
-          latitude: raw.latitude as number,
-          longitude: raw.longitude as number,
-        }
-      : {}),
+    ...(coordinate ? { latitude: coordinate.lat, longitude: coordinate.lon } : {}),
     radiusKm,
-    ...(typeof raw.start_date === "string"
-      ? { startDate: raw.start_date, endDate: raw.end_date as string }
+    ...(startDate !== undefined && endDate !== undefined
+      ? { startDate, endDate }
       : {}),
     ...(typeof raw.question === "string" ? { question: raw.question.trim() } : {}),
   };
@@ -1009,7 +968,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Analyze place/hazard; update UI; skip discovery. If no hazard is named or inferable, ask. Call ambiguous names as given so the tool returns choices. Never infer coordinates for a named place; use only user-given or selected-candidate values. Preserve stated dates exactly. On needs_place_choice, do not choose or retry before a new user reply: ask and wait. After choice, this task is still unfinished: immediately call this tool again with selected label and retry_with coordinates, preserve other args, and finish. Use single_hazard_only for one named hazard/measurement; related_context for broad/multiple conditions. Infer concern if clear; ask once for a broad goal, else general.",
+      "Analyze place/hazard; update UI; skip discovery. If no hazard is named or inferable, ask. Pass named or ambiguous places exactly as stated; coordinates are accepted only inside place when the person stated them. Never infer coordinates. Use time=latest_completed unless the person stated dates; never use today. On needs_place_choice, ask and wait for a new user reply. After choice the task is unfinished: immediately call this tool again with the selected label, preserve every other argument, and finish. Use single_hazard_only for one named hazard/measurement; related_context for broad/multiple conditions. Infer concern if clear; ask once for a broad goal, else general.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

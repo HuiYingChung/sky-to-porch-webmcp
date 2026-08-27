@@ -149,9 +149,9 @@ place-and-hazard question straight to the analysis tool, so discovery is not a
 mandatory or fragile preflight sequence. Coverage output states that pipeline
 eligibility is not proof of an observation. Contextual tools expose the current
 validated evidence and, only after Home + Wind, the bounded claim-discussion
-guide. The existing hazard-list tool also exposes a compact three-demo index
-and one selected scenario by `demo_id`; no separate demo or citation tool is
-added.
+guide. The existing no-input hazard-list tool exposes compact ready inputs for
+all three demos in one response; no selector, separate demo tool, or citation
+tool is added.
 
 ### W4 — Provider cleanup
 

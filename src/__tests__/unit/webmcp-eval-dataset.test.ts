@@ -120,9 +120,8 @@ describe("WebMCP tool-selection eval dataset", () => {
         arguments: {
           place: "Springfield, Illinois",
           hazard: "fire_smoke",
+          time: "latest_completed",
           analysis_scope: "single_hazard_only",
-          latitude: 39.7817,
-          longitude: -89.6501,
         },
       }],
       assistantMustContinueTask: true,
@@ -149,6 +148,7 @@ describe("WebMCP tool-selection eval dataset", () => {
         if (call.functionName === ANALYZE_HAZARD_TOOL_NAME) {
           expect(call.arguments).toHaveProperty("place");
           expect(call.arguments).toHaveProperty("hazard");
+          expect(call.arguments).toHaveProperty("time");
         }
         if (call.functionName === GET_COVERAGE_TOOL_NAME) {
           expect(call.arguments).toHaveProperty("hazard");

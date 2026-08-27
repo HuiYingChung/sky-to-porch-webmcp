@@ -88,15 +88,20 @@ export function createListEnvironmentalHazardsTool(): WebMCP.ModelContextTool {
         concerns: CONCERN_TYPES,
         concern_guidance:
           "Concern is optional. Infer it when explicit; ask only when a broad goal needs it; otherwise use general and proceed.",
-        demo_scenarios: WEBMCP_DEMO_SCENARIOS.map((scenario) => ({
-          id: scenario.id,
-          title: scenario.title,
-          analysis_input: {
-            ...scenario.analysisInput,
-            analysis_scope: "related_context",
-            question: compactText(scenario.prompt, 120),
-          },
-        })),
+        demo_scenarios: WEBMCP_DEMO_SCENARIOS.map((scenario) => {
+          const { start_date: startDate, end_date: endDate, ...analysisInput } =
+            scenario.analysisInput;
+          return {
+            id: scenario.id,
+            title: scenario.title,
+            analysis_input: {
+              ...analysisInput,
+              time: startDate === endDate ? startDate : `${startDate}/${endDate}`,
+              analysis_scope: "related_context",
+              question: compactText(scenario.prompt, 120),
+            },
+          };
+        }),
         default_analysis_scope: "related_context",
         relationship: "related_evidence_for_assessment",
         selection_guidance:

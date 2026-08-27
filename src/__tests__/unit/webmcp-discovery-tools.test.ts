@@ -41,11 +41,14 @@ describe("WebMCP discovery tools", () => {
     expect(output.concerns[0]).toBe("general");
     expect(output.demo_scenarios).toHaveLength(3);
     for (const scenario of WEBMCP_DEMO_SCENARIOS) {
+      const { start_date: startDate, end_date: endDate, ...analysisInput } =
+        scenario.analysisInput;
       expect(output.demo_scenarios.find((item) => item.id === scenario.id))
         .toMatchObject({
           title: scenario.title,
           analysis_input: {
-            ...scenario.analysisInput,
+            ...analysisInput,
+            time: startDate === endDate ? startDate : `${startDate}/${endDate}`,
             analysis_scope: "related_context",
           },
         });

@@ -75,6 +75,7 @@ const SYSTEM_INSTRUCTIONS = [
   "You are evaluating a browser Agent against the exact WebMCP tools registered by Sky to Porch.",
   "Follow each tool description and JSON schema exactly.",
   "Call tools only when needed. Do not invent coordinates for a named place.",
+  "For analysis time, use latest_completed unless the user stated exact dates; never invent a date or use today.",
   "If a tool result requires user input, ask the user and wait; do not choose or call another tool before a new user message.",
   "When the user then chooses a returned place, resume the unfinished task with that choice and continue through the requested result.",
 ].join(" ");
@@ -240,9 +241,6 @@ function semanticArgumentsMatch(actual: EvalCall, expected: EvalCall): boolean {
     }
     if (key === "place" && typeof expectedValue === "string") {
       if (typeof actualValue !== "string") return false;
-      const hasExpectedCoordinates = typeof expectedArgs.latitude === "number" &&
-        typeof expectedArgs.longitude === "number";
-      if (hasExpectedCoordinates) continue;
       const expectedPlace = normalizedPlace(expectedValue);
       const actualPlace = normalizedPlace(actualValue);
       if (actualPlace !== expectedPlace && !actualPlace.startsWith(`${expectedPlace},`)) {
@@ -403,8 +401,7 @@ async function runPostToolCase(
   const expectedCalls = item.expected.toolCallsAfterUserReply ??
     item.expected.toolCallsBeforeNextUserMessage ?? [];
   const expectedCallsMatch = calls.length === expectedCalls.length && calls.every(
-    (call, index) => call.functionName === expectedCalls[index].functionName &&
-      sameValue(call.arguments, expectedCalls[index].arguments)
+    (call, index) => semanticArgumentsMatch(call, expectedCalls[index])
   );
   const asksUserToChoose = /\b(which|choose|select)\b/iu.test(text);
   const waitsForNextMessage = calls.length === 0;

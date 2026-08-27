@@ -13,6 +13,7 @@
           "arguments": {
             "place": "Springfield",
             "hazard": "fire_smoke",
+            "time": "latest_completed",
             "analysis_scope": "single_hazard_only"
           }
         }
@@ -31,33 +32,20 @@
             "required_next_action": "retry_analysis_with_selected_place",
             "continue_task": true,
             "set_place_to_selected_label": true,
-            "include_selected_retry_with": true,
             "preserve_other_arguments": true
           },
           "choices": [
             {
               "choice_id": "place-1",
-              "label": "Springfield, Massachusetts",
-              "retry_with": {
-                "latitude": 42.1015,
-                "longitude": -72.5898
-              }
+              "label": "Springfield, Massachusetts"
             },
             {
               "choice_id": "place-2",
-              "label": "Springfield, Illinois",
-              "retry_with": {
-                "latitude": 39.7817,
-                "longitude": -89.6501
-              }
+              "label": "Springfield, Illinois"
             },
             {
               "choice_id": "place-3",
-              "label": "Springfield, Missouri",
-              "retry_with": {
-                "latitude": 37.209,
-                "longitude": -93.2923
-              }
+              "label": "Springfield, Missouri"
             }
           ]
         }
@@ -84,6 +72,7 @@
           "arguments": {
             "place": "Springfield",
             "hazard": "fire_smoke",
+            "time": "latest_completed",
             "analysis_scope": "single_hazard_only"
           }
         }
@@ -102,33 +91,20 @@
             "required_next_action": "retry_analysis_with_selected_place",
             "continue_task": true,
             "set_place_to_selected_label": true,
-            "include_selected_retry_with": true,
             "preserve_other_arguments": true
           },
           "choices": [
             {
               "choice_id": "place-1",
-              "label": "Springfield, Massachusetts",
-              "retry_with": {
-                "latitude": 42.1015,
-                "longitude": -72.5898
-              }
+              "label": "Springfield, Massachusetts"
             },
             {
               "choice_id": "place-2",
-              "label": "Springfield, Illinois",
-              "retry_with": {
-                "latitude": 39.7817,
-                "longitude": -89.6501
-              }
+              "label": "Springfield, Illinois"
             },
             {
               "choice_id": "place-3",
-              "label": "Springfield, Missouri",
-              "retry_with": {
-                "latitude": 37.209,
-                "longitude": -93.2923
-              }
+              "label": "Springfield, Missouri"
             }
           ]
         }
@@ -149,9 +125,8 @@
           "arguments": {
             "place": "Springfield, Illinois",
             "hazard": "fire_smoke",
-            "analysis_scope": "single_hazard_only",
-            "latitude": 39.7817,
-            "longitude": -89.6501
+            "time": "latest_completed",
+            "analysis_scope": "single_hazard_only"
           }
         }
       ],

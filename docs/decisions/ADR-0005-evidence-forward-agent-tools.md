@@ -1,6 +1,6 @@
 # ADR-0005: Evidence-forward Agent tools and demo journeys
 
-**Status:** Accepted
+**Status:** Superseded in part by ADR-0006
 **Date:** 2026-08-27
 
 ## Context

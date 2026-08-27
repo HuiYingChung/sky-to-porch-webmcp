@@ -60,9 +60,9 @@ functionality and new challenge work remain separated in
 | “Run the Los Angeles fire and health demo.” | Coughing and eye irritation on January 9, 2025 | Fire & Smoke + Air Quality |
 | “Run the Tucson dog and heat demo.” | Unusual lethargy after outdoor time on July 10, 2025 | Extreme Heat + Drought & Land |
 
-The list tool returns the complete copy-ready prompt and exact analysis input
-for the selected demo. Demo scenarios are curated inputs, not hard-coded answer
-paths.
+The no-input list tool returns compact, ready analysis inputs for all three
+demos in one response. Demo scenarios are curated inputs, not hard-coded
+answer paths or guessable selector IDs.
 
 ### Ask your own question
 
@@ -92,6 +92,9 @@ proceeds without forcing the person to use demo-shaped language.
 
 Concrete questions go directly to analysis. Discovery tools are not mandatory
 preflight calls. Contextual tools appear only when their required result exists.
+Analysis requires an explicit `time`: `latest_completed`, one completed UTC
+date, or a bounded date range. Named places are geocoded by deterministic
+application code; the Agent cannot supply guessed latitude/longitude fields.
 
 The browser registration entry point is
 [`src/components/webmcp/webmcp-bridge.tsx`](src/components/webmcp/webmcp-bridge.tsx).

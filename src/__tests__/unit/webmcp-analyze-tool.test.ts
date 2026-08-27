@@ -87,7 +87,7 @@ describe("WebMCP environmental hazard tool", () => {
       untrustedContentHint: true,
     });
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.additionalProperties).toBe(false);
-    expect(ANALYZE_HAZARD_INPUT_SCHEMA.required).toEqual(["place", "hazard"]);
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.required).toEqual(["place", "hazard", "time"]);
     for (const property of Object.values(ANALYZE_HAZARD_INPUT_SCHEMA.properties)) {
       expect(property.description.length).toBeLessThanOrEqual(150);
     }
@@ -121,14 +121,11 @@ describe("WebMCP environmental hazard tool", () => {
     ) => Promise<Record<string, unknown>>;
 
     const output = await executeWithOneArgument({
-      place: "Houston, Texas",
+      place: "29.7604, -95.3698",
       hazard: "wind_storm",
       analysis_scope: "single_hazard_only",
       concern: "home",
-      latitude: 29.7604,
-      longitude: -95.3698,
-      start_date: "2024-07-08",
-      end_date: "2024-07-08",
+      time: "2024-07-08",
     });
 
     expect(runAnalysis).toHaveBeenCalledTimes(1);
@@ -144,21 +141,22 @@ describe("WebMCP environmental hazard tool", () => {
 
   it("returns choices instead of guessing between ambiguous place results", async () => {
     const runAnalysis = vi.fn();
-    const fetchImpl = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          ok: true,
-          results: [
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { query: string };
+      const results = body.query === "Springfield, Illinois"
+        ? [{ label: "Springfield, Illinois", lon: -89.65, lat: 39.78 }]
+        : [
             { label: "Springfield, Illinois", lon: -89.65, lat: 39.78 },
             { label: "Springfield, Missouri", lon: -93.29, lat: 37.21 },
-          ],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      )
-    );
+          ];
+      return new Response(JSON.stringify({ ok: true, results }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
 
     const output = await executeAnalyzeHazardTool(
-      { place: "Springfield", hazard: "fire_smoke" },
+      { place: "Springfield", hazard: "fire_smoke", time: "latest_completed" },
       toolOptions(),
       { runAnalysis, fetchImpl, now: () => NOW }
     );
@@ -175,7 +173,6 @@ describe("WebMCP environmental hazard tool", () => {
         required_next_action: "retry_analysis_with_selected_place",
         continue_task: true,
         set_place_to_selected_label: true,
-        include_selected_retry_with: true,
         preserve_other_arguments: true,
       },
     });
@@ -183,12 +180,10 @@ describe("WebMCP environmental hazard tool", () => {
       {
         choice_id: "place-1",
         label: "Springfield, Illinois",
-        retry_with: { latitude: 39.78, longitude: -89.65 },
       },
       {
         choice_id: "place-2",
         label: "Springfield, Missouri",
-        retry_with: { latitude: 37.21, longitude: -93.29 },
       },
     ]);
     const message = "message" in output ? output.message : "";
@@ -203,14 +198,12 @@ describe("WebMCP environmental hazard tool", () => {
   it("tells the agent to wait for the person, then resume the unfinished task", () => {
     const tool = createAnalyzeHazardTool({ runAnalysis: vi.fn() });
 
-    expect(tool.description).toContain("Never infer coordinates for a named place");
-    expect(tool.description).toContain("before a new user reply");
-    expect(tool.description).toContain("this task is still unfinished");
+    expect(tool.description).toContain("Never infer coordinates");
+    expect(tool.description).toContain("wait for a new user reply");
+    expect(tool.description).toContain("the task is unfinished");
     expect(tool.description).toContain("immediately call this tool again");
-    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.latitude.description)
-      .toContain("Never geocode or infer coordinates");
-    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.longitude.description)
-      .toContain("Never geocode or infer coordinates");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties).not.toHaveProperty("latitude");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties).not.toHaveProperty("longitude");
   });
 
   it("continues the analysis after the person selects a returned place", async () => {
@@ -223,23 +216,25 @@ describe("WebMCP environmental hazard tool", () => {
       void _signal;
       return successfulFireAnalysis(request);
     });
-    const fetchImpl = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          ok: true,
-          results: [
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { query: string };
+      const results = body.query === "Springfield, Illinois"
+        ? [{ label: "Springfield, Illinois", lon: -89.65, lat: 39.78 }]
+        : [
             { label: "Springfield, Illinois", lon: -89.65, lat: 39.78 },
             { label: "Springfield, Missouri", lon: -93.29, lat: 37.21 },
-          ],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      )
-    );
+          ];
+      return new Response(JSON.stringify({ ok: true, results }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
 
     const ambiguous = await executeAnalyzeHazardTool(
       {
         place: "Springfield",
         hazard: "fire_smoke",
+        time: "latest_completed",
         analysis_scope: "single_hazard_only",
       },
       toolOptions(),
@@ -252,27 +247,26 @@ describe("WebMCP environmental hazard tool", () => {
       {
         place: "Springfield, Illinois",
         hazard: "fire_smoke",
+        time: "latest_completed",
         analysis_scope: "single_hazard_only",
-        latitude: 39.78,
-        longitude: -89.65,
       },
       toolOptions(),
       { runAnalysis, fetchImpl, now: () => NOW }
     );
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(runAnalysis).toHaveBeenCalledTimes(1);
     expect(runAnalysis.mock.calls[0][0]).toMatchObject({
       hazardId: "fire_smoke",
       placeSelection: {
-        label: "Springfield, Illinois (agent coordinates)",
-        selectionMethod: "agent_coordinate",
+        label: "Springfield, Illinois (OSM search)",
+        selectionMethod: "place_search",
       },
     });
     expect(completed.ui_updated).toBe(true);
   });
 
-  it("uses supplied coordinates, defaults to general/latest, returns citations, and caps output", async () => {
+  it("uses explicit coordinate text, defaults to general/latest, returns citations, and caps output", async () => {
     const runAnalysis = vi.fn(async (
       request: AnalysisRequest,
       _origin?: "agent",
@@ -286,11 +280,10 @@ describe("WebMCP environmental hazard tool", () => {
 
     const output = await executeAnalyzeHazardTool(
       {
-        place: "Tucson, Arizona",
+        place: "32.2226, -110.9747",
         hazard: "fire_smoke",
+        time: "latest_completed",
         analysis_scope: "single_hazard_only",
-        latitude: 32.2226,
-        longitude: -110.9747,
       },
       toolOptions(),
       { runAnalysis, fetchImpl, now: () => NOW }
@@ -343,12 +336,11 @@ describe("WebMCP environmental hazard tool", () => {
 
     const output = await executeAnalyzeHazardTool(
       {
-        place: "Tucson, Arizona",
+        place: "32.2226, -110.9747",
         hazard: "extreme_heat",
+        time: "latest_completed",
         analysis_scope: "single_hazard_only",
         concern: "health",
-        latitude: 32.2226,
-        longitude: -110.9747,
       },
       toolOptions(),
       { runAnalysis, now: () => NOW }
@@ -382,13 +374,10 @@ describe("WebMCP environmental hazard tool", () => {
 
     const output = await executeAnalyzeHazardTool(
       {
-        place: "Houston, Texas",
+        place: "29.7604, -95.3698",
         hazard: hazardId,
         analysis_scope: "single_hazard_only",
-        latitude: 29.7604,
-        longitude: -95.3698,
-        start_date: "2024-07-08",
-        end_date: "2024-07-08",
+        time: "2024-07-08",
       },
       toolOptions(),
       { runAnalysis, now: () => NOW }
@@ -411,13 +400,10 @@ describe("WebMCP environmental hazard tool", () => {
 
     const output = await executeAnalyzeHazardTool(
       {
-        place: "Houston, Texas",
+        place: "29.7604, -95.3698",
         hazard: "wind_storm",
         concern: "home",
-        latitude: 29.7604,
-        longitude: -95.3698,
-        start_date: "2024-07-08",
-        end_date: "2024-07-08",
+        time: "2024-07-08",
         question: "Could this storm have damaged my home, and what can I discuss with my insurer?",
       },
       toolOptions(),
@@ -510,14 +496,11 @@ describe("WebMCP environmental hazard tool", () => {
 
     const output = await executeAnalyzeHazardTool(
       {
-        place: "Houston, Texas, United States",
+        place: "29.7604, -95.3698",
         hazard: "wind_storm",
         concern: "home",
-        latitude: 29.7604,
-        longitude: -95.3698,
         radius_km: 25,
-        start_date: "2024-07-08",
-        end_date: "2024-07-08",
+        time: "2024-07-08",
         question: "Could Hurricane Beryl have damaged my home or roof, and what official environmental evidence can help me discuss it with my insurer?",
       },
       toolOptions(),
@@ -571,13 +554,10 @@ describe("WebMCP environmental hazard tool", () => {
 
     const output = await executeAnalyzeHazardTool(
       {
-        place: "Los Angeles, California",
+        place: "34.0522, -118.2437",
         hazard: "fire_smoke",
         concern: "health",
-        latitude: 34.0522,
-        longitude: -118.2437,
-        start_date: "2025-01-09",
-        end_date: "2025-01-09",
+        time: "2025-01-09",
       },
       toolOptions(),
       { runAnalysis, now: () => NOW }
@@ -624,10 +604,9 @@ describe("WebMCP environmental hazard tool", () => {
 
     const output = await executeAnalyzeHazardTool(
       {
-        place: "Test place",
+        place: "32.2226, -110.9747",
         hazard,
-        latitude: 32.2226,
-        longitude: -110.9747,
+        time: "latest_completed",
       },
       toolOptions(),
       { runAnalysis, now: () => NOW }
@@ -656,11 +635,10 @@ describe("WebMCP environmental hazard tool", () => {
 
     const output = await executeAnalyzeHazardTool(
       {
-        place: "Phoenix, Arizona",
+        place: "33.4484, -112.074",
         hazard: "extreme_heat",
+        time: "latest_completed",
         analysis_scope: "single_hazard_only",
-        latitude: 33.4484,
-        longitude: -112.074,
         question: "What was the maximum temperature on this date only?",
       },
       toolOptions(),
@@ -691,10 +669,9 @@ describe("WebMCP environmental hazard tool", () => {
 
     const output = await executeAnalyzeHazardTool(
       {
-        place: "Hilo, Hawaii",
+        place: "19.7074, -155.0885",
         hazard: "earth_volcanoes",
-        latitude: 19.7074,
-        longitude: -155.0885,
+        time: "latest_completed",
       },
       toolOptions(),
       { runAnalysis, runAnalysisBundle, now: () => NOW }
@@ -713,11 +690,13 @@ describe("WebMCP environmental hazard tool", () => {
   });
 
   it.each([
-    [{ place: "Tucson", hazard: "fire_smoke", latitude: 32.2 }, "latitude and longitude"],
+    [{ place: "91, -110.9", hazard: "fire_smoke", time: "latest_completed" }, "outside the valid WGS-84 range"],
+    [{ place: "Tucson", hazard: "fire_smoke", time: "latest_completed", latitude: 32.2 }, "Unexpected input field"],
     [
       {
         place: "Tucson",
         hazard: "fire_smoke",
+        time: "latest_completed",
         related_hazards: ["air_quality"],
       },
       "Unexpected input field",
@@ -727,10 +706,7 @@ describe("WebMCP environmental hazard tool", () => {
         place: "Tucson",
         hazard: "extreme_heat",
         analysis_scope: "single_hazard_only",
-        latitude: 32.2,
-        longitude: -110.9,
-        start_date: "2026-08-20",
-        end_date: "2026-08-21",
+        time: "2026-08-20/2026-08-21",
       },
       "exactly one",
     ],
@@ -738,10 +714,7 @@ describe("WebMCP environmental hazard tool", () => {
       {
         place: "Tucson",
         hazard: "fire_smoke",
-        latitude: 32.2,
-        longitude: -110.9,
-        start_date: "2026-02-30",
-        end_date: "2026-02-30",
+        time: "2026-02-30",
       },
       "real calendar dates",
     ],
