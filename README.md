@@ -5,6 +5,28 @@ can inspect with an AI agent on the same map and evidence panel.
 
 **Live application:** [sky-to-porch-webmcp.vercel.app](https://sky-to-porch-webmcp.vercel.app/)
 
+## Judge quick start
+
+No Sky to Porch account, login, or API key is required. Open the live
+application in ChatGPT's in-app browser, which supports WebMCP by default, or
+in Google Chrome 149+ after enabling `chrome://flags/#enable-webmcp-testing`
+and restarting Chrome. The human map and evidence workflow also remains usable
+in browsers without WebMCP; only the Agent tools require a compatible browser.
+
+1. Ask the page Agent: **“Run the Houston Beryl roof demo.”** The Agent should
+   call the analysis tool and update the visible map, Meaning, and Evidence
+   panels with separate wind and flood evidence chains.
+2. Ask: **“Inspect the exact observations and citations.”** The contextual
+   inspection tool should read the active result without rerunning it.
+3. To check the location-safety boundary, ask: **“Check wildfire evidence for
+   Springfield.”** The tool should return the matching places, and the Agent
+   must ask which Springfield you mean and wait for your reply. It must not
+   choose a candidate on its own.
+
+The Agent is supplied by the judge's compatible browser. Sky to Porch does not
+send judge prompts to an internal model provider and the Vercel deployment does
+not need an `OPENAI_API_KEY`.
+
 It helps answer three practical questions:
 
 - **What was officially observed here and when?**
@@ -160,6 +182,14 @@ npm run verify
 Live-source smoke scripts remain separate and may require network authorization
 or source-specific credentials. Deterministic development and fixture tests do
 not require an internal model credential. See [.env.example](.env.example).
+
+The optional model-scored WebMCP evaluation is a development-only gate. It can
+use `OPENAI_API_KEY` from the gitignored `.env.local`, but that key is never
+needed by the application or its deployed WebMCP tools:
+
+```bash
+npm run eval:webmcp:model -- --runs 3 --include-post-tool
+```
 
 ## Attribution and license
 
