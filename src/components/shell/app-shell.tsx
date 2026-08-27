@@ -106,7 +106,7 @@ function HeaderControls({ onOpenAbout }: { onOpenAbout: () => void }) {
           alignItems: "center",
           gap: "6px",
           color: agentStatus.color,
-          fontSize: "12px",
+          fontSize: "14px",
           whiteSpace: "nowrap",
         }}
       >
