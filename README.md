@@ -1,235 +1,161 @@
 # Sky to Porch WebMCP
 
-Sky to Porch helps ordinary people find official environmental evidence for a
-place, compare how strongly it supports a real concern, and see what additional
-property- or person-specific evidence could change that assessment.
-This repository extends the existing application with WebMCP so a person and
-an AI agent can work from the same map, evidence, provenance, and limitations.
+Sky to Porch turns official environmental observations into evidence a person
+can inspect with an AI agent on the same map and evidence panel.
 
-## Challenge status
+It helps answer three practical questions:
 
-The pre-existing product has been imported behind a documented prior-work
-boundary. A browser-native WebMCP vertical slice is now implemented and
-verified locally with deterministic unit, integration, and browser tests.
+- **What was officially observed here and when?**
+- **How strongly does that evidence support my concern?**
+- **What property- or person-specific evidence could change the assessment?**
 
-The primary tool is `analyze_environmental_hazard`. It resolves a place or
-accepts selected coordinates, runs the same hazard-analysis application layer
-as the human form, updates the map and Insight panel, and returns a compact
-evidence result. Two baseline read-only tools list the governed hazards and the
-checked-in source-coverage catalog; they are for capability questions, not
-mandatory preflight calls before a concrete analysis. After a result exists, a
-read-only evidence-inspection tool is available; a Home + Wind result also
-makes a local storm-claim discussion tool available. Supported-browser
-discovery with the challenge agent and model-backed tool-selection evals remain
-release gates; this repository does not yet claim a public live WebMCP
-experience. Exact local verification records include
-[the related-context analysis](docs/testing/wind-storm-verification-2026-08-26.md)
-and [the bounded discovery tools](docs/testing/discovery-tools-verification-2026-08-26.md).
-
-The original application and the exact prior-work boundary are documented in
+This repository adds WebMCP to the existing Sky to Porch product. Imported
+functionality and new challenge work remain separated in
 [PRIOR_WORK.md](PRIOR_WORK.md).
 
-## Intended human-agent experience
+## Product experience
 
-A person opens Sky to Porch and chooses or describes a place and environmental
-concern. An agent can run the same validated analysis used by the human form,
-then synchronize the visible map and evidence panel. The person can inspect
-the observations, source coverage, freshness, limitations, and verification
-links before deciding what the evidence means for them.
+- Ask about any supported place, historical date, hazard, radius, and optional
+  concern.
+- Receive the strongest supported assessment first, followed by observation
+  values, times, official citations, labelled inference, and confidence.
+- See the Agent update the same map, Meaning panel, and Evidence panel used by
+  the human workflow.
+- Inspect related environmental evidence without merging unlike observations
+  into one measurement.
+- Continue with contextual tools only when the current result makes them useful.
 
-The agent does not replace the evidence pipeline. Deterministic code
-continues to own:
+## Curated demo entrances
 
-- location and time validation;
-- source coverage and request construction;
-- upstream response and schema validation;
-- calculations and freshness;
-- provenance and required limitations;
-- the decision that evidence is safe to present.
+| Say to the Agent | Historical concern | Evidence chains |
+| --- | --- | --- |
+| “Run the Houston Beryl roof demo.” | Missing shingles and a new roof leak on July 8, 2024 | Wind & Storm + Flood & Heavy Rain |
+| “Run the Los Angeles fire and health demo.” | Coughing and eye irritation on January 9, 2025 | Fire & Smoke + Air Quality |
+| “Run the Tucson dog and heat demo.” | Unusual lethargy after outdoor time on July 10, 2025 | Extreme Heat + Drought & Land |
 
-## Safety boundary
+The list tool returns the complete copy-ready prompt and exact analysis input
+for the selected demo. Demo scenarios are curated inputs, not hard-coded answer
+paths.
 
-Sky to Porch is a public-information experience, not an emergency alerting or
-professional decision system.
+### Ask your own question
 
-- No data does not mean no danger.
-- Source failure, unsupported coverage, stale data, inconclusive evidence, and
-  a valid observation with no anomaly are different states.
-- Regional evidence is not property-level certainty.
-- The application does not issue evacuation guidance.
-- Earthquake and eruption timing are not predicted.
+For example:
+
+> What official fire and smoke observations were recorded within 30 km of
+> Albuquerque, New Mexico, on May 20, 2025?
+
+This non-demo journey uses a different city, date, hazard, and radius from all
+three curated scenarios. It omits `concern`, receives the neutral `general`
+fallback, updates the visible UI, opens Evidence, and inspects structured
+citations. All seven hazard families also have non-demo selection cases.
+
+When a concern is obvious, the Agent can supply it. When a broad goal materially
+depends on the concern, the Agent asks one short follow-up. Otherwise, analysis
+proceeds without forcing the person to use demo-shaped language.
+
+## WebMCP tools
+
+| Tool | Natural trigger | Human-page effect |
+| --- | --- | --- |
+| `analyze_environmental_hazard` | A concrete place-and-hazard question | Updates the map, Meaning, Evidence, and Agent receipt |
+| `list_environmental_hazards` | Capability discovery or explicit demo selection | None; read-only catalog |
+| `get_environmental_source_coverage` | Source, region, or date eligibility | None; read-only coverage, not an observation |
+| `inspect_current_environmental_evidence` | A completed analysis needs exact values or citations | Reads the active result without a new query |
+| `prepare_storm_claim_discussion` | A completed Home + Wind analysis | Opens an evidence and property-document checklist |
+
+Concrete questions go directly to analysis. Discovery tools are not mandatory
+preflight calls. Contextual tools appear only when their required result exists.
+
+## Shared evidence flow
+
+```mermaid
+flowchart LR
+  Human[Human question] --> Service[Validated analysis service]
+  Agent[WebMCP tool] --> Service
+  Service --> Contract[Evidence contract]
+  Contract --> UI[Shared map + Meaning + Evidence]
+  Contract --> Result[Compact tool result + citations]
+  UI --> Human
+  Result --> Agent
+```
+
+Deterministic application code owns location and time validation, source
+coverage, retrieval, schema checks, calculations, freshness, provenance,
+limitations, and whether evidence is safe to present. No internal model key is
+required for evidence retrieval.
+
+## Related evidence
+
+Related context is the default for broad questions. An explicitly narrow
+question uses `single_hazard_only`.
+
+| Primary evidence | Related evidence available by default |
+| --- | --- |
+| Wind & Storm | Flood & Heavy Rain |
+| Extreme Heat | Drought & Land |
+| Fire & Smoke | Air Quality |
+| Earth & Volcanoes | Air Quality + Extreme Heat |
+
+Each chain retains its own source, observation time, coverage, freshness,
+confidence, citations, and limitations. The result distinguishes direct
+observations from an evidence-supported inference and reports the confidence of
+that assessment.
+
+## Verification
+
+| Layer | Current evidence |
+| --- | --- |
+| Deterministic product | Unit, integration, production-build, and desktop/mobile Playwright gates |
+| Native WebMCP | Discovery, execution, shared UI updates, ambiguity, and contextual-tool registration |
+| Historical official sources | All six primary and related chains in the three curated demos returned observations |
+| Generic product path | Albuquerque non-demo browser journey plus selection cases across all seven hazards |
+| Tool selection | Every registered tool has a distinct natural-trigger case; repeated model-scored runs remain a separate evaluation gate |
+
+Evidence records:
+
+- [Native Agent acceptance](docs/testing/native-agent-acceptance-2026-08-27.md)
+- [Evidence-forward historical demos](docs/testing/evidence-forward-demo-live-verification-2026-08-27.md)
+- [WebMCP evaluation boundary](docs/testing/webmcp-evals.md)
+- [Target architecture](docs/architecture/webmcp-target.md)
+
+## Evidence boundary
+
+- Sky to Porch is public-information software, not an alerting or emergency
+  decision system.
+- A valid observation, no observation returned, source failure, unsupported
+  coverage, stale data, and inconclusive evidence remain distinct states.
+- Regional evidence can support a confidence-labelled assessment; applying it
+  to one property or person depends on property- or person-specific evidence.
+- The product does not issue evacuation decisions or predict earthquake or
+  eruption timing.
 - Official alerts and local authorities remain authoritative.
-
-## Flood evidence coverage
-
-Live Flood analysis combines NASA GIBS precipitation visualization, NASA
-VIIRS flood-extent visualization, and available ground-station evidence. USGS
-gage observations cover supported U.S. selections. For a selected area within
-the coarse Canadian request envelope, the application also makes one bounded,
-credential-free request to the ECCC GeoMet `hydrometric-daily-mean`
-collection and accepts only a station coordinate inside that exact selection.
-
-The Canadian value is a station daily mean in metres, not a universal flood
-threshold. Missing or failed GeoMet evidence remains visible and never becomes
-a claim of no flooding, safe travel, or no property impact. Other GeoMet
-weather and AQHI collections are not part of this integration.
-
-## Related environmental context with evidence-supported assessment
-
-`Wind & Storm` uses selected-area NOAA GHCNh wind speed and gust observations.
-For Hurricane Beryl on 2024-07-08, a pinned NWS Houston/Galveston report may
-also contribute regional post-event wind context when the selected geometry is
-inside its governed Southeast Texas scope. Together, these records can support
-a confidence-labelled regional assessment of whether wind contribution is a
-credible explanation for a roof concern. Property inspection records determine
-how strongly that assessment applies to one roof.
-
-`Flood & Heavy Rain` is the existing `flood_storm` path. It uses rainfall,
-flood extent, inundation, and water-gage evidence; it does not establish wind
-damage. Every WebMCP result includes a machine-readable evidence scope. A broad
-storm-impact question uses `wind_storm` with the default `related_context`
-scope, so the tool automatically runs both analyses and returns two related but
-unmerged evidence chains.
-
-The same product-owned relationship table covers Extreme Heat with Drought &
-Land, Fire & Smoke with Air Quality, and Earth & Volcanoes with both Air
-Quality and Extreme Heat. Related context is the Agent default. Only a question
-that explicitly limits itself to one hazard uses `single_hazard_only`. Each
-chain preserves its own source coverage, observation time, evidence state,
-freshness, confidence, provenance, and limitations. The bundle reports
-`related_evidence_for_assessment`, counts the chains with official observations,
-and instructs the Agent to state the strongest supported inference and its
-confidence while distinguishing inference from direct observation.
-
-The Houston Beryl roof-and-insurer journey is one practical Home use case, not
-the definition of the site. Sky to Porch also supports Travel, Pets, Health,
-Power & Internet, and Community questions within each source's truthful
-coverage.
-
-## Architecture
-
-Human UI and WebMCP tools share one application layer:
-
-    Human form -----\\
-                     > Analysis service -> validated evidence -> shared UI
-    WebMCP tool ----/                              |
-                                                   -> compact tool result
-
-The imported hazard adapters, source registry, evidence contracts, evaluator,
-map, and failure-state UI remain the evidence-first foundation.
-
-The application does not call an internal language-model provider. Its
-plain-language Meaning panel is deterministic; the browser agent reasons over
-the compact validated WebMCP result. This avoids an Agent → website model
-round trip and makes evidence retrieval independent of model keys, cost, and
-rate limits.
-
-## WebMCP behavior
-
-- Feature-detects `document.modelContext` and registers from a client
-  component.
-- Registers `analyze_environmental_hazard`, `list_environmental_hazards`, and
-  `get_environmental_source_coverage` as the baseline surface. Concrete
-  environmental questions go directly to analysis; discovery is reserved for
-  capability, source-eligibility, or explicit curated-demo selection. The
-  existing list tool returns a compact demo index or one chosen prompt by
-  `demo_id`; no additional demo tool is registered.
-- Reads coverage from the same deterministic catalog as the human About UI,
-  performs no live request, and labels it pipeline eligibility rather than an
-  observation for a place or date.
-- Uses an `AbortController` for registration lifecycle and forwards tool-call
-  cancellation through geocoding and evidence retrieval.
-- Rejects unknown fields, invalid coordinates, invalid or incomplete dates,
-  and out-of-range radii.
-- Returns up to three card-ready place choices when a name is ambiguous. Each
-  choice has a human-readable label and exact retry coordinates; the Agent
-  keeps every other input unchanged and never silently chooses one.
-- Shows an Agent action receipt after a shared-view update, keeps Evidence one
-  click away, and offers a one-step restore when another result was visible.
-- Opens Meaning with the strongest deterministic finding, confidence, and
-  source count. Missing-data reminders appear only when no usable observation
-  was returned.
-- Marks source-derived output as untrusted content and does not claim the tool
-  is read-only because it intentionally changes the visible page state.
-- Defaults Agent requests to `related_context`, using a bounded product-owned
-  relationship table. `single_hazard_only` is reserved for an explicitly
-  narrow question. One tool execution can therefore gather two or three
-  separately labelled chains without asking the person to know the hazard or
-  source taxonomy.
-- Labels every bundle `related_evidence_for_assessment`, reports observation
-  coverage across chains, and asks the Agent for the strongest supported
-  inference with a confidence level. Direct observations remain identifiable.
-- Registers `inspect_current_environmental_evidence` only while a completed
-  analysis is active. It reads the strongest primary and related observations,
-  confidence, and structured source/product/time/URL citations without
-  starting another hazard query.
-- Registers `prepare_storm_claim_discussion` only after a Home + Wind result.
-  It opens a documentation checklist in the current page and never submits a
-  claim or decides causation, coverage, liability, repair scope, or outcome.
-- Keeps analysis and inspection results within a 2.4K-character bound so
-  evidence strength and structured citations are not discarded for brevity.
-
-The curated demos are inputs, not hard-coded answer paths. A person's own
-place, historical date, hazard, optional concern, and question use the same
-analysis service and answer order: strongest supported assessment; observation
-values, times, and official citations; direct observation before labelled
-inference; then confidence and the evidence that would change the assessment.
-Every registered tool has a distinct natural trigger in the selection evals.
-The full Houston journey can exercise all tool roles: list demos, inspect source
-coverage, analyze the event, inspect the returned evidence, and open the
-Home + Wind storm-discussion kit.
-
-See [the target architecture](docs/architecture/webmcp-target.md) and
-[the evaluation boundary](docs/testing/webmcp-evals.md). The dated
-[architecture audit](docs/architecture/audit-2026-08-26.md) records the
-findings, completed refactors, and remaining release gates.
 
 ## Local development
 
-Requirements:
+Requirements: Node.js 22 and npm.
 
-- Node.js 22
-- npm
+```bash
+npm ci
+npm run dev
+```
 
-Install and run:
+Open `http://localhost:3000`.
 
-    npm ci
-    npm run dev
+Run the full deterministic gate:
 
-The application is available at http://localhost:3000.
+```bash
+npm run verify
+```
 
-Core verification:
+Live-source smoke scripts remain separate and may require network authorization
+or source-specific credentials. Deterministic development and fixture tests do
+not require an internal model credential. See [.env.example](.env.example).
 
-    npm run typecheck
-    npm run lint
-    npm test
-    npm run test:integration
-    npm run build
-    npm run test:e2e
-    npm run secret-check
+## Attribution and license
 
-Live-source smoke scripts are intentionally separate from deterministic tests
-and may require source-specific credentials or network authorization.
+Sky to Porch existed before the WebMCP Challenge. The original history,
+baseline commit, imported boundary, and material tool assistance are disclosed
+in [PRIOR_WORK.md](PRIOR_WORK.md).
 
-## Environment variables
-
-Most deterministic development and fixture tests need no credentials. See
-.env.example for optional server-side source configuration. The application
-has no internal model credential. Never expose source credentials through
-NEXT_PUBLIC_*.
-
-## Prior work and attribution
-
-Sky to Porch existed before the WebMCP Challenge. This repository does not
-claim the imported product as new challenge work. The original history,
-baseline commit, excluded internal records, and material development-tool
-assistance are disclosed in [PRIOR_WORK.md](PRIOR_WORK.md).
-
-## License
-
-Code in this repository is licensed under the Apache License 2.0. External
-observations and datasets remain subject to their publishers' terms and are not
-relicensed by this repository. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
-
-This software is provided without warranty and does not replace official
-alerts, emergency guidance, or professional advice.
+Code is licensed under the [Apache License 2.0](LICENSE). External observations
+and datasets remain subject to their publishers’ terms; see [NOTICE](NOTICE).
