@@ -115,11 +115,18 @@ hidden agent-only transaction.
 ## Verification
 
 - Production native WebMCP discovery and the complete Beryl, narrow-wind,
-  ambiguity, no-observation, inspection, and discussion journeys were exercised
-  in the supported in-app browser at deployed commit `5cc1098`.
+  no-observation, inspection, and discussion journeys were exercised in the
+  supported in-app browser at deployed commit `c6f3c8c`. Contextual inspection
+  is now within its 2,400-character output cap.
 - The published commit passed its exact GitHub Actions run.
-- The current private candidate passes 1,289 unit tests, 132 integration tests,
-  a production build, 228 desktop/mobile browser journeys, secret checking, and
+- The production rerun exposed a 2,524-character primary evidence bundle above
+  its 2,400-character contract. The current private worktree has a
+  production-shaped bounded-output regression plus a stronger ambiguous-place
+  STOP/wait contract. Its local gate passes 1,292 unit tests, 132 integration
+  tests, a production build, 228 desktop/mobile browser journeys, and secret
+  check; publication and exact production re-verification remain pending.
+- The published commit passed 1,289 unit tests, 132 integration tests, a
+  production build, 228 desktop/mobile browser journeys, secret checking, and
   the clean-commit mechanical reachable-history preflight. The preflight remains
   one release control rather than proof of licensing, public availability, or
   model-selection quality.
@@ -143,9 +150,11 @@ attribution requirements.
 ## Current submission blockers
 
 1. Owner approval to make the repository public.
-2. Commit, publish, and production-reverify the contextual-output cap fix.
+2. Publish and production-reverify committed primary-output cap and
+   ambiguous-place Agent-wait corrections.
 3. Record and publish the narrated video under three minutes.
 4. Replace the video placeholder and recheck exact-candidate evidence after any
    separately authorized publication change.
-5. Run and retain model-backed selection scoring if a backend is deliberately
-   configured; otherwise disclose it as unproven rather than implying a pass.
+5. Configure an explicitly free-tier model backend, then run and retain
+   model-backed selection scoring, including the post-ambiguity wait behavior;
+   otherwise disclose it as unproven rather than implying a pass.

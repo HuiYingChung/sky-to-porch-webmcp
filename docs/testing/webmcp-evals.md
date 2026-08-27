@@ -31,6 +31,12 @@ Volcanoes with Air Quality and Heat. The tool then runs the governed
 combination and reports how strongly official observations across the chains
 support an inference.
 
+`tests/webmcp/post-tool-behavior-evals.json` separately captures the missing
+multi-turn boundary reported during challenge-Agent use: after an ambiguous
+tool result, the model must ask the person to choose, make no second tool call,
+select no candidate, and wait for the next user message. Its deterministic test
+only validates the retained scenario and contract; it is not a model pass.
+
 The dataset also includes post-analysis availability context for
 `inspect_current_environmental_evidence` and the Home + Wind-only
 `prepare_storm_claim_discussion`. At least one natural selection case must
@@ -65,6 +71,8 @@ Before release, run the dataset repeatedly with the challenge agent and record:
     never merely called to increase the visible tool count;
 15. whether non-demo questions across all seven hazards preserve the same
     answer order and shared UI update as curated demos.
+16. after `needs_place_choice`, whether the model asks the person to choose and
+    produces no second tool call until a new user message arrives.
 
 Do not call this dataset "passed" until the model-backed runs and raw outcomes
 have been retained for the exact tool definition under review.
@@ -82,6 +90,17 @@ absent, and no local Ollama executable was available. No provider credential
 was requested or read, no paid request was made, and no synthetic score was
 substituted. The model-backed gate therefore remains explicitly unproven until
 a backend is deliberately authorized and the raw outcomes are retained.
+
+The owner later authorized an explicitly free API boundary. The official
+[Gemini pricing page](https://ai.google.dev/gemini-api/docs/pricing) lists a
+free tier and the official
+[function-calling guide](https://ai.google.dev/gemini-api/docs/function-calling)
+documents structured tool calls, so it is a viable eval-only candidate; its
+free-tier inputs may be used to improve Google's products. No Gemini key is
+present, no request has been made, and the app still has no internal model
+dependency. Any run must use only the public eval prompts and tool metadata,
+keep the key outside the repository, verify zero-cost tier selection, and
+retain the exact model name plus raw outcomes.
 
 ## Full journeys
 

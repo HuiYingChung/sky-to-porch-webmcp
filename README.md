@@ -115,10 +115,10 @@ that assessment.
 | Layer | Current evidence |
 | --- | --- |
 | Deterministic product | Unit, integration, production-build, and desktop/mobile Playwright gates |
-| Native WebMCP | Production discovery, analysis, shared UI updates, ambiguity, no-observation safety, and contextual-tool registration at `5cc1098`; a contextual-output cap correction is verified locally and awaits publication/recheck |
+| Native WebMCP | Exact `c6f3c8c` production discovery, analysis, shared UI, no-observation, and contextual tools pass; contextual inspection is within 2,400 characters. A newly exposed primary-bundle cap fix and stronger ambiguous-place STOP/wait contract pass the full local gate and await publication/recheck |
 | Historical official sources | All six primary and related chains in the three curated demos returned observations |
 | Generic product path | Albuquerque non-demo browser journey plus selection cases across all seven hazards |
-| Tool selection | Every registered tool has a distinct natural-trigger case; repeated model-scored runs remain a separate evaluation gate |
+| Tool selection | Every registered tool has a distinct natural-trigger case; repeated model-scored runs, including the post-ambiguity wait behavior, remain a separate evaluation gate |
 
 Evidence records:
 
