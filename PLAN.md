@@ -12,21 +12,29 @@
 - W1 shared analysis application layer: complete for the vertical slice
 - W2 shared client controller and state: complete with renderer compatibility
 - W3 WebMCP tools: three baseline tools plus two contextual tools implemented;
-  supported-browser agent verification pending
+  production native discovery and both read-only executions pass at `6ca5698`,
+  but the primary tool fails there; corrected native local execution passes at
+  `5972b4f`, with corrected production verification pending
 - W4 provider cleanup: complete; deterministic-only application runtime
-- W5 verification: typecheck, lint, 1277 unit tests, 132 integration tests,
+- W5 verification: typecheck, lint, 1278 unit tests, 132 integration tests,
   production build, 224 browser journeys, and secret check pass;
-  supported-browser and model eval runs pending
+  selected supported in-app-browser journeys pass locally, while repeated
+  model-scored evals and exact remote CI remain pending
 - W5a shared-view UX: complete; full deterministic and browser regression pass
 - W5b Canadian Flood ground evidence: complete; bounded ECCC GeoMet live smoke
   and the full 220-journey browser regression passed
-- W5c Wind & Storm evidence: locally verified, including a live localhost
-  related-context Agent bundle with separate successful wind and water chains;
-  supported-browser Agent verification pending
+- W5c Wind & Storm evidence: the supported in-app browser locally verified the
+  Beryl related-context bundle, separate Wind and Flood chains, synchronized
+  shared UI, conditional claim guide, and narrow single-hazard boundary;
+  production correction and rerun remain pending
 - W5d compound environmental context: locally verified for Heat–Drought,
   Fire/Smoke–Air Quality, and Volcano–Air Quality–Heat, including one parallel
   shared-view transaction; supported-browser Agent verification pending
 - W6 release and submission: pending explicit authorization
+
+The production/local/native evidence split for the current acceptance package
+is recorded in
+[`docs/testing/native-agent-acceptance-2026-08-27.md`](docs/testing/native-agent-acceptance-2026-08-27.md).
 
 ## 1. Goal
 
@@ -204,13 +212,16 @@ Technical WebMCP details remain Codex's responsibility.
 
 ## 7. Definition of done
 
-- WebMCP tools are discoverable and executable in the required browser
-  environments. (Pending supported-browser release verification.)
+- WebMCP tools are discoverable in the supported production in-app browser.
+  Read-only production execution and corrected local primary execution pass;
+  corrected production primary execution remains pending publication and
+  re-verification.
 - Human and agent interactions share one evidence pipeline and UI state.
 - The deterministic safety model is unchanged or stronger.
 - Tool descriptions and outputs stay within current implementation guidance.
 - All deterministic tests, model evals, CI, and exact-candidate checks pass.
-  (Deterministic local gates pass; model evals and exact CI remain pending.)
+  (Corrected deterministic local gates pass; repeated model-scored evals and
+  corrected exact remote CI remain pending.)
 - Prior work and new work are unambiguous.
 - The repository is publicly reproducible under a recognized open-source
   license.

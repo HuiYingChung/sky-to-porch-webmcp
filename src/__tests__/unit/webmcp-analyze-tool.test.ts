@@ -93,6 +93,55 @@ describe("WebMCP environmental hazard tool", () => {
     }
   });
 
+  it("supports the native one-argument callback and preserves source failure", async () => {
+    const runAnalysis = vi.fn(async (
+      request: AnalysisRequest,
+      _origin?: "agent",
+      _signal?: AbortSignal
+    ): Promise<ActiveAnalysis> => {
+      void _origin;
+      void _signal;
+      return {
+        analysisId: "analysis-native-one-argument",
+        origin: "agent",
+        request,
+        outcome: {
+          hazardId: "wind_storm",
+          result: {
+            kind: "source_failure",
+            rejectionReason: "Deterministic provider failure boundary.",
+          },
+        },
+        completedAt: "2026-08-26T18:00:01.000Z",
+      };
+    });
+    const tool = createAnalyzeHazardTool({ runAnalysis, now: () => NOW });
+    const executeWithOneArgument = tool.execute as (
+      input: Record<string, unknown>
+    ) => Promise<Record<string, unknown>>;
+
+    const output = await executeWithOneArgument({
+      place: "Houston, Texas",
+      hazard: "wind_storm",
+      analysis_scope: "single_hazard_only",
+      concern: "home",
+      latitude: 29.7604,
+      longitude: -95.3698,
+      start_date: "2024-07-08",
+      end_date: "2024-07-08",
+    });
+
+    expect(runAnalysis).toHaveBeenCalledTimes(1);
+    expect(runAnalysis.mock.calls[0][2]).toBeInstanceOf(AbortSignal);
+    expect(output).toMatchObject({
+      status: "source_failure",
+      evidence: null,
+      limitations: ["Deterministic provider failure boundary."],
+      no_data_is_not_no_danger: true,
+      evidence_scope: "wind_only_no_rain_flood_or_water_gages",
+    });
+  });
+
   it("returns choices instead of guessing between ambiguous place results", async () => {
     const runAnalysis = vi.fn();
     const fetchImpl = vi.fn().mockResolvedValue(

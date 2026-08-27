@@ -748,11 +748,16 @@ function plannedHazards(input: ParsedInput): HazardId[] {
 
 export async function executeAnalyzeHazardTool(
   rawInput: Record<string, unknown>,
-  options: WebMCP.ToolExecuteCallbackOptions,
+  options: WebMCP.ToolExecuteCallbackOptions | undefined,
   dependencies: AnalyzeHazardToolDependencies
 ): Promise<AnalyzeHazardToolOutput> {
-  if (options.signal.aborted) {
-    throw options.signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+  // Current supported browser agents may invoke the callback with only the
+  // schema input even though older WebMCP type packages require callback
+  // options. Keep per-invocation cancellation when the client supplies it,
+  // while retaining a never-aborted signal for the one-argument surface.
+  const signal = options?.signal ?? new AbortController().signal;
+  if (signal.aborted) {
+    throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
   }
   const now = dependencies.now?.() ?? new Date();
   const input = parseInput(rawInput, now);
@@ -761,7 +766,7 @@ export async function executeAnalyzeHazardTool(
   const resolved = await resolvePlace(
     input,
     dependencies.fetchImpl ?? fetch,
-    options.signal
+    signal
   );
   if ("status" in resolved) return resolved;
 
@@ -807,14 +812,14 @@ export async function executeAnalyzeHazardTool(
     });
     let analyses: ActiveAnalysis[] | null;
     if (dependencies.runAnalysisBundle) {
-      analyses = await dependencies.runAnalysisBundle(requests, "agent", options.signal);
+      analyses = await dependencies.runAnalysisBundle(requests, "agent", signal);
     } else {
       analyses = [];
       for (const request of requests) {
         const analysis = await dependencies.runAnalysis(
           request,
           "agent",
-          options.signal
+          signal
         );
         if (analysis === null) {
           analyses = null;
@@ -841,11 +846,11 @@ export async function executeAnalyzeHazardTool(
       evidenceMode: "live",
     },
     "agent",
-    options.signal
+    signal
   );
   if (analysis === null) {
-    if (options.signal.aborted) {
-      throw options.signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+    if (signal.aborted) {
+      throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
     }
     return failure(
       "superseded",
