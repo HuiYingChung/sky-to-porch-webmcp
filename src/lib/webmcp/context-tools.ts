@@ -72,7 +72,7 @@ export function createInspectEvidenceTool(
     name: INSPECT_EVIDENCE_TOOL_NAME,
     title: "Inspect current environmental evidence",
     description:
-      "Read the strongest validated observations, confidence, and structured citations from the primary result and related evidence currently shown in Sky to Porch. It does not re-query sources or control the interface. Explain the strongest relationship the returned evidence supports and label inference separately from direct observation.",
+      "Read validated observations, confidence, and citations from the current primary and related evidence without re-querying or controlling the UI. Explain supported relationships and label inference. Do not use for an insurer or property-record checklist; use prepare_storm_claim_discussion when available.",
     inputSchema: INSPECT_EVIDENCE_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     execute: async (input) => {
@@ -250,7 +250,7 @@ export function createStormClaimDiscussionTool(
     name: PREPARE_STORM_CLAIM_TOOL_NAME,
     title: "Prepare a storm claim discussion",
     description:
-      "Open an evidence-backed kit for discussing possible wind contribution to roof or home damage with an insurer. Available after a Home + Wind & Storm result. It leads with supported regional findings and shows which property-specific records would strengthen the discussion; the insurer makes the coverage decision.",
+      "Use this, not evidence inspection, when the person asks to open an insurer discussion or identify roof/property records. It opens the evidence-backed wind contribution kit after Home + Wind & Storm, leads with supported regional findings, and shows records that could strengthen the discussion; the insurer decides coverage.",
     inputSchema: PREPARE_STORM_CLAIM_INPUT_SCHEMA,
     annotations: { readOnlyHint: false, untrustedContentHint: true },
     execute: async (input) => {

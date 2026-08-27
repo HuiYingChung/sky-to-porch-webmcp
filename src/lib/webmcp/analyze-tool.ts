@@ -242,20 +242,20 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     hazard: {
       type: "string",
       enum: HAZARD_IDS,
-      description: "Main hazard named or most central to the person's question.",
+      description: "Primary hazard: smoke+air uses fire_smoke; wind+flood wind_storm; heat+drought extreme_heat; volcano+air/heat earth_volcanoes.",
     },
     analysis_scope: {
       type: "string",
       enum: ANALYSIS_SCOPES,
       default: "related_context",
-      description: "Default to related_context. Use single_hazard_only only when the person explicitly restricts the question to one hazard.",
+      description: "Use single_hazard_only for one named hazard or measurement; related_context for broad impact, multiple, or related-condition questions.",
     },
     related_hazards: {
       type: "array",
       items: { type: "string", enum: HAZARD_IDS },
       uniqueItems: true,
       maxItems: 3,
-      description: "Extra plausible context hazards named or implied by a broad question, beyond the product defaults. Maximum three.",
+      description: "Omit unless the person explicitly names a non-default related hazard. Never add hazards already covered by product defaults. Maximum three.",
     },
     concern: {
       type: "string",
@@ -294,7 +294,7 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     question: {
       type: "string",
       maxLength: 500,
-      description: "Optional user question to acknowledge without inventing evidence.",
+      description: "Optional. Preserve the person's wording when possible; shorten only to 500 characters. Never invent evidence.",
     },
   },
 } as const;
@@ -1047,7 +1047,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Analyze a concrete place/hazard and update shared UI; skip discovery. Never infer coordinates for a named place; use only user-given coordinates or a candidate the user later selects. On needs_place_choice, do not choose or retry before a new user reply: ask and wait. After their choice, this task is still unfinished: immediately call this tool again with the selected label and retry_with coordinates, keep all other arguments, and finish the evidence result. Default related_context; use single_hazard_only only if explicit. Infer concern when clear; ask once only for a broad goal, else general. Answer with strongest evidence, citations, supported inference, confidence, and separate chains.",
+      "Analyze place/hazard and update shared UI; skip discovery. Never infer coordinates for a named place; use only user-given coordinates or a candidate the user later selects. On needs_place_choice, do not choose or retry before a new user reply: ask and wait. After their choice, this task is still unfinished: immediately call this tool again with the selected label and retry_with coordinates, keep other arguments, and finish the result. Use single_hazard_only for one named hazard/measurement; related_context for broad or multiple conditions. Infer concern when clear; ask once for a broad goal, else general. Answer with evidence, citations, inference, confidence, and separate chains.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

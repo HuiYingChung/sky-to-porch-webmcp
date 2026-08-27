@@ -25,7 +25,7 @@ export const LIST_HAZARDS_INPUT_SCHEMA = {
     demo_id: {
       type: "string",
       enum: DEMO_SCENARIO_IDS,
-      description: "Optional curated historical demo ID. Omit it to list supported hazards and the compact demo index.",
+      description: "Set only when the person explicitly names or selects one curated demo ID. Omit for capability or demo-list questions.",
     },
   },
 } as const;
@@ -43,7 +43,7 @@ export const GET_COVERAGE_INPUT_SCHEMA = {
     source_id: {
       type: "string",
       enum: SOURCE_IDS,
-      description: "Optional source ID from the summary when one detailed profile is needed.",
+      description: "Set only when the person names one source or requests one profile. Omit for a hazard-wide region or time-range summary.",
     },
   },
 } as const;
@@ -113,7 +113,7 @@ export function createListEnvironmentalHazardsTool(): WebMCP.ModelContextTool {
     name: LIST_HAZARDS_TOOL_NAME,
     title: "List environmental hazards",
     description:
-      "List supported hazards and a compact index of curated historical demos, or return one demo prompt by demo_id. Use only for capability questions, genuine hazard ambiguity, or when the person asks to choose a demo. Concrete place-and-hazard questions go directly to analyze_environmental_hazard.",
+      "List supported hazards and a compact demo index. Omit demo_id for capability or demo-list questions; set it only after the person names or chooses one exact demo. Use for capability questions, genuine hazard ambiguity, or demo selection. Concrete place-and-hazard questions go directly to analyze_environmental_hazard.",
     inputSchema: LIST_HAZARDS_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute: async (input) => {
@@ -173,7 +173,7 @@ export function createGetEnvironmentalSourceCoverageTool(): WebMCP.ModelContextT
     name: GET_COVERAGE_TOOL_NAME,
     title: "Get environmental source coverage",
     description:
-      "Read the checked-in source-coverage catalog for one hazard without making live requests. Use for capability, region, or time-range questions, not before every analysis. Coverage means pipeline eligibility only; it never proves an observation exists for a place or date.",
+      "Read the checked-in source-coverage catalog for one hazard without live requests. Omit source_id for hazard-wide region/time questions; set it only when one source is named or requested. Do not call before every analysis. Coverage is pipeline eligibility, never proof of an observation.",
     inputSchema: GET_COVERAGE_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute: async (input) => {

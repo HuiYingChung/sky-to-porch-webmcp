@@ -4,6 +4,7 @@ import { loadEnvConfig } from "@next/env";
 import type { ActiveAnalysis } from "@/lib/analysis/types";
 import {
   createAnalyzeHazardTool,
+  DEFAULT_RELATED_HAZARDS,
 } from "@/lib/webmcp/analyze-tool";
 import {
   createInspectEvidenceTool,
@@ -48,6 +49,8 @@ interface ApiFunctionCall {
 
 interface ApiResponse {
   id: string;
+  status?: string;
+  incomplete_details?: { reason?: string } | null;
   output?: Array<Record<string, unknown>>;
   output_text?: string;
   usage?: Record<string, unknown>;
@@ -61,6 +64,7 @@ interface RunOutcome {
   actual_calls: EvalCall[];
   exact_match: boolean;
   expected_argument_subset_match: boolean;
+  semantic_match: boolean;
   response_ids: string[];
   response_text: string;
   usage: Array<Record<string, unknown> | undefined>;
@@ -215,6 +219,57 @@ function exactCall(actual: EvalCall, expected: EvalCall): boolean {
     Object.keys(actual.arguments).length === Object.keys(expected.arguments).length;
 }
 
+function normalizedPlace(value: string): string {
+  return value.toLocaleLowerCase("en-US").replace(/\s+/gu, " ").trim();
+}
+
+function semanticArgumentsMatch(actual: EvalCall, expected: EvalCall): boolean {
+  const actualArgs = actual.arguments;
+  const expectedArgs = expected.arguments;
+  if (actual.functionName !== expected.functionName) return false;
+  if (actual.functionName !== "analyze_environmental_hazard") {
+    return sameValue(actualArgs, expectedArgs) &&
+      Object.keys(actualArgs).length === Object.keys(expectedArgs).length;
+  }
+
+  for (const [key, expectedValue] of Object.entries(expectedArgs)) {
+    const actualValue = actualArgs[key];
+    if (key === "question") {
+      if (typeof actualValue !== "string" || actualValue.trim().length === 0) return false;
+      continue;
+    }
+    if (key === "place" && typeof expectedValue === "string") {
+      if (typeof actualValue !== "string") return false;
+      const hasExpectedCoordinates = typeof expectedArgs.latitude === "number" &&
+        typeof expectedArgs.longitude === "number";
+      if (hasExpectedCoordinates) continue;
+      const expectedPlace = normalizedPlace(expectedValue);
+      const actualPlace = normalizedPlace(actualValue);
+      if (actualPlace !== expectedPlace && !actualPlace.startsWith(`${expectedPlace},`)) {
+        return false;
+      }
+      continue;
+    }
+    if (!sameValue(actualValue, expectedValue)) return false;
+  }
+
+  for (const key of ["start_date", "end_date", "latitude", "longitude"] as const) {
+    if (!(key in expectedArgs) && key in actualArgs) return false;
+  }
+  const actualScope = actualArgs.analysis_scope;
+  if (!("analysis_scope" in expectedArgs) && actualScope !== undefined && actualScope !== "related_context") {
+    return false;
+  }
+  const related = actualArgs.related_hazards;
+  if (Array.isArray(related) && expectedArgs.analysis_scope !== "single_hazard_only") {
+    const hazard = actualArgs.hazard;
+    if (typeof hazard !== "string" || !(hazard in DEFAULT_RELATED_HAZARDS)) return false;
+    const defaults = DEFAULT_RELATED_HAZARDS[hazard as keyof typeof DEFAULT_RELATED_HAZARDS];
+    if (!related.every((item) => defaults.includes(item as never))) return false;
+  }
+  return true;
+}
+
 async function executeForContinuation(
   tools: WebMCP.ModelContextTool[],
   call: ApiFunctionCall
@@ -248,7 +303,9 @@ async function runSelectionCase(
       tools: apiTools(tools),
       tool_choice: "auto",
       parallel_tool_calls: false,
-      max_output_tokens: 500,
+      reasoning: { effort: "minimal" },
+      text: { verbosity: "low" },
+      max_output_tokens: 2_000,
       ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
     });
     responses.push(response);
@@ -273,6 +330,9 @@ async function runSelectionCase(
     (call, index) => call.functionName === item.expectedCall[index].functionName &&
       sameValue(call.arguments, item.expectedCall[index].arguments)
   );
+  const semantic = actualCalls.length === item.expectedCall.length && actualCalls.every(
+    (call, index) => semanticArgumentsMatch(call, item.expectedCall[index])
+  );
   return {
     case_id: item.id,
     run,
@@ -280,6 +340,7 @@ async function runSelectionCase(
     actual_calls: actualCalls,
     exact_match: exact,
     expected_argument_subset_match: subset,
+    semantic_match: semantic,
     response_ids: responses.map((response) => response.id),
     response_text: responses.map(responseText).filter(Boolean).join("\n"),
     usage: responses.map((response) => response.usage),
@@ -329,7 +390,9 @@ async function runPostToolCase(
     tools: apiTools(availableTools()),
     tool_choice: "auto",
     parallel_tool_calls: false,
-    max_output_tokens: 500,
+    reasoning: { effort: "minimal" },
+    text: { verbosity: "low" },
+    max_output_tokens: 2_000,
   });
   const text = responseText(response);
   const calls = functionCalls(response).map(parseCall);
@@ -403,6 +466,7 @@ async function main() {
 
   const exactPasses = outcomes.filter((item) => item.exact_match).length;
   const subsetPasses = outcomes.filter((item) => item.expected_argument_subset_match).length;
+  const semanticPasses = outcomes.filter((item) => item.semantic_match).length;
   const timestamp = new Date().toISOString().replaceAll(":", "-");
   const outputDirectory = resolve(process.cwd(), "artifacts/webmcp-evals");
   await mkdir(outputDirectory, { recursive: true });
@@ -414,6 +478,7 @@ async function main() {
     selection_summary: {
       exact_passes: exactPasses,
       expected_argument_subset_passes: subsetPasses,
+      semantic_passes: semanticPasses,
       total: outcomes.length,
     },
     post_tool_summary: {
@@ -427,6 +492,7 @@ async function main() {
   }, null, 2));
   console.log(`Selection exact: ${exactPasses}/${outcomes.length}`);
   console.log(`Selection expected-subset: ${subsetPasses}/${outcomes.length}`);
+  console.log(`Selection semantic: ${semanticPasses}/${outcomes.length}`);
   console.log(`Raw outcomes: ${outputPath}`);
 }
 
