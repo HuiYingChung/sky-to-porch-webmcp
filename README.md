@@ -3,6 +3,8 @@
 Sky to Porch turns official environmental observations into evidence a person
 can inspect with an AI agent on the same map and evidence panel.
 
+**Live application:** [sky-to-porch-webmcp.vercel.app](https://sky-to-porch-webmcp.vercel.app/)
+
 It helps answer three practical questions:
 
 - **What was officially observed here and when?**
@@ -66,6 +68,13 @@ proceeds without forcing the person to use demo-shaped language.
 Concrete questions go directly to analysis. Discovery tools are not mandatory
 preflight calls. Contextual tools appear only when their required result exists.
 
+The browser registration entry point is
+[`src/components/webmcp/webmcp-bridge.tsx`](src/components/webmcp/webmcp-bridge.tsx).
+It registers the baseline and contextual tools against the same
+`runAnalysis`/`runAnalysisBundle` controller used by the human interface. The
+primary tool definition and compact result shaping live in
+[`src/lib/webmcp/analyze-tool.ts`](src/lib/webmcp/analyze-tool.ts).
+
 ## Shared evidence flow
 
 ```mermaid
@@ -106,7 +115,7 @@ that assessment.
 | Layer | Current evidence |
 | --- | --- |
 | Deterministic product | Unit, integration, production-build, and desktop/mobile Playwright gates |
-| Native WebMCP | Discovery, execution, shared UI updates, ambiguity, and contextual-tool registration |
+| Native WebMCP | Production discovery, analysis, shared UI updates, ambiguity, no-observation safety, and contextual-tool registration at `5cc1098`; a contextual-output cap correction is verified locally and awaits publication/recheck |
 | Historical official sources | All six primary and related chains in the three curated demos returned observations |
 | Generic product path | Albuquerque non-demo browser journey plus selection cases across all seven hazards |
 | Tool selection | Every registered tool has a distinct natural-trigger case; repeated model-scored runs remain a separate evaluation gate |
@@ -114,6 +123,7 @@ that assessment.
 Evidence records:
 
 - [Native Agent acceptance](docs/testing/native-agent-acceptance-2026-08-27.md)
+- [Production native Agent verification](docs/testing/native-agent-production-verification-2026-08-27.md)
 - [Evidence-forward historical demos](docs/testing/evidence-forward-demo-live-verification-2026-08-27.md)
 - [WebMCP evaluation boundary](docs/testing/webmcp-evals.md)
 - [Target architecture](docs/architecture/webmcp-target.md)

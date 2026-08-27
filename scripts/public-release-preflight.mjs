@@ -3,9 +3,10 @@
  * Mechanical, fail-closed preflight for a proposed public repository commit.
  *
  * This is only one part of the Public Release Gate. It checks the candidate
- * tree and local worktree for common privacy, secret, generated-output, and
- * large-file risks. It does not replace full-history secret scanning, license
- * review, claim review, CI, deployment verification, or explicit user approval.
+ * reachable history and local worktree for common privacy, secret,
+ * generated-output, and large-file risks. It does not replace specialist
+ * secret scanning, license review, claim review, CI, deployment verification,
+ * or explicit user approval.
  */
 import { execFileSync } from "node:child_process";
 
@@ -103,6 +104,20 @@ const CONTENT_RULES = [
   },
 ];
 
+const REVIEWED_PUBLIC_MATCHES = new Map([
+  // npm's own lockfile metadata for a deprecated transitive package.
+  ["package-lock.json", new Set(["i@izs.me"])],
+  // A deliberately credential-shaped, non-routable test fixture in old commits.
+  [
+    "src/__tests__/unit/wp10-drought-live-adapter.test.ts",
+    new Set(["pass@gitc.earthdata.nasa.gov"]),
+  ],
+  [
+    "src/__tests__/unit/wp06-provider-router.test.ts",
+    new Set(["pass@us-south.ml.cloud.ibm.com"]),
+  ],
+]);
+
 function inspectBlob(path, objectId, size) {
   if (size > MAX_TRACKED_BYTES) return;
   let content;
@@ -115,7 +130,9 @@ function inspectBlob(path, objectId, size) {
   if (!Buffer.isBuffer(content) || content.includes(0)) return;
   const text = content.toString("utf8");
   for (const rule of CONTENT_RULES) {
-    if (rule.pattern.test(text)) {
+    const matches = text.match(new RegExp(rule.pattern.source, `${rule.pattern.flags}g`)) ?? [];
+    const reviewed = REVIEWED_PUBLIC_MATCHES.get(path) ?? new Set();
+    if (matches.some((match) => !reviewed.has(match))) {
       addIssue(rule.category, path, "review or visibly redact before public release");
     }
   }
@@ -156,9 +173,19 @@ if (worktreeStatus) {
   addIssue("dirty worktree", "(worktree)", "commit or remove candidate changes before the gate");
 }
 
-const entries = parseTree(git(["ls-tree", "-r", "-l", "--full-tree", candidateCommit]));
+const reachableCommits = git(["rev-list", candidateCommit])
+  .trim()
+  .split(/\r?\n/u)
+  .filter(Boolean);
+const uniqueEntries = new Map();
+for (const commit of reachableCommits) {
+  for (const entry of parseTree(git(["ls-tree", "-r", "-l", "--full-tree", commit]))) {
+    uniqueEntries.set(`${entry.path}\0${entry.objectId}`, entry);
+  }
+}
+const entries = [...uniqueEntries.values()];
 if (entries.length === 0) {
-  addIssue("empty candidate tree", "(tree)", "a public candidate must contain reviewed files");
+  addIssue("empty candidate history", "(tree)", "a public candidate must contain reviewed files");
 }
 
 for (const entry of entries) {
@@ -168,7 +195,8 @@ for (const entry of entries) {
 
 console.log("Public Release Gate — mechanical preflight");
 console.log(`Candidate: ${candidateCommit}`);
-console.log(`Tracked files inspected: ${entries.length}`);
+console.log(`Reachable commits inspected: ${reachableCommits.length}`);
+console.log(`Unique path/blob pairs inspected: ${entries.length}`);
 console.log(`Large-file threshold: ${MAX_TRACKED_BYTES} bytes`);
 
 if (issues.length > 0) {
@@ -177,12 +205,12 @@ if (issues.length > 0) {
     console.error(`- [${issue.category}] ${issue.path}: ${issue.detail}`);
   }
   console.error(
-    "Boundary: mechanical candidate-tree check only. A PASS would still require history, license, claim, CI, deployment, public-surface, and user-approval evidence."
+    "Boundary: mechanical reachable-history check only. A PASS would still require specialist secret scanning, license, claim, CI, deployment, public-surface, and user-approval evidence."
   );
   process.exit(1);
 }
 
 console.log("Result: PASS (mechanical preflight only)");
 console.log(
-  "Boundary: this does not prove full-history safety, licensing, claim accuracy, deployment health, public visibility, or user approval."
+  "Boundary: this does not prove specialist secret-scan coverage, licensing, claim accuracy, deployment health, public visibility, or user approval."
 );

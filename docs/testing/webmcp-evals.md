@@ -69,6 +69,20 @@ Before release, run the dataset repeatedly with the challenge agent and record:
 Do not call this dataset "passed" until the model-backed runs and raw outcomes
 have been retained for the exact tool definition under review.
 
+## Execution status — 2026-08-27
+
+The full 22-case dataset remains checked in and its deterministic structure
+tests pass. The production in-app-browser work on this date directly invoked
+named tools to verify their execution and shared UI behavior; it was not a
+model-selection run.
+
+No model-eval backend was configured in the private verification environment:
+the OpenAI, Google Generative AI, and Vercel AI Gateway key variables were
+absent, and no local Ollama executable was available. No provider credential
+was requested or read, no paid request was made, and no synthetic score was
+substituted. The model-backed gate therefore remains explicitly unproven until
+a backend is deliberately authorized and the raw outcomes are retained.
+
 ## Full journeys
 
 The release candidate must also be tested in a supported browser for these

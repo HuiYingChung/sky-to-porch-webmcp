@@ -349,7 +349,7 @@ describe("queryLiveDroughtEvidence", () => {
   it.each([
     ["path-family change", "https://gitc.earthdata.nasa.gov/outside/domain.xml"],
     ["non-default port", "https://gitc.earthdata.nasa.gov:444/wmts/epsg4326/std/1.0.0/file.xml"],
-    ["URL credential", "https://user:pass@gitc.earthdata.nasa.gov/wmts/epsg4326/std/1.0.0/file.xml"],
+    ["URL credential", "https://user:pass@earthdata.example/wmts/epsg4326/std/1.0.0/file.xml"],
   ])("rejects redirect %s", async (_label, location) => {
     const pngBytes = await makePng();
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {

@@ -12,29 +12,37 @@
 - W1 shared analysis application layer: complete for the vertical slice
 - W2 shared client controller and state: complete with renderer compatibility
 - W3 WebMCP tools: three baseline tools plus two contextual tools implemented;
-  production native discovery and both read-only executions pass at `6ca5698`,
-  but the primary tool fails there; corrected native local execution passes at
-  `5972b4f`, with corrected production verification pending
+  production native discovery, analysis, ambiguity, no-observation, shared-UI,
+  and contextual-tool journeys pass at `5cc1098`; production inspection exposed
+  a 2,834-character result above its 2,400-character contract, and the bounded
+  correction now passes a production-sized local regression pending publication
+  and production re-verification
 - W4 provider cleanup: complete; deterministic-only application runtime
-- W5 verification: typecheck, lint, 1278 unit tests, 132 integration tests,
-  production build, 224 browser journeys, and secret check pass;
-  selected supported in-app-browser journeys pass locally, while repeated
-  model-scored evals and exact remote CI remain pending
+- W5 verification: the published `5cc1098` candidate passed exact remote CI at
+  run `33055412709`; the current private candidate passes typecheck, lint, 1,289
+  unit tests, 132 integration tests, a production build, 228 browser journeys,
+  and secret check. Repeated model-scored evals remain pending because no model
+  backend is configured
 - W5a shared-view UX: complete; full deterministic and browser regression pass
 - W5b Canadian Flood ground evidence: complete; bounded ECCC GeoMet live smoke
   and the full 220-journey browser regression passed
 - W5c Wind & Storm evidence: the supported in-app browser locally verified the
   Beryl related-context bundle, separate Wind and Flood chains, synchronized
   shared UI, conditional claim guide, and narrow single-hazard boundary;
-  production correction and rerun remain pending
+  those journeys now also pass in production at `5cc1098`, while the newly found
+  contextual-output cap correction remains local and awaits publication/recheck
 - W5d compound environmental context: locally verified for Heat–Drought,
   Fire/Smoke–Air Quality, and Volcano–Air Quality–Heat, including one parallel
   shared-view transaction; supported-browser Agent verification pending
-- W6 release and submission: pending explicit authorization
+- W6 release and submission: private release preparation in progress; the repo
+  remains private, and visibility, deployment, push, video publication, and
+  submission still require explicit authorization
 
 The production/local/native evidence split for the current acceptance package
 is recorded in
-[`docs/testing/native-agent-acceptance-2026-08-27.md`](docs/testing/native-agent-acceptance-2026-08-27.md).
+[`docs/testing/native-agent-acceptance-2026-08-27.md`](docs/testing/native-agent-acceptance-2026-08-27.md)
+and the later production rerun is recorded in
+[`docs/testing/native-agent-production-verification-2026-08-27.md`](docs/testing/native-agent-production-verification-2026-08-27.md).
 
 ## 1. Goal
 
@@ -235,15 +243,17 @@ Technical WebMCP details remain Codex's responsibility.
 ## 7. Definition of done
 
 - WebMCP tools are discoverable in the supported production in-app browser.
-  Read-only production execution and corrected local primary execution pass;
-  corrected production primary execution remains pending publication and
-  re-verification.
+  Production discovery, primary execution, shared UI, ambiguity,
+  no-observation, and contextual registration pass at `5cc1098`; a local
+  correction for the inspection tool's output limit awaits publication and
+  production re-verification.
 - Human and agent interactions share one evidence pipeline and UI state.
 - The deterministic safety model is unchanged or stronger.
 - Tool descriptions and outputs stay within current implementation guidance.
 - All deterministic tests, model evals, CI, and exact-candidate checks pass.
-  (Corrected deterministic local gates pass; repeated model-scored evals and
-  corrected exact remote CI remain pending.)
+  (Exact remote CI passes for published `5cc1098`; the current local correction
+  passes its full local gate but still needs repeated model-scored evals,
+  publication, and exact remote CI.)
 - Prior work and new work are unambiguous.
 - The repository is publicly reproducible under a recognized open-source
   license.
