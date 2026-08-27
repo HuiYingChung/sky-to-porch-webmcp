@@ -45,4 +45,13 @@ describe("WebMCP tool-selection eval dataset", () => {
       }
     }
   });
+
+  it("uses a narrow wind chain for a gust question and auto-bundles broad storm damage", () => {
+    const gust = dataset.find((item) => item.id === "beryl-specific-wind-gust");
+    const water = dataset.find((item) => item.id === "completed-flood-date");
+    const broad = dataset.find((item) => item.id === "beryl-broad-home-damage-auto-bundle");
+    expect(gust?.expectedCall.map((call) => call.arguments.hazard)).toEqual(["wind_storm"]);
+    expect(water?.expectedCall.map((call) => call.arguments.hazard)).toEqual(["flood_storm"]);
+    expect(broad?.expectedCall.map((call) => call.arguments.hazard)).toEqual(["storm_impacts"]);
+  });
 });

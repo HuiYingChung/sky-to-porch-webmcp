@@ -20,6 +20,7 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useQueryDraft } from "@/components/query/query-provider";
 import { FireEvidenceInsightPanel } from "@/components/fire/fire-evidence-panel";
 import { FloodEvidenceInsightPanel } from "@/components/flood/flood-evidence-panel";
+import { StormEvidenceInsightPanel } from "@/components/storm/storm-evidence-panel";
 import { HeatEvidenceInsightPanel } from "@/components/heat/heat-evidence-panel";
 import { DroughtEvidenceInsightPanel } from "@/components/drought/drought-evidence-panel";
 import { CoverageGapInsightPanel } from "@/components/coverage-gap/coverage-gap-panel";
@@ -75,6 +76,7 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
   const {
     fireResult,
     floodResult,
+    windResult,
     heatResult,
     droughtResult,
     coverageGapResult,
@@ -88,10 +90,11 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
     [activeAnalysis]
   );
   const results = useMemo(
-    () => [fireResult, floodResult, heatResult, droughtResult, coverageGapResult],
+    () => [fireResult, floodResult, windResult, heatResult, droughtResult, coverageGapResult],
     [
       fireResult,
       floodResult,
+      windResult,
       heatResult,
       droughtResult,
       coverageGapResult,
@@ -335,6 +338,11 @@ function InsightPanelContent({
     fireLoading,
     floodResult,
     floodLoading,
+    relatedStormFloodResult,
+    windResult,
+    windLoading,
+    stormClaimDiscussionOpen,
+    setStormClaimDiscussionOpen,
     heatResult,
     heatLoading,
     droughtResult,
@@ -399,6 +407,26 @@ function InsightPanelContent({
 
   if (draft.hazardId === "flood_storm" && floodLoading) {
     return <PipelineLoading testId="flood-panel-loading" />;
+  }
+
+  if (draft.hazardId === "wind_storm" && windLoading) {
+    return <PipelineLoading testId="wind-panel-loading" />;
+  }
+
+  if (windResult !== null) {
+    return (
+      <ResultFailureGapBoundary result={windResult} tab={tab}>
+        <StormEvidenceInsightPanel
+          result={windResult}
+          tab={tab}
+          claimDiscussionOpen={stormClaimDiscussionOpen}
+          onClaimDiscussionOpenChange={setStormClaimDiscussionOpen}
+          relatedFloodResult={relatedStormFloodResult}
+          missionSelection={missionSelection}
+          onMissionSelectionChange={onMissionSelectionChange}
+        />
+      </ResultFailureGapBoundary>
+    );
   }
 
   if (floodResult !== null) {

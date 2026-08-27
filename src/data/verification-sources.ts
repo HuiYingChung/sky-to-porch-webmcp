@@ -41,7 +41,7 @@ export const VERIFICATION_SOURCES: readonly VerificationSource[] = [
     owner: "U.S. National Weather Service",
     url: "https://www.weather.gov/",
     kind: "checker",
-    hazardIds: ["fire_smoke", "flood_storm", "extreme_heat", "drought_land"],
+    hazardIds: ["fire_smoke", "flood_storm", "wind_storm", "extreme_heat", "drought_land"],
     coverageLabel: "United States and U.S. territories",
     purpose: "Check current official weather forecasts, watches, warnings, and local hazard information.",
     limitation: "This is an official forecast and alert entry point, not proof of conditions at one property.",
@@ -54,7 +54,7 @@ export const VERIFICATION_SOURCES: readonly VerificationSource[] = [
     owner: "NOAA National Centers for Environmental Information",
     url: "https://www.ncei.noaa.gov/stormevents/",
     kind: "checker",
-    hazardIds: ["flood_storm"],
+    hazardIds: ["flood_storm", "wind_storm"],
     concernTypes: ["home", "community", "travel"],
     coverageLabel: "United States; event-type records and reporting periods vary",
     purpose: "Search official historical storm-event records, dates, locations, narratives, and reported damage.",
@@ -260,6 +260,7 @@ export function defaultVerificationSourceIds(
     }
     return ["noaa_nwps", "nasa_lance_flood_viewer"];
   }
+  if (hazardId === "wind_storm") return ["noaa_storm_events", "nws_weather"];
   if (hazardId === "extreme_heat") {
     if (concern === "pets") return ["nws_weather", "cdc_heat_pets", "epa_airnow"];
     // Travel plans need a forward-looking official check, so the HeatRisk

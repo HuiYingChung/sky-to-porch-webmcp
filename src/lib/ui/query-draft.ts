@@ -79,7 +79,8 @@ export function isDraftSubmittable(draft: QueryDraft, placeSelection: PlaceSelec
 /** Human-readable labels for hazard IDs, used by the guided query UI. */
 export const HAZARD_LABELS: Record<HazardId, string> = {
   fire_smoke: "Fire & Smoke",
-  flood_storm: "Flood & Storm",
+  flood_storm: "Flood & Heavy Rain",
+  wind_storm: "Wind & Storm",
   extreme_heat: "Extreme Heat",
   drought_land: "Drought & Land",
   air_quality: "Air Quality",

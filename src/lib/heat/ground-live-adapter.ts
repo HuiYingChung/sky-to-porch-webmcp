@@ -83,6 +83,32 @@ export interface GhcnhGroundObservation {
   metadata: Record<string, string | number>;
 }
 
+/** Wind fields from the same bounded GHCNh station-year response. */
+export interface GhcnhWindObservation {
+  observationId: string;
+  provenance: {
+    sourceId: typeof NCEI_GHCNH_SOURCE_ID;
+    sourceUrl: string;
+    sourceRecordId: string;
+    retrievedAt: string;
+    observedAt: string;
+    product: string;
+    payloadHash: string;
+    requestParameters: Record<string, string>;
+  };
+  variableName: "Peak observed wind gust" | "Peak observed wind speed";
+  value: number;
+  unit: "m/s";
+  dataMode: "live";
+  qualifiers: string[];
+  metadata: Record<string, string | number>;
+}
+
+export type GhcnhWindResult =
+  | { kind: "observations"; station: GhcnhStation; observations: GhcnhWindObservation[] }
+  | { kind: "no_observation"; stage: "station_discovery" | "station_year" }
+  | { kind: "source_failure"; reason: GhcnhFailureReason; stage: "station_discovery" | "station_year" };
+
 export type GhcnhGroundResult =
   | { kind: "observations"; station: GhcnhStation; observations: GhcnhGroundObservation[] }
   | { kind: "no_observation"; stage: "station_discovery" | "station_year" }
@@ -363,6 +389,24 @@ export interface GhcnhRowParseResult {
   skippedRowCount: number;
 }
 
+type GhcnhWindRow = {
+  recordId: string;
+  observedAt: string;
+  windDirectionDeg: number | null;
+  windSpeedMs: number | null;
+  windGustMs: number | null;
+  windDirectionQc: string;
+  windSpeedQc: string;
+  windGustQc: string;
+};
+
+export interface GhcnhWindRowParseResult {
+  /** Valid requested-date rows carrying wind speed or gust, sorted by time. */
+  rows: GhcnhWindRow[];
+  requestedDateRowCount: number;
+  skippedRowCount: number;
+}
+
 /**
  * GHCNh DATE values are UTC but carry no timezone suffix (real sample:
  * "2026-01-01T00:00:00"). JavaScript treats a suffix-less ISO datetime as
@@ -478,6 +522,102 @@ export function parseGhcnhRows(
   };
 }
 
+/**
+ * Parse only the documented GHCNh wind fields. Blank wind values are normal
+ * and mean that report row contributes no wind observation. Quality flags are
+ * preserved verbatim; they are not reinterpreted or silently filtered.
+ */
+export function parseGhcnhWindRows(
+  text: string,
+  stationId: string,
+  date: string
+): GhcnhWindRowParseResult {
+  const lines = text.split(/\r?\n/u).filter((line) => line.trim().length > 0);
+  if (lines.length < 1) throw new GhcnhLiveError("malformed");
+  const headers = parseDelimitedLine(lines[0].replace(/^\uFEFF/u, ""), "|");
+  const indices = exactHeaderIndices(headers, [
+    "STATION", "DATE",
+    "wind_direction", "wind_direction_Quality_Code",
+    "wind_speed", "wind_speed_Quality_Code",
+    "wind_gust", "wind_gust_Quality_Code",
+  ]);
+  const start = Date.parse(`${date}T00:00:00Z`);
+  const end = Date.parse(`${date}T23:59:59Z`);
+  const rows: GhcnhWindRow[] = [];
+  let requestedDateRowCount = 0;
+  let malformedRowCount = 0;
+  let skippedDateRowCount = 0;
+
+  for (const line of lines.slice(1)) {
+    let cells: string[];
+    try {
+      cells = parseDelimitedLine(line, "|");
+    } catch {
+      malformedRowCount += 1;
+      continue;
+    }
+    if (cells.length !== headers.length) {
+      malformedRowCount += 1;
+      continue;
+    }
+    if (cells[indices.STATION] !== stationId) continue;
+    const observedAt = cells[indices.DATE];
+    const timestamp = parseGhcnhUtcTimestamp(observedAt);
+    if (timestamp === null) {
+      malformedRowCount += 1;
+      continue;
+    }
+    if (timestamp < start || timestamp > end) continue;
+    requestedDateRowCount += 1;
+
+    const directionText = cells[indices.wind_direction].trim();
+    const speedText = cells[indices.wind_speed].trim();
+    const gustText = cells[indices.wind_gust].trim();
+    if (speedText === "" && gustText === "") continue;
+
+    const windDirectionDeg = directionText === "" ? null : Number(directionText);
+    const windSpeedMs = speedText === "" ? null : Number(speedText);
+    const windGustMs = gustText === "" ? null : Number(gustText);
+    if (
+      (windDirectionDeg !== null &&
+        (!Number.isFinite(windDirectionDeg) || windDirectionDeg < 0 || windDirectionDeg > 360)) ||
+      (windSpeedMs !== null &&
+        (!Number.isFinite(windSpeedMs) || windSpeedMs < 0 || windSpeedMs > 150)) ||
+      (windGustMs !== null &&
+        (!Number.isFinite(windGustMs) || windGustMs < 0 || windGustMs > 150))
+    ) {
+      skippedDateRowCount += 1;
+      continue;
+    }
+    rows.push({
+      recordId: `${stationId}#${observedAt}`,
+      observedAt: new Date(timestamp).toISOString(),
+      windDirectionDeg,
+      windSpeedMs,
+      windGustMs,
+      windDirectionQc: cells[indices.wind_direction_Quality_Code],
+      windSpeedQc: cells[indices.wind_speed_Quality_Code],
+      windGustQc: cells[indices.wind_gust_Quality_Code],
+    });
+    if (rows.length > NCEI_GHCNH_MAX_OBSERVATION_ROWS) {
+      throw new GhcnhLiveError("oversize");
+    }
+  }
+  const skippedRowCount = skippedDateRowCount + malformedRowCount;
+  const attributableRowCount = requestedDateRowCount + malformedRowCount;
+  if (
+    attributableRowCount > 0 &&
+    skippedRowCount / attributableRowCount > GHCNH_STATION_YEAR_MAX_SKIPPED_FRACTION
+  ) {
+    throw new GhcnhLiveError("schema_validation");
+  }
+  return {
+    rows: rows.sort((left, right) => left.observedAt.localeCompare(right.observedAt)),
+    requestedDateRowCount,
+    skippedRowCount,
+  };
+}
+
 function buildObservations(
   rows: GhcnhRow[],
   station: GhcnhStation,
@@ -547,6 +687,100 @@ function buildObservations(
       qualifiers: ["outdoor_station", "quality_flags_preserved_not_reinterpreted"],
       metadata: { ...metadata, fieldName: "relative_humidity" },
     },
+  ];
+}
+
+function buildWindObservations(
+  rows: GhcnhWindRow[],
+  station: GhcnhStation,
+  url: URL,
+  bytes: Uint8Array,
+  retrievedAt: string,
+  date: string,
+  stationsSkippedForMissingYearFile: string[] = [],
+  stationsSkippedWithoutUsableDateRows: string[] = []
+): GhcnhWindObservation[] {
+  if (rows.length === 0) return [];
+  const peakSpeed = rows
+    .filter((row) => row.windSpeedMs !== null)
+    .sort((left, right) =>
+      (right.windSpeedMs ?? -1) - (left.windSpeedMs ?? -1) ||
+      left.observedAt.localeCompare(right.observedAt)
+    )[0];
+  const peakGust = rows
+    .filter((row) => row.windGustMs !== null)
+    .sort((left, right) =>
+      (right.windGustMs ?? -1) - (left.windGustMs ?? -1) ||
+      left.observedAt.localeCompare(right.observedAt)
+    )[0];
+  const payloadHash = createHash("sha256").update(bytes).digest("hex");
+  const selectionBasis =
+    stationsSkippedForMissingYearFile.length === 0 &&
+    stationsSkippedWithoutUsableDateRows.length === 0
+      ? "nearest_station_inside_canonical_area"
+      : "next_nearest_station_inside_canonical_area_after_skipped_stations";
+  const sharedMetadata = {
+    stationId: station.id,
+    stationName: station.name,
+    stationLatitude: station.latitude,
+    stationLongitude: station.longitude,
+    stationElevationM: station.elevationM ?? "unknown",
+    selectionBasis,
+    rowCountForDate: rows.length,
+    ...(stationsSkippedForMissingYearFile.length > 0
+      ? { stationsSkippedForMissingYearFile: stationsSkippedForMissingYearFile.join(",") }
+      : {}),
+    ...(stationsSkippedWithoutUsableDateRows.length > 0
+      ? { stationsSkippedWithoutUsableDateRows: stationsSkippedWithoutUsableDateRows.join(",") }
+      : {}),
+  };
+  const makeProvenance = (row: GhcnhWindRow) => ({
+    sourceId: NCEI_GHCNH_SOURCE_ID,
+    sourceUrl: url.toString(),
+    sourceRecordId: row.recordId,
+    retrievedAt,
+    observedAt: row.observedAt,
+    product: NCEI_GHCNH_PRODUCT,
+    payloadHash,
+    requestParameters: { stationId: station.id, utcDate: date },
+  } as const);
+  return [
+    ...(peakGust
+      ? [{
+          observationId: `obs-ghcnh-wind-gust-${station.id}-${peakGust.observedAt.replace(/[^0-9]/gu, "")}`,
+          provenance: makeProvenance(peakGust),
+          variableName: "Peak observed wind gust" as const,
+          value: peakGust.windGustMs as number,
+          unit: "m/s" as const,
+          dataMode: "live" as const,
+          qualifiers: ["outdoor_station", "quality_flags_preserved_not_reinterpreted"],
+          metadata: {
+            ...sharedMetadata,
+            fieldName: "wind_gust",
+            windGustQc: peakGust.windGustQc || "blank",
+            windDirectionDeg: peakGust.windDirectionDeg ?? "unknown",
+            windDirectionQc: peakGust.windDirectionQc || "blank",
+          },
+        }]
+      : []),
+    ...(peakSpeed
+      ? [{
+          observationId: `obs-ghcnh-wind-speed-${station.id}-${peakSpeed.observedAt.replace(/[^0-9]/gu, "")}`,
+          provenance: makeProvenance(peakSpeed),
+          variableName: "Peak observed wind speed" as const,
+          value: peakSpeed.windSpeedMs as number,
+          unit: "m/s" as const,
+          dataMode: "live" as const,
+          qualifiers: ["outdoor_station", "quality_flags_preserved_not_reinterpreted"],
+          metadata: {
+            ...sharedMetadata,
+            fieldName: "wind_speed",
+            windSpeedQc: peakSpeed.windSpeedQc || "blank",
+            windDirectionDeg: peakSpeed.windDirectionDeg ?? "unknown",
+            windDirectionQc: peakSpeed.windDirectionQc || "blank",
+          },
+        }]
+      : []),
   ];
 }
 
@@ -642,6 +876,96 @@ export async function queryGhcnhGroundEvidence(
     // Bounded attempts exhausted. When at least one candidate published a
     // year file the honest terminal state is no_observation; when every
     // attempted candidate lacked a file it is a not_found source failure.
+    if (skippedWithoutUsableDateRows.length > 0) {
+      return { kind: "no_observation", stage: "station_year" };
+    }
+    return { kind: "source_failure", reason: "not_found", stage: "station_year" };
+  });
+}
+
+/**
+ * Wind-specific GHCNh query using the exact same request budget, in-area
+ * station selection, caching, timeout, payload limits, and fail-closed rules
+ * as the established heat fallback. It reads no precipitation or flood field.
+ */
+export async function queryGhcnhWindEvidence(
+  date: string,
+  value: unknown,
+  dependencies: GhcnhLiveDependencies = {}
+): Promise<GhcnhWindResult> {
+  const area = validateQueryArea(value);
+  const dateMs = Date.parse(`${date}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(date) ||
+    !Number.isFinite(dateMs) || new Date(dateMs).toISOString().slice(0, 10) !== date) {
+    return { kind: "source_failure", reason: "schema_validation", stage: "station_discovery" };
+  }
+  return inSingleConcurrencySlot(async () => {
+    const fetchImpl = dependencies.fetchImpl ?? fetch;
+    const now = dependencies.now?.() ?? new Date();
+    let stations: GhcnhStation[];
+    try {
+      if (dependencies.stationCache !== false && cachedStations && cachedStations.expiresAt > now.getTime()) {
+        stations = cachedStations.stations;
+      } else {
+        const stationUrl = new URL(`https://${GHCNH_HOST}${GHCNH_STATION_LIST_PATH}`);
+        const stationResponse = await fetchText(
+          fetchImpl,
+          stationUrl,
+          GHCNH_STATION_LIST_MAX_BYTES,
+          ["text/csv", "text/plain", "application/octet-stream"]
+        );
+        stations = parseGhcnhStationList(stationResponse.text).stations;
+        if (dependencies.stationCache !== false) {
+          cachedStations = { expiresAt: now.getTime() + GHCNH_STATION_CACHE_TTL_MS, stations };
+        }
+      }
+    } catch (error) {
+      return {
+        kind: "source_failure",
+        reason: error instanceof GhcnhLiveError ? error.reason : "schema_validation",
+        stage: "station_discovery",
+      };
+    }
+    const candidates = nearestStations(stations, area);
+    if (candidates.length === 0) return { kind: "no_observation", stage: "station_discovery" };
+    const attempts = candidates.slice(0, NCEI_GHCNH_MAX_STATION_YEAR_ATTEMPTS);
+    const skippedForMissingYearFile: string[] = [];
+    const skippedWithoutUsableDateRows: string[] = [];
+    for (const station of attempts) {
+      try {
+        const dataUrl = stationYearUrl(station.id, date.slice(0, 4));
+        const dataResponse = await fetchText(
+          fetchImpl,
+          dataUrl,
+          GHCNH_STATION_YEAR_MAX_BYTES,
+          ["text/plain", "text/psv", "application/octet-stream"],
+          GHCNH_STATION_YEAR_TIMEOUT_MS
+        );
+        const { rows } = parseGhcnhWindRows(dataResponse.text, station.id, date);
+        const observations = buildWindObservations(
+          rows,
+          station,
+          dataUrl,
+          dataResponse.bytes,
+          now.toISOString(),
+          date,
+          skippedForMissingYearFile,
+          skippedWithoutUsableDateRows
+        );
+        if (observations.length === 0) {
+          skippedWithoutUsableDateRows.push(station.id);
+          continue;
+        }
+        return { kind: "observations", station, observations };
+      } catch (error) {
+        const reason = error instanceof GhcnhLiveError ? error.reason : "schema_validation";
+        if (reason === "not_found") {
+          skippedForMissingYearFile.push(station.id);
+          continue;
+        }
+        return { kind: "source_failure", reason, stage: "station_year" };
+      }
+    }
     if (skippedWithoutUsableDateRows.length > 0) {
       return { kind: "no_observation", stage: "station_year" };
     }

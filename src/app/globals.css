@@ -15,7 +15,7 @@
  *   --status-*     loading / empty / error states
  *   --hazard-*     per-hazard tokens (color + text label combination)
  *
- * All six hazard tokens pair color with a distinct visual marker so
+ * All seven hazard tokens pair color with a distinct visual marker so
  * hazard meaning never relies on color alone.
  */
 
@@ -90,6 +90,11 @@
   --hazard-flood-storm-border: #388bfd;
   --hazard-flood-storm-fg:     #79c0ff;
   --hazard-flood-storm-label:  "🌊";
+
+  --hazard-wind-storm-bg:     #10272b;
+  --hazard-wind-storm-border: #39c5cf;
+  --hazard-wind-storm-fg:     #7ee7ef;
+  --hazard-wind-storm-label:  "🌬️";
 
   /* extreme_heat — amber */
   --hazard-extreme-heat-bg:     #2b1e00;
@@ -173,6 +178,10 @@
   --hazard-flood-storm-bg:     #ddf4ff;
   --hazard-flood-storm-border: #0969da;
   --hazard-flood-storm-fg:     #0a3069;
+
+  --hazard-wind-storm-bg:      #e6fffb;
+  --hazard-wind-storm-border:  #0f6f78;
+  --hazard-wind-storm-fg:      #0a5157;
 
   --hazard-extreme-heat-bg:    #fff8c5;
   --hazard-extreme-heat-border: #9a6700;
@@ -712,7 +721,7 @@ body {
   gap: 0.85rem;
 }
 
-/* The wider ADR-0047 dialog fits the six hazards as a tidy 3×2. */
+/* The wider ADR-0047 dialog gives the seven hazard cards a readable grid. */
 @media (min-width: 1100px) {
   .about-hazard-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

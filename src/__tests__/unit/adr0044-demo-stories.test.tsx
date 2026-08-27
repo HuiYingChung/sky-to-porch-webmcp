@@ -24,7 +24,7 @@ import { latestCompletedUtcDate } from "@/lib/ui/date-input";
 // ---------------------------------------------------------------------------
 
 describe("ADR-0044 demo-story catalog", () => {
-  it("covers six stories over six distinct places and all six hazard lines", () => {
+  it("covers six stories over six distinct places and all seven hazard lines", () => {
     expect(DEMO_STORIES).toHaveLength(6);
     const placeIds = DEMO_STORIES.map((story) => story.placeId);
     expect(new Set(placeIds).size).toBe(6);
@@ -176,11 +176,11 @@ describe("ADR-0044 demo gallery flow", () => {
     await flush();
 
     const probe = byTestId("canonical-selection-probe");
-    expect(probe.getAttribute("data-hazard")).toBe("flood_storm");
+    expect(probe.getAttribute("data-hazard")).toBe("wind_storm");
     expect(probe.getAttribute("data-demo-place-id")).toBe("demo-houston");
     expect(probe.getAttribute("data-radius-km")).toBe("50");
     expect(probe.getAttribute("data-start-ts")).toBe("2024-07-08T00:00:00Z");
-    expect(probe.getAttribute("data-end-ts")).toBe("2024-07-09T23:59:59Z");
+    expect(probe.getAttribute("data-end-ts")).toBe("2024-07-08T23:59:59Z");
 
     // The one remaining decision is the concern; submit says so.
     expect((byTestId("find-evidence-btn") as HTMLButtonElement).disabled).toBe(true);
@@ -191,13 +191,18 @@ describe("ADR-0044 demo gallery flow", () => {
     click(byTestId("find-evidence-btn"));
     await flush();
     expect(recordedCalls).toHaveLength(1);
-    expect(recordedCalls[0].url).toBe("/api/flood/query");
+    expect(recordedCalls[0].url).toBe("/api/storm/query");
     expect(recordedCalls[0].body).toMatchObject({
       placeId: "custom-area",
       mode: "live",
-      startDate: "2024-07-08",
-      endDate: "2024-07-09",
+      date: "2024-07-08",
     });
+
+    // The second chip keeps the same event/place but opens the water chain.
+    click(byTestId("t-gq-place-demo-houston-flood_storm"));
+    await flush();
+    expect(probe.getAttribute("data-hazard")).toBe("flood_storm");
+    expect(probe.getAttribute("data-end-ts")).toBe("2024-07-09T23:59:59Z");
   });
 
   it("a second hazard chip switches the lens and its dates on the same card", async () => {

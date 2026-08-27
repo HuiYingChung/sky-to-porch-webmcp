@@ -6,13 +6,14 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
 }, testInfo) => {
   await page.addInitScript(() => {
     const state = globalThis as typeof globalThis & {
-      __skyToPorchWebMcpTool?: WebMCP.ModelContextTool;
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
     };
+    state.__skyToPorchWebMcpTools = {};
     Object.defineProperty(document, "modelContext", {
       configurable: true,
       value: {
         registerTool: async (tool: WebMCP.ModelContextTool) => {
-          state.__skyToPorchWebMcpTool = tool;
+          state.__skyToPorchWebMcpTools![tool.name] = tool;
         },
       },
     });
@@ -40,12 +41,13 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
 
   const registered = await page.evaluate(() => {
     const state = globalThis as typeof globalThis & {
-      __skyToPorchWebMcpTool?: WebMCP.ModelContextTool;
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
     };
-    return state.__skyToPorchWebMcpTool
+    const tool = state.__skyToPorchWebMcpTools?.analyze_environmental_hazard;
+    return tool
       ? {
-          name: state.__skyToPorchWebMcpTool.name,
-          annotations: state.__skyToPorchWebMcpTool.annotations,
+          name: tool.name,
+          annotations: tool.annotations,
         }
       : null;
   });
@@ -60,10 +62,11 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
     longitude: number;
   }) => page.evaluate(async (agentInput) => {
     const state = globalThis as typeof globalThis & {
-      __skyToPorchWebMcpTool?: WebMCP.ModelContextTool;
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
     };
-    if (!state.__skyToPorchWebMcpTool) throw new Error("WebMCP tool was not registered");
-    return state.__skyToPorchWebMcpTool.execute(
+    const tool = state.__skyToPorchWebMcpTools?.analyze_environmental_hazard;
+    if (!tool) throw new Error("WebMCP analysis tool was not registered");
+    return tool.execute(
       {
         place: agentInput.place,
         hazard: "fire_smoke",

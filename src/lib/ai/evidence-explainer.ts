@@ -1487,6 +1487,10 @@ export function requiredSafetyStatements(
       "Confirmation that a specific property is flooded",
       "Certain road closure or route safety",
     ],
+    wind_storm: [
+      "Confirmation that wind damaged a specific roof or property",
+      "Engineering causation, policy coverage, liability, or an insurance-claim outcome",
+    ],
     extreme_heat: [
       "Indoor temperature or individual medical risk",
       "Medical diagnosis or treatment advice",

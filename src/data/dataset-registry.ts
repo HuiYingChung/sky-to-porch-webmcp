@@ -116,6 +116,28 @@ const ENTRIES: DatasetRegistryEntry[] = [
     supportedDataModes: ["live", "fixture", "historical"],
   },
   {
+    sourceId: "nws_tropical_cyclone_report",
+    displayName: "NWS Post-Tropical Cyclone Report",
+    agency: "NOAA / National Weather Service",
+    hazardIds: ["wind_storm"],
+    decision: "go_supporting",
+    role:
+      "Pinned official post-event context for a documented tropical cyclone, scoped to the " +
+      "reporting office, event date, and published regional observations. It does not establish " +
+      "conditions or damage at a selected property.",
+    endpointTemplate:
+      "https://www.weather.gov/media/{office}/TropicalEventSummary/{report}.pdf",
+    requiresCredential: false,
+    authNote: "No authentication required. Public National Weather Service report.",
+    documentationUrl: "https://www.weather.gov/hgx/beryl2024",
+    requiredLimitations: [
+      "A regional post-event report does not prove wind speed, damage, or causation at a selected property.",
+      "Reported station gusts describe named observation sites and must not be transferred to a roof or address.",
+      "A historical report is not a current warning, forecast, engineering inspection, or insurance determination.",
+    ],
+    supportedDataModes: ["historical"],
+  },
+  {
     sourceId: "nasa_imerg_raw",
     displayName: "NASA IMERG Raw GES DISC / PPS Products",
     agency: "NASA / GES DISC / GPM",
@@ -164,7 +186,7 @@ const ENTRIES: DatasetRegistryEntry[] = [
     sourceId: "noaa_ncei_storm_events",
     displayName: "NOAA NCEI Storm Events Database",
     agency: "NOAA / NCEI",
-    hazardIds: ["flood_storm"],
+    hazardIds: ["flood_storm", "wind_storm"],
     decision: "go_supporting",
     role:
       "Supporting historical storm-event context for documented weather events. " +
@@ -261,11 +283,12 @@ const ENTRIES: DatasetRegistryEntry[] = [
     sourceId: "noaa_ncei_global_hourly",
     displayName: "NOAA NCEI Global Historical Climatology Network-hourly (GHCNh)",
     agency: "NOAA / NCEI",
-    hazardIds: ["extreme_heat"],
+    hazardIds: ["extreme_heat", "wind_storm"],
     decision: "go_supporting",
     role:
       "Credential-free historical ground observations (hourly-cadence air temperature and " +
-      "relative humidity) from the GHCNh station-by-year PSV files, used when no operational " +
+      "relative humidity, wind speed, and wind gust) from the GHCNh station-by-year PSV files. " +
+      "The heat path uses these files when no operational " +
       "USCRN station lies inside the selected area and the date is older than the by-year " +
       "publication window (~4 weeks, verified 2026-08-19). Supporting ground evidence; NOAA " +
       "publishes no heat index in this product and none is derived.",
@@ -280,8 +303,9 @@ const ENTRIES: DatasetRegistryEntry[] = [
       "GHCNh station-by-year files publish roughly four weeks behind real time; an unpublished date is not evidence of safe conditions.",
       "Station quality flags are preserved verbatim and never reinterpreted; no heat index exists in this product and none is derived.",
       "An outdoor station does not establish indoor, household, property, or personal exposure conditions.",
+      "Station wind is measured at a named observation site; it does not establish roof-level wind, damage, or causation at another location.",
     ],
-    supportedDataModes: ["live"],
+    supportedDataModes: ["live", "historical"],
   },
   {
     sourceId: "nasa_ecostress",

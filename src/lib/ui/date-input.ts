@@ -14,7 +14,7 @@
  *   - Extreme Heat: 2000-02-24, the approved MODIS Terra path start used by
  *     the heat live adapter (EARLIEST_GIBS_DATE). Kept in sync manually
  *     because the live adapter is server-only (sharp import).
- *   - Flood & Storm: 2000-06-01, the start of the GIBS IMERG precipitation
+ *   - Flood & Heavy Rain: 2000-06-01, the start of the GIBS IMERG precipitation
  *     record used by the flood live adapter.
  * Bounds are UI affordances only. Every date remains a request that the
  * server-side adapter validates against actual source coverage (fail-closed).
@@ -102,6 +102,9 @@ export function customDateBounds(
     }
     return { minDate: FLOOD_EARLIEST_DATE, maxDate: latest, defaultDate: latest };
   }
+  if (hazardId === "wind_storm") {
+    return { minDate: "1901-01-01", maxDate: latest, defaultDate: latest };
+  }
   if (hazardId === "extreme_heat") {
     if (mode === "fixture") {
       return {
@@ -144,6 +147,7 @@ export function allowedTimeTypesForHazard(
   void droughtMode;
   if (
     hazardId === "flood_storm" ||
+    hazardId === "wind_storm" ||
     hazardId === "extreme_heat" ||
     hazardId === "drought_land" ||
     hazardId === "air_quality" ||

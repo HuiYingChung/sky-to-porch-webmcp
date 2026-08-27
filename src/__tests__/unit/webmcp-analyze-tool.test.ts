@@ -198,10 +198,86 @@ describe("WebMCP environmental hazard tool", () => {
 
     const request = runAnalysis.mock.calls[0][0];
     expect(request.placeSelection.timeSelection.startTs).toBe("2026-08-25T00:00:00.000Z");
-    expect(request.placeSelection.timeSelection.endTs).toBe("2026-08-25T00:00:00.000Z");
+    expect(request.placeSelection.timeSelection.endTs).toBe("2026-08-25T23:59:59.000Z");
     expect(output.status).toBe("unsupported_coverage");
     expect(output.no_data_is_not_no_danger).toBe(true);
     expect("limitations" in output ? output.limitations[0] : undefined).toBe("No station coverage.");
+  });
+
+  it.each([
+    ["wind_storm", "wind_only_no_rain_flood_or_water_gages"],
+    ["flood_storm", "water_only_no_wind_damage_causation"],
+  ] as const)("labels the %s evidence chain so same-event data stays distinct", async (
+    hazardId,
+    evidenceScope
+  ) => {
+    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
+      analysisId: `analysis-${hazardId}`,
+      origin: "agent",
+      request,
+      outcome: {
+        hazardId,
+        result: { kind: "unsupported_coverage", rejectionReason: "No source coverage." },
+      } as ActiveAnalysis["outcome"],
+      completedAt: "2026-08-26T18:00:01.000Z",
+    }));
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Houston, Texas",
+        hazard: hazardId,
+        latitude: 29.7604,
+        longitude: -95.3698,
+        start_date: "2024-07-08",
+        end_date: "2024-07-08",
+      },
+      toolOptions(),
+      { runAnalysis, now: () => NOW }
+    );
+
+    expect(output).toMatchObject({ evidence_scope: evidenceScope });
+  });
+
+  it("automatically gathers separate wind and water chains for a broad storm-impact question", async () => {
+    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
+      analysisId: `analysis-${request.hazardId}`,
+      origin: "agent",
+      request,
+      outcome: {
+        hazardId: request.hazardId,
+        result: { kind: "unsupported_coverage", rejectionReason: `No ${request.hazardId} coverage.` },
+      } as ActiveAnalysis["outcome"],
+      completedAt: "2026-08-26T18:00:01.000Z",
+    }));
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Houston, Texas",
+        hazard: "storm_impacts",
+        concern: "home",
+        latitude: 29.7604,
+        longitude: -95.3698,
+        start_date: "2024-07-08",
+        end_date: "2024-07-08",
+        question: "Could this storm have damaged my home, and what can I discuss with my insurer?",
+      },
+      toolOptions(),
+      { runAnalysis, now: () => NOW }
+    );
+
+    expect(runAnalysis.mock.calls.map(([request]) => request.hazardId)).toEqual([
+      "flood_storm",
+      "wind_storm",
+    ]);
+    expect(output).toMatchObject({
+      status: "storm_evidence_bundle",
+      evidence_scope: "separate_wind_and_water_chains",
+      chains: {
+        wind: { evidence_scope: "wind_only_no_rain_flood_or_water_gages" },
+        water: { evidence_scope: "water_only_no_wind_damage_causation" },
+      },
+    });
+    expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
   });
 
   it.each([

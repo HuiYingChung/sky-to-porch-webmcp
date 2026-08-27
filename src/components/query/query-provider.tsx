@@ -53,6 +53,7 @@ import type { FloodQueryResult, FloodEvidenceMode } from "@/lib/flood/types";
 import type { HeatQueryResult, HeatEvidenceMode } from "@/lib/heat/types";
 import type { DroughtQueryResult, DroughtEvidenceMode } from "@/lib/drought/types";
 import type { CoverageGapQueryResult } from "@/lib/coverage-gap/types";
+import type { StormQueryResult } from "@/lib/storm/types";
 import { executeAnalysisRequest } from "@/lib/analysis/client";
 import type {
   ActiveAnalysis,
@@ -91,6 +92,13 @@ interface QueryContextValue {
   floodLoading: boolean;
   floodEvidenceMode: FloodEvidenceMode | null;
   setFloodEvidenceMode: (mode: FloodEvidenceMode) => void;
+  /** Water evidence retained beside the active Wind result for a storm bundle. */
+  relatedStormFloodResult: FloodQueryResult | null;
+  /** Wind & Storm stays source-distinct from Flood & Heavy Rain. */
+  windResult: StormQueryResult | null;
+  windLoading: boolean;
+  stormClaimDiscussionOpen: boolean;
+  setStormClaimDiscussionOpen: (open: boolean) => void;
   /** WP-09: current Extreme Heat result and generation-guarded request state. */
   heatResult: HeatQueryResult | null;
   heatLoading: boolean;
@@ -139,6 +147,10 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [floodResult, setFloodResultState] = useState<FloodQueryResult | null>(null);
   const [floodLoading, setFloodLoadingState] = useState(false);
   const [floodEvidenceMode, setFloodEvidenceModeState] = useState<FloodEvidenceMode | null>("live");
+  const [relatedStormFloodResult, setRelatedStormFloodResult] = useState<FloodQueryResult | null>(null);
+  const [windResult, setWindResultState] = useState<StormQueryResult | null>(null);
+  const [windLoading, setWindLoadingState] = useState(false);
+  const [stormClaimDiscussionOpen, setStormClaimDiscussionOpen] = useState(false);
   const [heatResult, setHeatResultState] = useState<HeatQueryResult | null>(null);
   const [heatLoading, setHeatLoadingState] = useState(false);
   const [heatEvidenceMode, setHeatEvidenceModeState] = useState<HeatEvidenceMode | null>("live");
@@ -167,9 +179,14 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     setPreviousAnalysis(analysis);
   }, []);
 
+  const openStormClaimDiscussion = useCallback(() => {
+    setStormClaimDiscussionOpen(true);
+  }, []);
+
   const clearResultState = useCallback(() => {
     setFireResultState(null);
     setFloodResultState(null);
+    setWindResultState(null);
     setHeatResultState(null);
     setDroughtResultState(null);
     setCoverageGapResultState(null);
@@ -182,6 +199,8 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       setFireResultState(outcome.result);
     } else if (outcome.hazardId === "flood_storm") {
       setFloodResultState(outcome.result);
+    } else if (outcome.hazardId === "wind_storm") {
+      setWindResultState(outcome.result);
     } else if (outcome.hazardId === "extreme_heat") {
       setHeatResultState(outcome.result);
     } else if (outcome.hazardId === "drought_land") {
@@ -219,8 +238,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     commitPreviousAnalysis(null);
     setAnalysisLoading(false);
     clearResultState();
+    setRelatedStormFloodResult(null);
     setFireLoadingState(false);
     setFloodLoadingState(false);
+    setWindLoadingState(false);
+    setStormClaimDiscussionOpen(false);
     setHeatLoadingState(false);
     setDroughtLoadingState(false);
     setCoverageGapLoadingState(false);
@@ -269,7 +291,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     analysisQueryGenRef.current += 1;
     const generation = analysisQueryGenRef.current;
     analysisAbortRef.current?.abort();
-    commitPreviousAnalysis(origin === "agent" ? activeAnalysisRef.current : null);
+    if (origin === "agent" && request.stormBundleRole !== "wind") {
+      commitPreviousAnalysis(activeAnalysisRef.current);
+    } else if (origin === "human") {
+      commitPreviousAnalysis(null);
+    }
 
     const controller = new AbortController();
     analysisAbortRef.current = controller;
@@ -283,8 +309,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     }
 
     clearResultState();
+    if (request.stormBundleRole !== "wind") setRelatedStormFloodResult(null);
     setFireLoadingState(request.hazardId === "fire_smoke");
     setFloodLoadingState(request.hazardId === "flood_storm");
+    setWindLoadingState(request.hazardId === "wind_storm");
+    setStormClaimDiscussionOpen(false);
     setHeatLoadingState(request.hazardId === "extreme_heat");
     setDroughtLoadingState(request.hazardId === "drought_land");
     setCoverageGapLoadingState(
@@ -310,6 +339,12 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         completedAt: new Date().toISOString(),
       };
       commitOutcome(snapshot);
+      if (
+        request.stormBundleRole === "water" &&
+        outcome.hazardId === "flood_storm"
+      ) {
+        setRelatedStormFloodResult(outcome.result);
+      }
       commitActiveAnalysis(snapshot);
       return snapshot;
     } catch (error) {
@@ -327,6 +362,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       if (generation === analysisQueryGenRef.current) {
         setFireLoadingState(false);
         setFloodLoadingState(false);
+        setWindLoadingState(false);
         setHeatLoadingState(false);
         setDroughtLoadingState(false);
         setCoverageGapLoadingState(false);
@@ -354,9 +390,12 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     setAnalysisLoading(false);
     setFireLoadingState(false);
     setFloodLoadingState(false);
+    setWindLoadingState(false);
+    setStormClaimDiscussionOpen(false);
     setHeatLoadingState(false);
     setDroughtLoadingState(false);
     setCoverageGapLoadingState(false);
+    setRelatedStormFloodResult(null);
     synchronizeRequestState(snapshot.request);
     commitOutcome(snapshot);
     commitActiveAnalysis(snapshot);
@@ -385,6 +424,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         floodLoading,
         floodEvidenceMode,
         setFloodEvidenceMode,
+        relatedStormFloodResult,
+        windResult,
+        windLoading,
+        stormClaimDiscussionOpen,
+        setStormClaimDiscussionOpen,
         heatResult,
         heatLoading,
         heatEvidenceMode,
@@ -406,6 +450,8 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     >
       <WebMcpBridge
         runAnalysis={runAnalysis}
+        activeAnalysis={activeAnalysis}
+        onOpenStormClaimDiscussion={openStormClaimDiscussion}
         onStatusChange={setWebMcpStatus}
       />
       {children}

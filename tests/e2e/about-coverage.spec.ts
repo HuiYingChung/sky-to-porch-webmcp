@@ -45,13 +45,13 @@ test("About keeps coverage compact and exposes Satellite data with keyboard-safe
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("It does not mean no danger");
   await expect(dialog).toContainText("Current primary gaps");
-  await expect(dialog.locator(".about-hazard-card")).toHaveCount(6);
+  await expect(dialog.locator(".about-hazard-card")).toHaveCount(7);
   await expect(dialog.locator(".about-hazard-card[open]")).toHaveCount(0);
 
   // ADR-0047: bulk expand/collapse drives every card; per-card toggling
   // (asserted further down) must keep working afterwards.
   await dialog.getByTestId("about-expand-all").click();
-  await expect(dialog.locator(".about-hazard-card[open]")).toHaveCount(6);
+  await expect(dialog.locator(".about-hazard-card[open]")).toHaveCount(7);
   await dialog.getByTestId("about-collapse-all").click();
   await expect(dialog.locator(".about-hazard-card[open]")).toHaveCount(0);
   await expectSingleAboutScrollOwner(dialog);

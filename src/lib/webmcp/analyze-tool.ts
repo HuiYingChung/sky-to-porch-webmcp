@@ -17,6 +17,8 @@ import {
 export const ANALYZE_HAZARD_TOOL_NAME = "analyze_environmental_hazard";
 const DEFAULT_RADIUS_KM = 25;
 const MAX_OUTPUT_CHARACTERS = 1_500;
+const AGENT_HAZARD_IDS = [...HAZARD_IDS, "storm_impacts"] as const;
+type AgentHazardId = (typeof AGENT_HAZARD_IDS)[number];
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/;
 
@@ -44,7 +46,7 @@ export interface AnalyzeHazardToolDependencies {
 
 interface ParsedInput {
   place: string;
-  hazard: HazardId;
+  hazard: AgentHazardId;
   concern: ConcernType;
   latitude?: number;
   longitude?: number;
@@ -94,9 +96,13 @@ interface ToolSuccess {
   status: string;
   analysis_id: string;
   ui_updated: true;
+  evidence_scope:
+    | "wind_only_no_rain_flood_or_water_gages"
+    | "water_only_no_wind_damage_causation"
+    | "selected_hazard_only";
   request: {
     place: string;
-    hazard: HazardId;
+    hazard: AgentHazardId;
     concern: ConcernType;
     radius_km: number;
     time: string;
@@ -113,7 +119,36 @@ interface ToolSuccess {
   no_data_is_not_no_danger: true;
 }
 
-export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess;
+interface CompactStormChain {
+  hazard: "wind_storm" | "flood_storm";
+  evidence_scope:
+    | "wind_only_no_rain_flood_or_water_gages"
+    | "water_only_no_wind_damage_causation";
+  status: string;
+  observation: CompactObservation | null;
+  limitation: string | null;
+  verify_url: string | null;
+}
+
+interface ToolStormBundle {
+  status: "storm_evidence_bundle";
+  analysis_id: string;
+  ui_updated: true;
+  evidence_scope: "separate_wind_and_water_chains";
+  request: {
+    place: string;
+    hazard: "storm_impacts";
+    concern: ConcernType;
+    radius_km: number;
+    time: string;
+  };
+  chains: { wind: CompactStormChain; water: CompactStormChain };
+  claim_discussion_available: boolean;
+  water_evidence_visible_in_shared_view: true;
+  no_data_is_not_no_danger: true;
+}
+
+export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess | ToolStormBundle;
 
 export const ANALYZE_HAZARD_INPUT_SCHEMA = {
   type: "object",
@@ -128,8 +163,8 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     },
     hazard: {
       type: "string",
-      enum: HAZARD_IDS,
-      description: "Environmental hazard to investigate.",
+      enum: AGENT_HAZARD_IDS,
+      description: "Use storm_impacts for broad storm damage or claim questions; it gathers separate wind and water chains. Use one hazard only for a narrow ask.",
     },
     concern: {
       type: "string",
@@ -237,9 +272,9 @@ function parseInput(
   }
   if (
     typeof raw.hazard !== "string" ||
-    !(HAZARD_IDS as readonly string[]).includes(raw.hazard)
+    !(AGENT_HAZARD_IDS as readonly string[]).includes(raw.hazard)
   ) {
-    return failure("invalid_input", `hazard must be one of: ${HAZARD_IDS.join(", ")}.`);
+    return failure("invalid_input", `hazard must be one of: ${AGENT_HAZARD_IDS.join(", ")}.`);
   }
   const concern = raw.concern ?? "home";
   if (
@@ -325,7 +360,7 @@ function parseInput(
 
   return {
     place: raw.place.trim(),
-    hazard: raw.hazard as HazardId,
+    hazard: raw.hazard as AgentHazardId,
     concern: concern as ConcernType,
     ...(hasLatitude
       ? {
@@ -349,7 +384,7 @@ function selectionTime(
     return {
       type: "custom",
       startTs: `${input.startDate}T00:00:00.000Z`,
-      endTs: `${input.endDate}T00:00:00.000Z`,
+      endTs: `${input.endDate}T23:59:59.000Z`,
       display: input.startDate === input.endDate
         ? input.startDate
         : `${input.startDate}/${input.endDate}`,
@@ -362,7 +397,7 @@ function selectionTime(
   return {
     type: "custom",
     startTs: `${completed}T00:00:00.000Z`,
-    endTs: `${completed}T00:00:00.000Z`,
+    endTs: `${completed}T23:59:59.000Z`,
     display: completed,
   };
 }
@@ -511,6 +546,11 @@ function compactSuccess(
     status: details.kind,
     analysis_id: analysis.analysisId,
     ui_updated: true,
+    evidence_scope: analysis.request.hazardId === "wind_storm"
+      ? "wind_only_no_rain_flood_or_water_gages"
+      : analysis.request.hazardId === "flood_storm"
+        ? "water_only_no_wind_damage_causation"
+        : "selected_hazard_only",
     request: {
       place: truncate(analysis.request.placeSelection.label, 100),
       hazard: analysis.request.hazardId,
@@ -542,6 +582,65 @@ function compactSuccess(
     verify_urls: base.verify_urls.slice(0, 1),
   };
   return reduced;
+}
+
+function compactStormChain(
+  analysis: ActiveAnalysis,
+  hazard: "wind_storm" | "flood_storm"
+): CompactStormChain {
+  const details = resultDetails(analysis);
+  const evidence = details.evidence;
+  const observation = evidence?.observations[0];
+  const limitation = details.rejectionReason ?? details.limitations[0] ?? null;
+  const verifyUrl = evidence?.observations
+    .map((item) => item.provenance.sourceUrl)
+    .find((url): url is string => typeof url === "string" && url.length <= 300) ?? null;
+  return {
+    hazard,
+    evidence_scope: hazard === "wind_storm"
+      ? "wind_only_no_rain_flood_or_water_gages"
+      : "water_only_no_wind_damage_causation",
+    status: details.kind,
+    observation: observation ? compactObservation(observation) : null,
+    limitation: limitation ? truncate(limitation, 130) : null,
+    verify_url: verifyUrl,
+  };
+}
+
+function compactStormBundle(
+  wind: ActiveAnalysis,
+  water: ActiveAnalysis,
+  timeDisplay: string
+): ToolStormBundle {
+  const bundle: ToolStormBundle = {
+    status: "storm_evidence_bundle",
+    analysis_id: `storm-bundle:${wind.analysisId}:${water.analysisId}`,
+    ui_updated: true,
+    evidence_scope: "separate_wind_and_water_chains",
+    request: {
+      place: truncate(wind.request.placeSelection.label, 100),
+      hazard: "storm_impacts",
+      concern: wind.request.concern,
+      radius_km: wind.request.placeSelection.analysisArea.radiusKm,
+      time: timeDisplay,
+    },
+    chains: {
+      wind: compactStormChain(wind, "wind_storm"),
+      water: compactStormChain(water, "flood_storm"),
+    },
+    claim_discussion_available:
+      wind.outcome.hazardId === "wind_storm" && Boolean(wind.outcome.result.claimDiscussion),
+    water_evidence_visible_in_shared_view: true,
+    no_data_is_not_no_danger: true,
+  };
+  if (JSON.stringify(bundle).length <= MAX_OUTPUT_CHARACTERS) return bundle;
+  return {
+    ...bundle,
+    chains: {
+      wind: { ...bundle.chains.wind, observation: null, verify_url: null },
+      water: { ...bundle.chains.water, observation: null, verify_url: null },
+    },
+  };
 }
 
 export async function executeAnalyzeHazardTool(
@@ -579,9 +678,41 @@ export async function executeAnalyzeHazardTool(
     );
   }
 
+  if (input.hazard === "storm_impacts") {
+    const commonRequest = {
+      concern: input.concern,
+      placeSelection,
+      ...(input.question ? { optionalQuestion: input.question } : {}),
+      evidenceMode: "live" as const,
+    };
+    const water = await dependencies.runAnalysis(
+      { ...commonRequest, hazardId: "flood_storm", stormBundleRole: "water" },
+      "agent",
+      options.signal
+    );
+    if (water === null) {
+      return failure(
+        "superseded",
+        "A newer request replaced the storm investigation before both evidence chains completed."
+      );
+    }
+    const wind = await dependencies.runAnalysis(
+      { ...commonRequest, hazardId: "wind_storm", stormBundleRole: "wind" },
+      "agent",
+      options.signal
+    );
+    if (wind === null) {
+      return failure(
+        "superseded",
+        "A newer request replaced the storm investigation before both evidence chains completed."
+      );
+    }
+    return compactStormBundle(wind, water, time.display);
+  }
+
   const analysis = await dependencies.runAnalysis(
     {
-      hazardId: input.hazard,
+      hazardId: input.hazard as HazardId,
       concern: input.concern,
       placeSelection,
       ...(input.question ? { optionalQuestion: input.question } : {}),
@@ -609,7 +740,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Resolve a place, retrieve bounded environmental evidence, and synchronize Sky to Porch's map and evidence panel. Use for fire/smoke, flood/storm, extreme heat, drought/land, air quality, or earthquakes/volcanoes. If place search is ambiguous, ask the user to choose a returned candidate. Missing data never means no danger.",
+      "Resolve a place, retrieve bounded evidence, and synchronize Sky to Porch. For broad storm damage or claim questions, use storm_impacts: it automatically gathers separate wind and water chains. Use wind_storm or flood_storm only for a clearly narrow question. Ambiguous places require user choice. Missing data never means no danger.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

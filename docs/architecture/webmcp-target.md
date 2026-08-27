@@ -46,11 +46,29 @@ Output:
 
 The output excludes raw source payloads and long prose.
 
-### Optional second tool
+### inspect_current_environmental_evidence
 
-A source-coverage or current-analysis tool will be added only if evals show it
-improves tool selection or the shared user journey. It must not introduce a
-fragile required call order.
+Registered only while a completed result is active. It reads the compact
+current evidence, source identifiers, limitations, and the hazard-specific
+evidence scope. It does not run another query and is not required before or
+after the primary tool.
+
+### prepare_storm_claim_discussion
+
+Registered only while the current result is Home + Wind & Storm and a bounded
+claim-discussion guide exists. It opens that guide in the visible page and
+returns a compact documentation checklist. It does not contact an insurer,
+submit a claim, or decide damage, causation, coverage, liability, repair scope,
+or outcome.
+
+Wind and water are intentionally separate. `wind_storm` covers wind speed,
+gust, and governed wind-event context. `flood_storm` covers rainfall,
+inundation, flood extent, and water gages. Every result exposes an
+`evidence_scope`. For a broad storm-impact question, the Agent passes the
+Agent-only `storm_impacts` orchestration value to the primary tool. The tool
+resolves the place once, runs both domain analyses, and returns one compact
+bundle with separately labelled wind and water chains. Narrow gust or gage
+questions still use a single domain.
 
 When no coordinates are supplied, place search returns at most three choices.
 One result proceeds; multiple results return `needs_place_choice` with
@@ -86,6 +104,8 @@ state through safe closures.
 - Invalid input, ambiguity, unsupported coverage, no observation, source
   failure, and internal failure return distinct compact error states.
 - Tool output must not turn missing evidence into reassurance.
+- A shared storm name must not merge wind observations into a water result or
+  water observations into a wind result.
 
 ## Internal-model decision
 

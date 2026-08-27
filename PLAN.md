@@ -13,11 +13,15 @@
 - W2 shared client controller and state: complete with renderer compatibility
 - W3 WebMCP tool: implemented; supported-browser agent verification pending
 - W4 provider cleanup: complete; deterministic-only application runtime
-- W5 verification: local deterministic gates pass, including 220 browser
-  journeys; supported-browser and model eval runs pending
+- W5 verification: typecheck, lint, 1261 unit tests, 132 integration tests,
+  production build, 220 browser journeys, and secret check pass;
+  supported-browser and model eval runs pending
 - W5a shared-view UX: complete; full deterministic and browser regression pass
 - W5b Canadian Flood ground evidence: complete; bounded ECCC GeoMet live smoke
   and the full 220-journey browser regression passed
+- W5c Wind & Storm evidence: locally verified, including a live localhost
+  `storm_impacts` Agent bundle with separate successful wind and water chains;
+  supported-browser Agent verification pending
 - W6 release and submission: pending explicit authorization
 
 ## 1. Goal
@@ -140,6 +144,22 @@ are easy to call in the wrong order.
 - preserve no observation, source failure, pagination overflow, and
   non-applicable coverage as separate deterministic outcomes.
 
+### W5c — Wind & Storm evidence and claim-discussion use case
+
+- add `wind_storm` as a separate hazard from the existing `flood_storm` path;
+- use in-area NOAA GHCNh wind speed and gust observations without importing
+  rainfall, flood extent, or water-gage evidence;
+- add pinned official Beryl regional context only within its governed date and
+  area;
+- expose machine-readable wind-only and water-only evidence scopes to WebMCP;
+- let the Agent select `storm_impacts` for broad damage or claim questions so
+  one tool execution automatically gathers both chains without asking the user
+  to name the relevant data types;
+- make the insurer-discussion checklist conditional on a completed Home + Wind
+  result and keep it local, bounded, and non-adjudicative;
+- retain Home, Travel, Pets, Health, Power & Internet, and Community as the
+  product's broader concern contexts.
+
 ### W6 — Release and submission
 
 - reconcile prior work, README, UI, video, and submission claims;
@@ -160,7 +180,12 @@ The product owner has ruled on the first three checkpoints:
    person to choose; the Agent never guesses;
 3. mobile opens Meaning, where a trust strip exposes evidence state, source
    count, limitations, and a direct Evidence action;
-4. the final three-minute demonstration journey remains pending.
+4. the primary demonstration uses Hurricane Beryl in Houston to ask whether
+   wind could have damaged a roof and what official evidence can support an
+   insurer discussion; this is one use case, not the site's entire purpose;
+5. wind and water remain separate evidence chains. For a broad storm-impact
+   question, the Agent selects one `storm_impacts` orchestration that runs and
+   labels both analyses instead of asking the user to enumerate hazards.
 
 Technical WebMCP details remain Codex's responsibility.
 

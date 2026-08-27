@@ -5,7 +5,8 @@ import { getRegistryEntry } from "@/data/dataset-registry";
 
 export const HAZARD_LABELS: Record<HazardId, string> = {
   fire_smoke: "Fire & Smoke",
-  flood_storm: "Flood & Storm",
+  flood_storm: "Flood & Heavy Rain",
+  wind_storm: "Wind & Storm",
   extreme_heat: "Extreme Heat",
   drought_land: "Drought & Land",
   air_quality: "Air Quality",
@@ -120,6 +121,27 @@ const PROFILES: SourceCoverageProfile[] = [
     satellite: { platform: "NOAA-20 / NOAA-21", sensor: "VIIRS", product: "VCDWD 3-day global flood composite" },
   },
   {
+    sourceId: "nws_tropical_cyclone_report",
+    hazardIds: ["wind_storm"],
+    level: "regional",
+    kind: "official_event",
+    integrationStatus: "supporting_only",
+    evidenceRole: "supporting",
+    regionLabel: "NWS Houston/Galveston reporting area · Hurricane Beryl 2024",
+    countryCodes: ["US"],
+    temporalCoverage: "Pinned July 8, 2024 post-event report",
+    updateCadence: "Published after the event; historical context only",
+    spatialResolution: "Regional report with named stations; never property scale",
+    coverageNote:
+      "Official Beryl event context and named regional gust observations. The report does not " +
+      "establish wind or damage at a selected home.",
+    liveGateNote:
+      "The pinned NWS Houston report and event page were verified on 2026-08-26. The adapter " +
+      "adds this historical context only when the selected geometry overlaps the governed " +
+      "Southeast Texas reporting box and the requested date is 2024-07-08.",
+    lastVerifiedDate: "2026-08-26",
+  },
+  {
     sourceId: "nasa_gibs_imerg",
     hazardIds: ["flood_storm"],
     level: "global",
@@ -152,7 +174,7 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "noaa_ncei_storm_events",
-    hazardIds: ["flood_storm"],
+    hazardIds: ["flood_storm", "wind_storm"],
     level: "national",
     kind: "official_event",
     integrationStatus: "supporting_only",
@@ -268,7 +290,7 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "noaa_ncei_global_hourly",
-    hazardIds: ["extreme_heat"],
+    hazardIds: ["extreme_heat", "wind_storm"],
     level: "national",
     kind: "ground_station",
     integrationStatus: "live_integrated",
@@ -283,13 +305,12 @@ const PROFILES: SourceCoverageProfile[] = [
       "Named outdoor stations; the in-area station nearest to the selected area center is " +
       "used, with bounded next-nearest fallback",
     coverageNote:
-      "Hourly outdoor air temperature and relative humidity from one named GHCNh station. " +
-      "NOAA publishes no heat index in this product and none is derived. One outdoor station " +
-      "is never indoor temperature, household certainty, or individual evidence.",
+      "Hourly outdoor air temperature, relative humidity, wind speed, and wind gust fields " +
+      "from one named GHCNh station. NOAA publishes no heat index in this product and none is " +
+      "derived. One station is never property-level or individual evidence.",
     liveGateNote:
-      "ADR-0039: consulted only when no operational USCRN station lies inside the selected " +
-      "area and the date is older than the publication window; the 7-day-to-4-week window " +
-      "carries an explicit ground-publication-gap limitation.",
+      "ADR-0039 governs the Heat fallback. ADR-0002 reuses the same bounded in-area station " +
+      "selection and exact-field parser for historical Wind & Storm observations.",
   },
   {
     sourceId: "nasa_gibs_modis_ndvi_16day",

@@ -19,6 +19,7 @@
 export const HAZARD_IDS = [
   "fire_smoke",
   "flood_storm",
+  "wind_storm",
   "extreme_heat",
   "drought_land",
   "air_quality",

@@ -11,12 +11,16 @@ The pre-existing product has been imported behind a documented prior-work
 boundary. A browser-native WebMCP vertical slice is now implemented and
 verified locally with deterministic unit, integration, and browser tests.
 
-The current tool is `analyze_environmental_hazard`. It resolves a place or
+The primary tool is `analyze_environmental_hazard`. It resolves a place or
 accepts selected coordinates, runs the same hazard-analysis application layer
 as the human form, updates the map and Insight panel, and returns a compact
-evidence result. Supported-browser discovery with the challenge agent and
+evidence result. After a result exists, a read-only evidence-inspection tool is
+available; a Home + Wind result also makes a local storm-claim discussion tool
+available. Supported-browser discovery with the challenge agent and
 model-backed tool-selection evals remain release gates; this repository does
-not yet claim a public live WebMCP experience.
+not yet claim a public live WebMCP experience. The exact local verification
+record is in
+[docs/testing/wind-storm-verification-2026-08-26.md](docs/testing/wind-storm-verification-2026-08-26.md).
 
 The original application and the exact prior-work boundary are documented in
 [PRIOR_WORK.md](PRIOR_WORK.md).
@@ -66,6 +70,26 @@ threshold. Missing or failed GeoMet evidence remains visible and never becomes
 a claim of no flooding, safe travel, or no property impact. Other GeoMet
 weather and AQHI collections are not part of this integration.
 
+## Wind and water are separate evidence chains
+
+`Wind & Storm` uses selected-area NOAA GHCNh wind speed and gust observations.
+For Hurricane Beryl on 2024-07-08, a pinned NWS Houston/Galveston report may
+also contribute regional post-event wind context when the selected geometry is
+inside its governed Southeast Texas scope. These records do not establish wind
+at a roof, property damage, causation, policy coverage, or a claim outcome.
+
+`Flood & Heavy Rain` is the existing `flood_storm` path. It uses rainfall,
+flood extent, inundation, and water-gage evidence; it does not establish wind
+damage. Every WebMCP result includes a machine-readable evidence scope. If a
+question broadly asks what a storm may have damaged, the Agent uses
+`storm_impacts`; the tool automatically runs both analyses and returns two
+related but unmerged evidence chains.
+
+The Houston Beryl roof-and-insurer journey is one practical Home use case, not
+the definition of the site. Sky to Porch also supports Travel, Pets, Health,
+Power & Internet, and Community questions within each source's truthful
+coverage.
+
 ## Architecture
 
 Human UI and WebMCP tools share one application layer:
@@ -102,6 +126,18 @@ rate limits.
   danger.
 - Marks source-derived output as untrusted content and does not claim the tool
   is read-only because it intentionally changes the visible page state.
+- Labels Wind results `wind_only_no_rain_flood_or_water_gages` and Flood
+  results `water_only_no_wind_damage_causation`, even when both refer to the
+  same named storm. For a broad damage or insurance question, the Agent selects
+  the Agent-only `storm_impacts` value; one tool execution automatically
+  gathers both chains and returns them as an unmerged bundle. The user does not
+  need to name wind or flood sources.
+- Registers `inspect_current_environmental_evidence` only while a completed
+  analysis is active. It reads the bounded current result without starting a
+  second hazard query.
+- Registers `prepare_storm_claim_discussion` only after a Home + Wind result.
+  It opens a documentation checklist in the current page and never submits a
+  claim or decides causation, coverage, liability, repair scope, or outcome.
 - Keeps the compact tool result within the current approximately 1.5K-character
   guidance while leaving complete evidence in the UI.
 

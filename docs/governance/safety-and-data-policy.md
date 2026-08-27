@@ -41,6 +41,21 @@ instructions, or predict earthquake or eruption timing.
 The application does not call an internal model provider. Evidence retrieval,
 validation, deterministic explanation, and safe display require no model key.
 
+## Wind, flood, property, and claim boundaries
+
+- Wind speed, wind gust, and official wind-event context belong to Wind &
+  Storm.
+- Rainfall, flood extent, inundation, and water-gage evidence belong to Flood &
+  Heavy Rain.
+- A named storm may appear in both analyses, but the observations remain in
+  two machine-labelled evidence scopes and are never merged.
+- Regional reports and outdoor stations do not establish conditions at a
+  particular roof or property.
+- The product may prepare a documentation checklist for an insurer discussion;
+  it does not determine damage, engineering causation, coverage, deductibles,
+  liability, repair scope, or a claim outcome, and it does not submit anything
+  externally.
+
 ## External data
 
 - Validate every upstream response.

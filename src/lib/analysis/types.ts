@@ -5,6 +5,7 @@ import type { DroughtQueryResult } from "@/lib/drought/types";
 import type { FireQueryResult } from "@/lib/fire/types";
 import type { FloodQueryResult } from "@/lib/flood/types";
 import type { HeatQueryResult } from "@/lib/heat/types";
+import type { StormQueryResult } from "@/lib/storm/types";
 
 export type AnalysisEvidenceMode = "live" | "fixture";
 export type AnalysisOrigin = "human" | "agent";
@@ -15,11 +16,14 @@ export interface AnalysisRequest {
   placeSelection: PlaceSelection;
   optionalQuestion?: string;
   evidenceMode?: AnalysisEvidenceMode;
+  /** Internal WebMCP orchestration marker; never changes a source's evidence domain. */
+  stormBundleRole?: "water" | "wind";
 }
 
 export type AnalysisOutcome =
   | { hazardId: "fire_smoke"; result: FireQueryResult }
   | { hazardId: "flood_storm"; result: FloodQueryResult }
+  | { hazardId: "wind_storm"; result: StormQueryResult }
   | { hazardId: "extreme_heat"; result: HeatQueryResult }
   | { hazardId: "drought_land"; result: DroughtQueryResult }
   | {

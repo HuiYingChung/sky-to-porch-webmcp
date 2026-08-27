@@ -63,7 +63,7 @@
     "messages": [
       {
         "role": "user",
-        "content": "For travel planning, examine flood and storm evidence around Houston on 2024-07-08."
+        "content": "For travel planning, examine rainfall, flooding, inundation, and water-gage evidence around Houston on 2024-07-08."
       }
     ],
     "expectedCall": [
@@ -75,6 +75,49 @@
           "concern": "travel",
           "start_date": "2024-07-08",
           "end_date": "2024-07-08"
+        }
+      }
+    ]
+  },
+  {
+    "id": "beryl-specific-wind-gust",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What was the maximum observed wind gust near my Houston home during Hurricane Beryl on July 8, 2024?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Houston",
+          "hazard": "wind_storm",
+          "concern": "home",
+          "start_date": "2024-07-08",
+          "end_date": "2024-07-08"
+        }
+      }
+    ]
+  },
+  {
+    "id": "beryl-broad-home-damage-auto-bundle",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Could Hurricane Beryl have damaged my Houston home or roof on July 8, 2024, and what evidence can help me discuss a claim with my insurer?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Houston",
+          "hazard": "storm_impacts",
+          "concern": "home",
+          "start_date": "2024-07-08",
+          "end_date": "2024-07-08",
+          "question": "Could Hurricane Beryl have damaged my home or roof, and what evidence can help me discuss a claim with my insurer?"
         }
       }
     ]

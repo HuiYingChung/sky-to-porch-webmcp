@@ -123,7 +123,7 @@ describe("evidence coverage catalog and About surface", () => {
       (profile) => profile.sourceId === "noaa_ncei_storm_events"
     );
     expect(storm).toMatchObject({
-      hazardIds: ["flood_storm"],
+      hazardIds: ["flood_storm", "wind_storm"],
       level: "national",
       kind: "official_event",
       integrationStatus: "supporting_only",
