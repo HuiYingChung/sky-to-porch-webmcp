@@ -123,3 +123,5 @@ venv/
 .ruff_cache/
 .gradle/
 target/
+
+.vercel
