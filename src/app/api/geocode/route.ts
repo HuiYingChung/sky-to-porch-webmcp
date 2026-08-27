@@ -4,7 +4,7 @@
  * UXFIX-02 (W8): POST /api/geocode — bounded place-name search proxy.
  *
  * Input: { "query": "place name" } (exact keys; 2–200 chars; no control chars)
- * Output: { ok: true, results: [{ label, lon, lat }], attribution }
+ * Output: { ok: true, results: [{ id?, label, lon, lat }], attribution }
  *
  * Good-citizen rules (ADR-0022): at most one upstream Photon request per
  * second process-wide (429 otherwise), 8s timeout, 1 MiB body cap, no retry,

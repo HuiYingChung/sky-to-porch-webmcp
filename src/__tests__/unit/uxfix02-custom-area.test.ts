@@ -687,6 +687,54 @@ describe("Photon geocode parsing", () => {
     expect(results).toEqual([{ label: "Taipei, Taiwan", lon: 121.56, lat: 25.03 }]);
   });
 
+  it("keeps stable OSM identities and distinguishes a city from a same-name county", () => {
+    const results = parsePhotonResponse({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {
+            osm_type: "R",
+            osm_id: 2688911,
+            type: "city",
+            name: "Houston",
+            county: "Harris",
+            state: "Texas",
+            country: "United States",
+          },
+          geometry: { type: "Point", coordinates: [-95.3676974, 29.7589382] },
+        },
+        {
+          type: "Feature",
+          properties: {
+            osm_type: "R",
+            osm_id: 1840945,
+            type: "county",
+            name: "Houston",
+            state: "Texas",
+            country: "United States",
+          },
+          geometry: { type: "Point", coordinates: [-95.390805, 31.3378465] },
+        },
+      ],
+    });
+
+    expect(results).toEqual([
+      {
+        id: "osm-r-2688911",
+        label: "Houston (city), Harris, Texas, United States",
+        lon: -95.3676974,
+        lat: 29.7589382,
+      },
+      {
+        id: "osm-r-1840945",
+        label: "Houston (county), Texas, United States",
+        lon: -95.390805,
+        lat: 31.3378465,
+      },
+    ]);
+  });
+
   it("throws on a non-FeatureCollection body", () => {
     expect(() => parsePhotonResponse({ nope: true })).toThrow();
   });

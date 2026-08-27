@@ -109,9 +109,12 @@ no-data or source-failure state.
 
 When no coordinates are supplied, place search returns at most three choices.
 One result proceeds; multiple results return `needs_place_choice` with
-card-ready labels and no public coordinate bypass. The Agent keeps the hazard,
-concern, time, radius, and question unchanged, asks the person, waits for the
-reply, then calls analysis with the selected label and finishes the task.
+card-ready labels, stable `choice_id` values, and no public coordinate bypass.
+The Agent keeps the original place, hazard, concern, time, radius, and question
+unchanged, asks the person, waits for the reply, then copies the selected ID to
+`place_choice_id`. Deterministic code refreshes and validates that ID against
+the current candidates before analysis, so duplicate labels and candidate
+reordering cannot select the wrong place or restart the ambiguity loop.
 
 After a successful Agent analysis, the visible product shows an action receipt
 with the place, hazard, and time. Evidence is one action away. If another

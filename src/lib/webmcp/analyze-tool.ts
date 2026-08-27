@@ -46,6 +46,7 @@ export const DEFAULT_RELATED_HAZARDS: Readonly<Record<HazardId, readonly HazardI
 
 const INPUT_KEYS = new Set([
   "place",
+  "place_choice_id",
   "hazard",
   "concern",
   "radius_km",
@@ -71,6 +72,7 @@ export interface AnalyzeHazardToolDependencies {
 
 interface ParsedInput {
   place: string;
+  placeChoiceId?: string;
   hazard: HazardId;
   analysisScope: AnalysisScope;
   concern: ConcernType;
@@ -83,6 +85,7 @@ interface ParsedInput {
 }
 
 interface GeocodeCandidate {
+  id?: string;
   label: string;
   lon: number;
   lat: number;
@@ -111,8 +114,18 @@ interface ToolFailure {
   after_user_choice?: {
     required_next_action: "retry_analysis_with_selected_place";
     continue_task: true;
-    set_place_to_selected_label: true;
+    set_place_choice_id_to_selected_choice_id: true;
+    preserve_original_place: true;
     preserve_other_arguments: true;
+    retry_with_original_arguments: {
+      place: string;
+      hazard: HazardId;
+      analysis_scope: AnalysisScope;
+      concern: ConcernType;
+      radius_km: number;
+      time: string;
+      question?: string;
+    };
   };
 }
 
@@ -169,6 +182,7 @@ interface ToolSuccess {
   limitations: string[];
   no_data_is_not_no_danger?: true;
   required_answer_boundary?: "no_observations_do_not_prove_safety";
+  required_final_answer_sentence?: "No observations were returned; this does not prove safety or no danger.";
 }
 
 type EvidenceScope = ToolSuccess["evidence_scope"];
@@ -217,6 +231,7 @@ interface ToolEvidenceBundle {
   related_evidence_visible_in_shared_view: true;
   no_data_is_not_no_danger?: true;
   required_answer_boundary?: "no_observations_do_not_prove_safety";
+  required_final_answer_sentence?: "No observations were returned; this does not prove safety or no danger.";
 }
 
 export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess | ToolEvidenceBundle;
@@ -230,7 +245,12 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
       type: "string",
       minLength: 2,
       maxLength: 200,
-      description: "Geographic name only, or exact coordinates the person stated. Strip context/possessives: 'near my Houston home' becomes 'Houston'. Keep ambiguous names and wait if choices return.",
+      description: "Initial call: pass the named place as stated, even if ambiguous; do not qualify it first. Strip context: 'near my Houston home' becomes 'Houston'. After a choice, keep this original query.",
+    },
+    place_choice_id: {
+      type: ["string", "null"],
+      pattern: "^place-[A-Za-z0-9._-]{3,120}$",
+      description: "Initial call: use null. Only after needs_place_choice: copy the selected choice_id exactly. Never derive it from a place, label, demo, or coordinates; never invent or edit it.",
     },
     hazard: {
       type: "string",
@@ -240,7 +260,7 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     analysis_scope: {
       type: "string",
       enum: ANALYSIS_SCOPES,
-      description: "single_hazard_only when all terms map to one enum; flood_storm includes rain, flood, inundation, and gages. A concern never broadens scope. related_context only for 2+ hazard enums or related/all/together evidence.",
+      description: "MUST use single_hazard_only when all terms fit one enum; flood_storm includes rain, flood, inundation and gages together. Concern never broadens scope. related_context only for 2+ hazard enums or related/all evidence.",
     },
     concern: {
       type: "string",
@@ -257,7 +277,7 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     time: {
       type: "string",
       pattern: "^(latest_completed|\\d{4}-\\d{2}-\\d{2}(?:/\\d{4}-\\d{2}-\\d{2})?)$",
-      description: "Use latest_completed unless the person stated dates; otherwise copy YYYY-MM-DD or YYYY-MM-DD/YYYY-MM-DD exactly. Never use today.",
+      description: "After needs_place_choice, copy retry_with_original_arguments.time exactly. Otherwise use latest_completed unless the person stated dates; never invent a date or use today.",
     },
     question: {
       type: "string",
@@ -282,12 +302,18 @@ function failure(
 }
 
 function placeChoiceFailure(
-  query: string,
-  choices: AgentPlaceChoice[]
+  input: ParsedInput,
+  choices: AgentPlaceChoice[],
+  refreshed = false
 ): ToolFailure {
+  const time = input.startDate && input.endDate
+    ? input.startDate === input.endDate
+      ? input.startDate
+      : `${input.startDate}/${input.endDate}`
+    : "latest_completed";
   return {
     status: "needs_place_choice",
-    message: `PAUSE FOR USER: I found ${choices.length} possible places for “${query}”. Do not select a place or retry yet. Ask the person to choose one label below, then wait for a new user message. After the person replies, continue the unfinished task: call this tool again, set place to the selected label, and keep every other input unchanged.`,
+    message: `PAUSE FOR USER: ${refreshed ? "The previous place choice no longer matches the refreshed results. I now found" : "I found"} ${choices.length} possible places for “${input.place}”. Do not select a place or retry yet. Ask the person to choose one option below, then wait for a new user message. After the person replies, continue the unfinished task: call this tool again, copy retry_with_original_arguments exactly (especially time=${time}), and add the selected choice_id as place_choice_id.`,
     ui_updated: false,
     no_data_is_not_no_danger: true,
     requires_user_input: true,
@@ -297,16 +323,32 @@ function placeChoiceFailure(
     after_user_choice: {
       required_next_action: "retry_analysis_with_selected_place",
       continue_task: true,
-      set_place_to_selected_label: true,
+      set_place_choice_id_to_selected_choice_id: true,
+      preserve_original_place: true,
       preserve_other_arguments: true,
+      retry_with_original_arguments: {
+        place: input.place,
+        hazard: input.hazard,
+        analysis_scope: input.analysisScope,
+        concern: input.concern,
+        radius_km: input.radiusKm,
+        time,
+        ...(input.question ? { question: input.question } : {}),
+      },
     },
     choices,
   };
 }
 
+function placeChoiceId(candidate: GeocodeCandidate): string {
+  const stableId = candidate.id ??
+    `coordinate-${candidate.lat.toFixed(7)}-${candidate.lon.toFixed(7)}`;
+  return `place-${stableId}`;
+}
+
 function placeChoices(candidates: GeocodeCandidate[]): AgentPlaceChoice[] {
-  return candidates.map((candidate, index) => ({
-    choice_id: `place-${index + 1}`,
+  return candidates.map((candidate) => ({
+    choice_id: placeChoiceId(candidate),
     label: truncate(candidate.label, 120),
   }));
 }
@@ -367,6 +409,17 @@ function parseInput(
   const place = raw.place.trim();
   const coordinate = explicitCoordinate(place);
   if (coordinate && "status" in coordinate) return coordinate;
+  if (
+    raw.place_choice_id !== undefined &&
+    raw.place_choice_id !== null &&
+    (typeof raw.place_choice_id !== "string" ||
+      !/^place-[A-Za-z0-9._-]{3,120}$/.test(raw.place_choice_id))
+  ) {
+    return failure("invalid_input", "place_choice_id must be copied unchanged from a prior needs_place_choice result.");
+  }
+  if (coordinate && typeof raw.place_choice_id === "string") {
+    return failure("invalid_input", "place_choice_id cannot be combined with an explicit coordinate place.");
+  }
   const analysisScope = raw.analysis_scope ?? "related_context";
   if (
     typeof analysisScope !== "string" ||
@@ -442,6 +495,9 @@ function parseInput(
 
   return {
     place,
+    ...(typeof raw.place_choice_id === "string"
+      ? { placeChoiceId: raw.place_choice_id }
+      : {}),
     hazard: raw.hazard as HazardId,
     analysisScope: analysisScope as AnalysisScope,
     concern: concern as ConcernType,
@@ -543,6 +599,9 @@ async function resolvePlace(
     )
     .slice(0, 3)
     .map((item) => ({
+      ...(typeof item.id === "string" && /^[A-Za-z0-9._-]{3,120}$/.test(item.id)
+        ? { id: item.id }
+        : {}),
       label: item.label as string,
       lon: item.lon as number,
       lat: item.lat as number,
@@ -551,8 +610,15 @@ async function resolvePlace(
   if (candidates.length === 0) {
     return failure("place_not_found", `No place candidate was found for “${input.place}”.`);
   }
+  if (input.placeChoiceId !== undefined) {
+    const selected = candidates.find(
+      (candidate) => placeChoiceId(candidate) === input.placeChoiceId
+    );
+    if (selected) return selected;
+    return placeChoiceFailure(input, placeChoices(candidates), true);
+  }
   if (candidates.length > 1) {
-    return placeChoiceFailure(input.place, placeChoices(candidates));
+    return placeChoiceFailure(input, placeChoices(candidates));
   }
   return candidates[0];
 }
@@ -689,6 +755,7 @@ function compactSuccess(
       ? {
           no_data_is_not_no_danger: true as const,
           required_answer_boundary: "no_observations_do_not_prove_safety" as const,
+          required_final_answer_sentence: "No observations were returned; this does not prove safety or no danger." as const,
         }
       : {}),
   };
@@ -798,6 +865,7 @@ function compactEvidenceBundle(
       ? {
           no_data_is_not_no_danger: true as const,
           required_answer_boundary: "no_observations_do_not_prove_safety" as const,
+          required_final_answer_sentence: "No observations were returned; this does not prove safety or no danger." as const,
         }
       : {}),
   };
@@ -980,7 +1048,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Analyze place+hazard; update UI; never call the help catalog first. DO NOT CALL for generic environmental conditions: season/place/goal does not imply heat, air, or any hazard; ask and wait. Pass place as stated. Never infer coordinates. Use time=latest_completed unless the person gave dates; never today. On needs_place_choice, ask and wait; after the reply retry the selected label, preserve other arguments, execute, and finish. Use single_hazard_only when all observations fit one hazard enum, including fire+smoke or rain+flood+inundation+gages; concern never broadens scope. Use related_context only for related/multiple hazard families. Infer concern if clear; otherwise general.",
+      "Analyze place+hazard. Call help first only for demo requests. If no hazard is clear, ask and wait; season/place/goal alone implies none. First named-place call: pass as stated if ambiguous; set place_choice_id=null; never pre-qualify place or infer coordinates. Use latest_completed unless dates given; never today. If needs_place_choice, ask and wait. After the reply, keep original place, copy selected choice_id to place_choice_id, preserve inputs, execute and finish. Use single_hazard_only when all terms fit one enum, including fire+smoke or rain+flood+inundation+gages; concern does not broaden scope. Use related_context for multiple/related hazards. Infer concern if clear; else general.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,
