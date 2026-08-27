@@ -17,6 +17,12 @@ import {
 export const ANALYZE_HAZARD_TOOL_NAME = "analyze_environmental_hazard";
 const DEFAULT_RADIUS_KM = 25;
 const MAX_OUTPUT_CHARACTERS = 2_400;
+export const ANSWER_ORDER = [
+  "strongest_supported_assessment",
+  "observation_values_times_and_official_citations",
+  "direct_observation_then_labelled_inference",
+  "confidence_and_evidence_that_would_change_it",
+] as const;
 const ANALYSIS_SCOPES = ["related_context", "single_hazard_only"] as const;
 type AnalysisScope = (typeof ANALYSIS_SCOPES)[number];
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -156,6 +162,7 @@ interface ToolSuccess {
     observation_count: number;
     source_count: number;
   };
+  answer_order: typeof ANSWER_ORDER;
   citations: CompactCitation[];
   limitations: string[];
   no_data_is_not_no_danger?: true;
@@ -191,6 +198,7 @@ interface ToolEvidenceBundle {
     source_count: number;
   };
   inference_guidance: "state_strongest_supported_inference_and_confidence";
+  answer_order: typeof ANSWER_ORDER;
   use_decision: "person_decides_how_to_use_related_evidence";
   request: {
     place: string;
@@ -718,6 +726,7 @@ function compactSuccess(
       observation_count: observationCount,
       source_count: sourceCount,
     },
+    answer_order: ANSWER_ORDER,
     citations,
     limitations: limitations.slice(0, 2).map((item) => truncate(item, 180)),
     ...(observationCount === 0 ? { no_data_is_not_no_danger: true as const } : {}),
@@ -794,6 +803,7 @@ function compactEvidenceBundle(
       source_count: sourceCount,
     },
     inference_guidance: "state_strongest_supported_inference_and_confidence",
+    answer_order: ANSWER_ORDER,
     use_decision: "person_decides_how_to_use_related_evidence",
     request: {
       place: truncate(primary.request.placeSelection.label, 100),

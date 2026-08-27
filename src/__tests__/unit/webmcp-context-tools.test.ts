@@ -105,6 +105,12 @@ describe("contextual WebMCP tools", () => {
       hazard: "wind_storm",
       relationship: "related_evidence_for_assessment",
       inference_guidance: "state_strongest_supported_inference_and_confidence",
+      answer_order: [
+        "strongest_supported_assessment",
+        "observation_values_times_and_official_citations",
+        "direct_observation_then_labelled_inference",
+        "confidence_and_evidence_that_would_change_it",
+      ],
       support: {
         level: "official_observations_in_every_chain",
         chains_with_observations: 2,

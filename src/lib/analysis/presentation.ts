@@ -1,7 +1,7 @@
 import type { EvidenceState } from "@/contracts/common";
 import type { EvidenceObject } from "@/contracts/evidence";
 import type { ActiveAnalysis } from "@/lib/analysis/types";
-import { TIME_RANGE_DISPLAY_LABELS } from "@/lib/location/time";
+import { formatTimeSelectionLabel } from "@/lib/location/time";
 
 export interface AnalysisTrustSummary {
   state: EvidenceState | null;
@@ -85,12 +85,7 @@ export function summarizeAnalysisTrust(
 }
 
 export function formatAnalysisTime(analysis: ActiveAnalysis): string {
-  const time = analysis.request.placeSelection.timeSelection;
-  if (time.type !== "custom") return TIME_RANGE_DISPLAY_LABELS[time.type];
-  const start = time.startTs?.slice(0, 10);
-  const end = time.endTs?.slice(0, 10);
-  if (!start || !end) return TIME_RANGE_DISPLAY_LABELS.custom;
-  return start === end ? start : `${start}–${end}`;
+  return formatTimeSelectionLabel(analysis.request.placeSelection.timeSelection);
 }
 
 export function formatAnalysisPlace(analysis: ActiveAnalysis): string {

@@ -123,7 +123,9 @@ It should accept a place or selected area, hazard, time window, optional
 concern, and optional question; execute the deterministic analysis pipeline;
 update the shared map and evidence panel; and return a compact structured
 result with evidence strength, confidence, observations, structured citations,
-and concise scope notes. Omitted concern resolves to neutral `general`.
+and concise scope notes. Omitted concern resolves to neutral `general`. Curated
+demo inputs and a person's own supported historical question must use the same
+parser, analysis service, output contract, answer order, and shared UI update.
 
 Two baseline discovery tools expose the governed hazard vocabulary and the
 checked-in source-coverage catalog. Their descriptions direct a concrete
@@ -150,6 +152,9 @@ added.
   concern, related-chain support, and bounded output;
 - agent evals for tool selection, parameters, sequencing, and full user
   journeys;
+- a natural trigger case for every baseline and contextual tool, non-demo
+  questions across all seven hazards, and a successful non-demo WebMCP browser
+  journey in a city and time window not used by the curated demos;
 - ChatGPT in-app-browser and supported-Chrome verification;
 - full CI, clean-clone build, and exact-candidate evidence.
 
@@ -220,6 +225,10 @@ The product owner has ruled on the first three checkpoints:
    assessment. No-data and failure are last-resort states, not demo features;
 9. panel switching, generic expansion, map-layer controls, and Start over stay
    as human UI actions for now rather than increasing the Agent tool count.
+10. the demos are curated entrances, not privileged code paths. A supported
+    custom question receives the same evidence-forward order: strongest
+    assessment; observed values, times, and official citations; labelled
+    inference; confidence; and evidence that would change the assessment.
 
 Technical WebMCP details remain Codex's responsibility.
 

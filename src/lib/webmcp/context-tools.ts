@@ -3,11 +3,21 @@
 import type { EvidenceObject, Observation } from "@/contracts/evidence";
 import type { ActiveAnalysis } from "@/lib/analysis/types";
 import type { StormQueryResult } from "@/lib/storm/types";
-import { evidenceScopeForHazard } from "@/lib/webmcp/analyze-tool";
+import { ANSWER_ORDER, evidenceScopeForHazard } from "@/lib/webmcp/analyze-tool";
 
 export const INSPECT_EVIDENCE_TOOL_NAME = "inspect_current_environmental_evidence";
 export const PREPARE_STORM_CLAIM_TOOL_NAME = "prepare_storm_claim_discussion";
 export const MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS = 2_400;
+export const INSPECT_EVIDENCE_INPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {},
+} as const;
+export const PREPARE_STORM_CLAIM_INPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {},
+} as const;
 
 function compactText(value: string, maxLength: number): string {
   const clean = value.replace(/\s+/gu, " ").trim();
@@ -63,11 +73,7 @@ export function createInspectEvidenceTool(
     title: "Inspect current environmental evidence",
     description:
       "Read the strongest validated observations, confidence, and structured citations from the primary result and related evidence currently shown in Sky to Porch. It does not re-query sources or control the interface. Explain the strongest relationship the returned evidence supports and label inference separately from direct observation.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-    },
+    inputSchema: INSPECT_EVIDENCE_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     execute: async (input) => {
       if (Object.keys(input).length > 0) {
@@ -109,6 +115,7 @@ export function createInspectEvidenceTool(
           total_chains: allAnalyses.length,
           source_count: sourceCount,
         },
+        answer_order: ANSWER_ORDER,
         ...(relatedAnalyses.length > 0
           ? {
               relationship: "related_evidence_for_assessment" as const,
@@ -167,11 +174,7 @@ export function createStormClaimDiscussionTool(
     title: "Prepare a storm claim discussion",
     description:
       "Open an evidence-backed kit for discussing possible wind contribution to roof or home damage with an insurer. Available after a Home + Wind & Storm result. It leads with supported regional findings and shows which property-specific records would strengthen the discussion; the insurer makes the coverage decision.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-    },
+    inputSchema: PREPARE_STORM_CLAIM_INPUT_SCHEMA,
     annotations: { readOnlyHint: false, untrustedContentHint: true },
     execute: async (input) => {
       if (Object.keys(input).length > 0) {

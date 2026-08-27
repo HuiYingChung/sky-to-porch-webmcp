@@ -268,6 +268,59 @@
     ]
   },
   {
+    "id": "inspect-after-custom-analysis",
+    "availableAfter": "completed_environmental_analysis",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Now inspect the current result. Show me the strongest observations, their exact times and official citations, then explain the strongest supported inference and confidence."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "inspect_current_environmental_evidence",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "id": "prepare-claim-after-home-wind",
+    "availableAfter": "completed_home_wind_analysis",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Open the evidence-backed storm claim discussion and show me what roof or property records would strengthen the assessment for my insurer conversation."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "prepare_storm_claim_discussion",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "id": "custom-drought-land-question",
+    "messages": [
+      {
+        "role": "user",
+        "content": "How strongly do official vegetation and drought records support unusually dry land around Albuquerque on June 3, 2025? Give me the strongest evidence, citations, and confidence."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Albuquerque",
+          "hazard": "drought_land",
+          "start_date": "2025-06-03",
+          "end_date": "2025-06-03",
+          "question": "How strongly do official vegetation and drought records support unusually dry land?"
+        }
+      }
+    ]
+  },
+  {
     "id": "broad-goal-ask-clarification",
     "messages": [
       {

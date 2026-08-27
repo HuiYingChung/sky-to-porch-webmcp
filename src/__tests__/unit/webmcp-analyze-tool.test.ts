@@ -220,6 +220,12 @@ describe("WebMCP environmental hazard tool", () => {
     expect(output.ui_updated).toBe(true);
     expect(output.no_data_is_not_no_danger).toBeUndefined();
     expect(output).toMatchObject({
+      answer_order: [
+        "strongest_supported_assessment",
+        "observation_values_times_and_official_citations",
+        "direct_observation_then_labelled_inference",
+        "confidence_and_evidence_that_would_change_it",
+      ],
       support: {
         level: "official_observations_returned",
         confidence: "moderate",
@@ -340,6 +346,12 @@ describe("WebMCP environmental hazard tool", () => {
       evidence_scope: "separate_related_hazard_chains",
       relationship: "related_evidence_for_assessment",
       inference_guidance: "state_strongest_supported_inference_and_confidence",
+      answer_order: [
+        "strongest_supported_assessment",
+        "observation_values_times_and_official_citations",
+        "direct_observation_then_labelled_inference",
+        "confidence_and_evidence_that_would_change_it",
+      ],
       included_chains: ["flood_storm", "wind_storm"],
       chains: [
         {

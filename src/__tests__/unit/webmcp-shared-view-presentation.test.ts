@@ -90,7 +90,7 @@ describe("shared-view presentation", () => {
       showNoDangerReminder: false,
     });
     expect(formatAnalysisPlace(current)).toBe("Tucson, Arizona");
-    expect(formatAnalysisTime(current)).toBe("2026-08-25");
+    expect(formatAnalysisTime(current)).toBe("August 25, 2026");
   });
 
   it("keeps source failures explicit and activates the no-danger reminder", () => {

@@ -169,6 +169,16 @@ rate limits.
 - Keeps analysis and inspection results within a 2.4K-character bound so
   evidence strength and structured citations are not discarded for brevity.
 
+The curated demos are inputs, not hard-coded answer paths. A person's own
+place, historical date, hazard, optional concern, and question use the same
+analysis service and answer order: strongest supported assessment; observation
+values, times, and official citations; direct observation before labelled
+inference; then confidence and the evidence that would change the assessment.
+Every registered tool has a distinct natural trigger in the selection evals.
+The full Houston journey can exercise all tool roles: list demos, inspect source
+coverage, analyze the event, inspect the returned evidence, and open the
+Home + Wind storm-discussion kit.
+
 See [the target architecture](docs/architecture/webmcp-target.md) and
 [the evaluation boundary](docs/testing/webmcp-evals.md). The dated
 [architecture audit](docs/architecture/audit-2026-08-26.md) records the

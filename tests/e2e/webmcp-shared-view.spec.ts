@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { gotoHydrated } from "./helpers";
+import fireSuccessFixture from "../../src/data/fixtures/wp02/fire-success.json";
 
 test("shows a neutral waiting status while WebMCP tools are still registering", async ({
   page,
@@ -21,6 +22,167 @@ test("shows a neutral waiting status while WebMCP tools are still registering", 
   await expect(agentStatus).toHaveCSS("border-width", "0px");
   await expect(agentStatus).toHaveCSS("border-radius", "0px");
   await expect(agentStatus).toHaveCSS("padding", "0px");
+});
+
+test("a non-demo Albuquerque question returns evidence and updates the shared human UI", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    state.__skyToPorchWebMcpTools = {};
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: async (tool: WebMCP.ModelContextTool) => {
+          state.__skyToPorchWebMcpTools![tool.name] = tool;
+        },
+      },
+    });
+  });
+
+  const customEvidence = structuredClone(fireSuccessFixture);
+  customEvidence._fixtureId = "webmcp-custom-fire-albuquerque-2025-05-20";
+  customEvidence._fixtureDescription =
+    "Synthetic validated contract for a non-demo WebMCP browser wiring test; not live evidence.";
+  customEvidence.evidenceId = "evd-fire-albuquerque-20250520-browser-test";
+  customEvidence.intentId = "intent-webmcp-custom-albuquerque";
+  customEvidence.observations[0].observationId = "obs-hms-fire-albuquerque-browser-test";
+  customEvidence.observations[0].value = 17;
+  customEvidence.observations[0].variableName =
+    "HMS fire detection coordinate pairs in the selected Albuquerque test box";
+  customEvidence.observations[1].observationId = "obs-hms-smoke-albuquerque-browser-test";
+  customEvidence.observations[1].value = 6;
+  customEvidence.observations[1].variableName =
+    "HMS smoke polygon coordinate pairs in the selected Albuquerque test box";
+  for (const observation of customEvidence.observations) {
+    observation.provenance.observedAt = "2025-05-20T00:00:00Z";
+    observation.provenance.retrievedAt = "2026-08-27T12:00:00Z";
+    observation.provenance.requestParameters.date = "2025-05-20";
+    observation.metadata.boundingBox = "Albuquerque browser-test selection";
+  }
+  customEvidence.observations[0].provenance.sourceUrl =
+    "https://satepsanone.nesdis.noaa.gov/pub/FIRE/web/HMS/Fire_Points/KML/2025/05/hms_fire20250520.kml";
+  customEvidence.observations[0].provenance.payloadHash = "1".repeat(64);
+  customEvidence.observations[1].provenance.sourceUrl =
+    "https://satepsanone.nesdis.noaa.gov/pub/FIRE/web/HMS/Smoke_Polygons/KML/2025/05/hms_smoke20250520.kml";
+  customEvidence.observations[1].provenance.payloadHash = "2".repeat(64);
+  customEvidence.missionAttributions[0].contributedObservationIds = [
+    customEvidence.observations[0].observationId,
+    customEvidence.observations[1].observationId,
+  ];
+  customEvidence.missionAttributions[0].selectionReason =
+    "Synthetic non-demo Albuquerque browser wiring contract.";
+  customEvidence.freshness.mostRecentObservationAt = "2025-05-20T00:00:00Z";
+  customEvidence.freshness.evaluatedAt = "2026-08-27T12:00:00Z";
+  customEvidence.freshness.note =
+    "Historical synthetic browser-test fixture for May 20, 2025; not a live retrieval.";
+  customEvidence.confidence.level = "moderate";
+  customEvidence.confidence.rationale =
+    "Two separate synthetic official-source roles exercise the generic WebMCP evidence contract for a non-demo city and date.";
+  customEvidence.assembledAt = "2026-08-27T12:00:00Z";
+
+  let requestBody: Record<string, unknown> | undefined;
+  await page.route("**/api/fire/query", async (route) => {
+    requestBody = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, result: { kind: "success", evidence: customEvidence } }),
+    });
+  });
+
+  await gotoHydrated(page, "/");
+  const output = await page.evaluate(async () => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    const tool = state.__skyToPorchWebMcpTools?.analyze_environmental_hazard;
+    if (!tool) throw new Error("WebMCP analysis tool was not registered");
+    return tool.execute({
+      place: "Albuquerque, New Mexico",
+      hazard: "fire_smoke",
+      analysis_scope: "single_hazard_only",
+      latitude: 35.0844,
+      longitude: -106.6504,
+      radius_km: 30,
+      start_date: "2025-05-20",
+      end_date: "2025-05-20",
+      question: "What official fire and smoke observations were recorded near Albuquerque?",
+    }, { signal: new AbortController().signal });
+  }) as Record<string, unknown>;
+
+  expect(output).toMatchObject({
+    status: "success",
+    ui_updated: true,
+    request: {
+      place: "Albuquerque, New Mexico (agent coordinates)",
+      hazard: "fire_smoke",
+      concern: "general",
+      radius_km: 30,
+      time: "2025-05-20",
+    },
+    answer_order: [
+      "strongest_supported_assessment",
+      "observation_values_times_and_official_citations",
+      "direct_observation_then_labelled_inference",
+      "confidence_and_evidence_that_would_change_it",
+    ],
+    support: { level: "official_observations_returned", observation_count: 2, source_count: 2 },
+    citations: [
+      { source: "noaa_hms_fire_points", observed_at: "2025-05-20T00:00:00Z" },
+      { source: "noaa_hms_smoke_polygons", observed_at: "2025-05-20T00:00:00Z" },
+    ],
+  });
+  expect(output.no_data_is_not_no_danger).toBeUndefined();
+  expect(requestBody).toMatchObject({
+    concern: "general",
+    optionalQuestion: "What official fire and smoke observations were recorded near Albuquerque?",
+    time: { kind: "range", startDate: "2025-05-20", endDate: "2025-05-20" },
+  });
+
+  const receipt = page.locator('[data-testid="agent-analysis-notice"]:visible');
+  await expect(receipt).toContainText("Agent updated this view");
+  await expect(receipt.getByTestId("agent-analysis-receipt"))
+    .toContainText("Fire & Smoke · Albuquerque, New Mexico · May 20, 2025");
+  await receipt.getByTestId("agent-view-evidence").click();
+  const insight = page.locator('[data-testid="insight-navigation"]:visible');
+  await insight.getByRole("button", { name: /Show evidence details/u }).click();
+  await expect(insight).toContainText("Value: 17 coordinate_pairs");
+  await expect(insight).toContainText("Source: noaa_hms_fire_points");
+  await expect(insight).toContainText("Observed at: 2025-05-20T00:00:00Z");
+  await expect(insight).not.toContainText("Los Angeles");
+  await expect(insight).not.toContainText("2025-01-08");
+
+  await page.waitForFunction(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    return Boolean(state.__skyToPorchWebMcpTools?.inspect_current_environmental_evidence);
+  });
+  const inspected = await page.evaluate(async () => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    const tool = state.__skyToPorchWebMcpTools?.inspect_current_environmental_evidence;
+    if (!tool) throw new Error("Contextual evidence tool was not registered");
+    return tool.execute({}, { signal: new AbortController().signal });
+  }) as Record<string, unknown>;
+  expect(inspected).toMatchObject({
+    status: "ok",
+    hazard: "fire_smoke",
+    answer_order: [
+      "strongest_supported_assessment",
+      "observation_values_times_and_official_citations",
+      "direct_observation_then_labelled_inference",
+      "confidence_and_evidence_that_would_change_it",
+    ],
+    citations: [
+      { source: "noaa_hms_fire_points", observed_at: "2025-05-20T00:00:00Z" },
+      { source: "noaa_hms_smoke_polygons", observed_at: "2025-05-20T00:00:00Z" },
+    ],
+  });
 });
 
 test("registers WebMCP and shares an agent analysis with the visible product", async ({

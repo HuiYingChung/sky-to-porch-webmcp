@@ -15,7 +15,7 @@
 
 import React from "react";
 import type { PlaceSelection } from "@/lib/location/selection";
-import { TIME_RANGE_DISPLAY_LABELS } from "@/lib/location/time";
+import { formatTimeSelectionLabel } from "@/lib/location/time";
 
 interface SelectionSummaryProps {
   selection: PlaceSelection | null;
@@ -57,12 +57,7 @@ export function SelectionSummary({
 
   const { label, selectionMethod, coordinate, analysisArea, timeSelection } = selection;
   const { radiusKm, boundingBox } = analysisArea;
-  const timeLabel = TIME_RANGE_DISPLAY_LABELS[timeSelection.type];
-
-  const timeDisplay =
-    timeSelection.type === "custom" && timeSelection.startTs && timeSelection.endTs
-      ? `${timeSelection.startTs} – ${timeSelection.endTs}`
-      : timeLabel;
+  const timeDisplay = formatTimeSelectionLabel(timeSelection);
   const canonicalAttributes = {
     "data-selection-label": label,
     "data-selection-coordinate": `${coordinate.lon.toFixed(5)},${coordinate.lat.toFixed(5)}`,

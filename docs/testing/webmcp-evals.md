@@ -31,6 +31,13 @@ Volcanoes with Air Quality and Heat. The tool then runs the governed
 combination and reports how strongly official observations across the chains
 support an inference.
 
+The dataset also includes post-analysis availability context for
+`inspect_current_environmental_evidence` and the Home + Wind-only
+`prepare_storm_claim_discussion`. At least one natural selection case must
+exist for every registered baseline or contextual tool. Non-demo analysis
+questions must cover all seven hazard families so curated prompts cannot mask
+a generic-query regression.
+
 Before release, run the dataset repeatedly with the challenge agent and record:
 
 1. tool-selection accuracy;
@@ -54,6 +61,10 @@ Before release, run the dataset repeatedly with the challenge agent and record:
     `demo_id` detail and then the analysis tool, without adding a new tool;
 13. whether the final answer leads with the strongest observations, citations,
     evidence-supported inference, and confidence rather than repeated caveats.
+14. whether every registered tool is selected for its distinct natural ask and
+    never merely called to increase the visible tool count;
+15. whether non-demo questions across all seven hazards preserve the same
+    answer order and shared UI update as curated demos.
 
 Do not call this dataset "passed" until the model-backed runs and raw outcomes
 have been retained for the exact tool definition under review.
