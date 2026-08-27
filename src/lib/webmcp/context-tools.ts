@@ -31,10 +31,10 @@ function evidenceFrom(analysis: ActiveAnalysis): EvidenceObject | null {
 
 function compactObservation(item: Observation) {
   return {
-    id: item.observationId,
+    id: compactText(item.observationId, 100),
     name: compactText(item.variableName, 70),
     value: item.value ?? compactText(item.textValue ?? "unavailable", 100),
-    unit: item.unit,
+    unit: item.unit ? compactText(item.unit, 30) : undefined,
     source: item.provenance.sourceId,
     observed_at: item.provenance.observedAt,
   };
@@ -144,10 +144,87 @@ export function createInspectEvidenceTool(
         ...(chainsWithObservations === 0 ? { no_data_is_not_no_danger: true as const } : {}),
       };
       if (JSON.stringify(output).length <= MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS) return output;
-      return {
+      const reduced = {
         ...output,
         observations: output.observations.slice(0, 1),
         limitations: output.limitations.slice(0, 1),
+        citations: output.citations.filter((citation, index, all) =>
+          all.findIndex((candidate) => candidate.hazard === citation.hazard) === index
+        ),
+      };
+      if (JSON.stringify(reduced).length <= MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS) return reduced;
+
+      const compact = {
+        ...reduced,
+        citations: reduced.citations.map((citation) => ({
+          hazard: citation.hazard,
+          source: citation.source,
+          observed_at: citation.observed_at,
+          url: citation.url,
+        })),
+        related_chains: reduced.related_chains?.map((chain) => ({
+          hazard: chain.hazard,
+          status: chain.status,
+          evidence_scope: chain.evidence_scope,
+          confidence: chain.confidence,
+          observation_count: chain.observation_count,
+          strongest_observation: chain.strongest_observation,
+        })),
+      };
+      if (JSON.stringify(compact).length <= MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS) return compact;
+
+      const minimal = {
+        status: compact.status,
+        analysis_id: compactText(compact.analysis_id, 120),
+        hazard: compact.hazard,
+        evidence_scope: compact.evidence_scope,
+        support: compact.support,
+        answer_order: compact.answer_order,
+        ...(compact.relationship ? { relationship: compact.relationship } : {}),
+        ...(compact.inference_guidance
+          ? { inference_guidance: compact.inference_guidance }
+          : {}),
+        sources: compact.sources.slice(0, 4),
+        observations: compact.observations.slice(0, 1),
+        citations: compact.citations.slice(0, 2),
+        limitations: compact.limitations
+          .slice(0, 1)
+          .map((item) => compactText(item, 100)),
+        ...(compact.related_chains && compact.related_chains.length > 0
+          ? {
+              related_chains: compact.related_chains.map((chain) => ({
+                hazard: chain.hazard,
+                status: chain.status,
+                evidence_scope: chain.evidence_scope,
+                confidence: chain.confidence,
+                observation_count: chain.observation_count,
+              })),
+            }
+          : {}),
+        ...(compact.no_data_is_not_no_danger
+          ? { no_data_is_not_no_danger: true as const }
+          : {}),
+      };
+      if (JSON.stringify(minimal).length <= MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS) return minimal;
+      return {
+        status: minimal.status,
+        hazard: minimal.hazard,
+        evidence_scope: minimal.evidence_scope,
+        support: minimal.support,
+        observations: minimal.observations.slice(0, 1),
+        citations: minimal.citations.slice(0, 1),
+        ...(minimal.related_chains
+          ? {
+              related_chains: minimal.related_chains.map((chain) => ({
+                hazard: chain.hazard,
+                status: chain.status,
+                observation_count: chain.observation_count,
+              })),
+            }
+          : {}),
+        ...(minimal.no_data_is_not_no_danger
+          ? { no_data_is_not_no_danger: true as const }
+          : {}),
       };
     },
   };
@@ -201,12 +278,34 @@ export function createStormClaimDiscussionTool(
         no_claim_decision: true,
       };
       if (JSON.stringify(output).length <= MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS) return output;
-      return {
+      const reduced = {
         ...output,
         supported_by_evidence: output.supported_by_evidence.slice(0, 1),
         property_specific_questions: output.property_specific_questions.slice(0, 2),
         documentation_checklist: output.documentation_checklist.slice(0, 2),
         official_guidance_urls: output.official_guidance_urls.slice(0, 1),
+      };
+      if (JSON.stringify(reduced).length <= MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS) return reduced;
+      return {
+        status: reduced.status,
+        ui_updated: reduced.ui_updated,
+        analysis_id: compactText(reduced.analysis_id, 120),
+        evidence_scope: reduced.evidence_scope,
+        assessment: compactText(reduced.assessment, 200),
+        confidence: reduced.confidence,
+        supported_by_evidence: reduced.supported_by_evidence
+          .slice(0, 1)
+          .map((item) => compactText(item, 100)),
+        property_specific_questions: reduced.property_specific_questions
+          .slice(0, 1)
+          .map((item) => compactText(item, 100)),
+        documentation_checklist: reduced.documentation_checklist
+          .slice(0, 1)
+          .map((item) => compactText(item, 100)),
+        official_guidance_urls: reduced.official_guidance_urls
+          .filter((url) => url.length <= 500)
+          .slice(0, 1),
+        no_claim_decision: true,
       };
     },
   };

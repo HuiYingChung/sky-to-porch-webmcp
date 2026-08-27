@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { EvidenceObject } from "@/contracts/evidence";
 import type { ActiveAnalysis } from "@/lib/analysis/types";
 import { buildAgentCoordinateSelection } from "@/lib/location/selection";
 import {
@@ -86,6 +87,12 @@ function analysis(hazardId: "wind_storm" | "flood_storm", concern: "home" | "tra
   };
 }
 
+function evidenceFor(value: ActiveAnalysis): EvidenceObject {
+  const result = value.outcome.result as { evidence?: EvidenceObject };
+  if (!result.evidence) throw new Error("test analysis must include evidence");
+  return result.evidence;
+}
+
 describe("contextual WebMCP tools", () => {
   const options = { signal: new AbortController().signal } as WebMCP.ToolExecuteCallbackOptions;
 
@@ -132,6 +139,77 @@ describe("contextual WebMCP tools", () => {
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
   });
 
+  it("keeps production-sized related citations inside the contextual output limit", async () => {
+    const wind = analysis("wind_storm", "home");
+    const flood = analysis("flood_storm", "home");
+    const windEvidence = evidenceFor(wind);
+    const floodEvidence = evidenceFor(flood);
+
+    windEvidence.observations[0].provenance.sourceUrl =
+      "https://www.ncei.noaa.gov/oa/global-historical-climatology-network/hourly/access/by-year/2024/psv/GHCNh_USW00000188_2024.psv";
+    windEvidence.observations[0].provenance.product =
+      "NOAA NCEI GHCNh Version 1 station-by-year PSV";
+    windEvidence.observations.push({
+      ...windEvidence.observations[0],
+      observationId: "obs-wind-report",
+      variableName: "Official regional wind-storm event context",
+      provenance: {
+        ...windEvidence.observations[0].provenance,
+        sourceId: "nws_tropical_cyclone_report",
+        sourceUrl:
+          "https://www.weather.gov/media/hgx/TropicalEventSummary/PSHHGX_2024AL02_Beryl_Summary.pdf",
+        product: "NWS Houston/Galveston Post-Tropical Cyclone Report for Hurricane Beryl",
+      },
+    });
+    windEvidence.limitations = [{
+      limitationId: "lim-wind-property",
+      source: "noaa_ncei_global_hourly",
+      description:
+        "The selected in-area station is an outdoor point observation. It does not establish roof-level wind, wind at an address, property damage, or causation.",
+      required: true,
+    }];
+
+    floodEvidence.observations[0].provenance.sourceUrl =
+      "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=IMERG_Precipitation_Rate&SRS=EPSG%3A4326&STYLES=&WIDTH=512&HEIGHT=512&TIME=2024-07-08&BBOX=-95.62849777141066%2C29.535822206252245%2C-95.11110222858933%2C29.984977793747756";
+    floodEvidence.observations[0].provenance.product =
+      "NASA GIBS best-service layer IMERG_Precipitation_Rate; GetMap does not expose a numeric rainfall value";
+    floodEvidence.limitations = [{
+      limitationId: "lim-flood-visual",
+      source: "nasa_gibs_imerg",
+      description:
+        "GIBS imagery is visualization evidence only. Numeric rainfall, surface-water extent, route status, and property impact are not inferred from image colors.",
+      required: true,
+    }];
+
+    const output = await createInspectEvidenceTool(wind, [flood]).execute({}, options);
+    expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
+    expect(output).toMatchObject({
+      relationship: "related_evidence_for_assessment",
+      observations: [{ name: "Peak wind gust", value: 39.6 }],
+      related_chains: [{ hazard: "flood_storm" }],
+    });
+    expect((output as { citations: Array<{ hazard: string }> }).citations.map(
+      (citation) => citation.hazard
+    )).toEqual(["wind_storm", "flood_storm"]);
+  });
+
+  it("keeps inspection bounded when internal identifiers are unexpectedly long", async () => {
+    const wind = analysis("wind_storm", "home");
+    wind.analysisId = `analysis-${"a".repeat(5_000)}`;
+    const windEvidence = evidenceFor(wind);
+    windEvidence.observations[0].observationId = `obs-${"b".repeat(5_000)}`;
+    windEvidence.observations[0].unit = `unit-${"c".repeat(5_000)}`;
+    windEvidence.observations[0].provenance.sourceUrl =
+      `https://example.test/${"d".repeat(5_000)}`;
+
+    const output = await createInspectEvidenceTool(wind).execute({}, options);
+    expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
+    expect(output).toMatchObject({
+      status: "ok",
+      observations: [{ name: "Peak wind gust", value: 39.6 }],
+    });
+  });
+
   it("registers claim preparation only for a Home + Wind result and only updates local UI", async () => {
     const open = vi.fn();
     const windHome = analysis("wind_storm", "home");
@@ -150,5 +228,28 @@ describe("contextual WebMCP tools", () => {
       no_claim_decision: true,
     });
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
+  });
+
+  it("keeps the claim discussion bounded when source fields are unexpectedly long", async () => {
+    const wind = analysis("wind_storm", "home");
+    wind.analysisId = `analysis-${"a".repeat(5_000)}`;
+    const discussion = claimDiscussionForAnalysis(wind);
+    if (!discussion) throw new Error("test analysis must include a claim discussion");
+    discussion.assessmentSummary = "assessment ".repeat(1_000);
+    discussion.supportedStatements = ["supported ".repeat(1_000)];
+    discussion.notEstablished = ["question ".repeat(1_000)];
+    discussion.documentationChecklist = ["document ".repeat(1_000)];
+    discussion.officialGuidance = [{
+      label: "Long fixture URL",
+      url: `https://example.test/${"z".repeat(5_000)}`,
+    }];
+
+    const output = await createStormClaimDiscussionTool(wind, vi.fn())!.execute({}, options);
+    expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
+    expect(output).toMatchObject({
+      status: "ready_for_discussion",
+      ui_updated: true,
+      no_claim_decision: true,
+    });
   });
 });
