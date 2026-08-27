@@ -39,10 +39,10 @@ const MOCK_SELECTION: PlaceSelection = {
 };
 
 describe("emptyDraft", () => {
-  it("returns all null / empty fields", () => {
+  it("returns a neutral general lens with empty hazard and question", () => {
     const d = emptyDraft();
     expect(d.hazardId).toBeNull();
-    expect(d.concern).toBeNull();
+    expect(d.concern).toBe("general");
     expect(d.optionalQuestion).toBe("");
   });
 
@@ -86,7 +86,7 @@ describe("queryDraftReducer", () => {
   it("SET_CONCERN ignores unknown concern", () => {
     // @ts-expect-error -- intentional invalid value for test
     const next = queryDraftReducer(base, { type: "SET_CONCERN", value: "work" });
-    expect(next.concern).toBeNull();
+    expect(next.concern).toBe("general");
   });
 
   it("SET_OPTIONAL_QUESTION updates optionalQuestion", () => {
@@ -131,8 +131,13 @@ describe("isDraftSubmittable", () => {
   });
 
   it("returns false when concern is null", () => {
-    const d = { ...emptyDraft(), hazardId: "fire_smoke" as const };
+    const d = { ...emptyDraft(), hazardId: "fire_smoke" as const, concern: null };
     expect(isDraftSubmittable(d, MOCK_SELECTION)).toBe(false);
+  });
+
+  it("returns true with the default general lens", () => {
+    const d = { ...emptyDraft(), hazardId: "fire_smoke" as const };
+    expect(isDraftSubmittable(d, MOCK_SELECTION)).toBe(true);
   });
 
   it("returns true when placeSelection is set and hazard and concern are filled", () => {

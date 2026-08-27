@@ -17,16 +17,36 @@ function analysis(hazardId: "wind_storm" | "flood_storm", concern: "home" | "tra
       intentId: "intent-test",
       evidenceState: "observations_returned" as const,
       dataMode: "historical" as const,
-      observations: [],
+      observations: [{
+        observationId: `obs-${hazardId}`,
+        variableName: hazardId === "wind_storm" ? "Peak wind gust" : "Gage height",
+        value: hazardId === "wind_storm" ? 39.6 : 4.2,
+        unit: hazardId === "wind_storm" ? "m/s" : "m",
+        dataMode: "historical" as const,
+        provenance: {
+          sourceId: hazardId === "wind_storm"
+            ? "noaa_ncei_global_hourly" as const
+            : "usgs_instantaneous_values" as const,
+          sourceUrl: `https://example.test/${hazardId}`,
+          retrievedAt: "2026-08-26T11:00:00.000Z",
+          observedAt: "2024-07-08T14:35:00.000Z",
+          product: hazardId === "wind_storm" ? "NOAA GHCNh" : "USGS IV",
+          payloadHash: "a".repeat(64),
+        },
+      }],
       derivedMetrics: [],
       missionAttributions: [],
       freshness: {
         status: "unknown" as const,
-        classificationBasis: "no_observation_time" as const,
+        classificationBasis: "age_thresholds" as const,
+        mostRecentObservationAt: "2024-07-08T14:35:00.000Z",
+        ageSeconds: 67200000,
+        currentAgeLimitSeconds: 86400,
+        recentAgeLimitSeconds: 172800,
         evaluatedAt: "2026-08-26T12:00:00.000Z",
         note: "test",
       },
-      confidence: { level: "insufficient" as const, rationale: "test" },
+      confidence: { level: "moderate" as const, rationale: "test" },
       limitations: [],
       explanations: [],
       assembledAt: "2026-08-26T12:00:00.000Z",
@@ -37,6 +57,8 @@ function analysis(hazardId: "wind_storm" | "flood_storm", concern: "home" | "tra
         ...commonResult,
         claimDiscussion: {
           title: "Storm claim discussion preparation",
+          assessmentSummary: "Official regional wind evidence makes wind contribution plausible.",
+          assessmentConfidence: "moderate" as const,
           supportedStatements: ["Regional wind context is present."],
           notEstablished: ["Property damage is not established."],
           documentationChecklist: ["Photograph observed damage."],
@@ -70,8 +92,8 @@ describe("contextual WebMCP tools", () => {
   it("reports non-overlapping wind and water scopes", async () => {
     const wind = await createInspectEvidenceTool(analysis("wind_storm", "home")).execute({}, options);
     const flood = await createInspectEvidenceTool(analysis("flood_storm", "travel")).execute({}, options);
-    expect(wind).toMatchObject({ evidence_scope: "wind_only_no_rain_flood_or_water_gages" });
-    expect(flood).toMatchObject({ evidence_scope: "water_only_no_wind_damage_causation" });
+    expect(wind).toMatchObject({ evidence_scope: "regional_wind_observations" });
+    expect(flood).toMatchObject({ evidence_scope: "regional_water_and_rain_observations" });
   });
 
   it("inspects related context as separate non-causal chains", async () => {
@@ -81,12 +103,30 @@ describe("contextual WebMCP tools", () => {
     ).execute({}, options);
     expect(output).toMatchObject({
       hazard: "wind_storm",
-      relationship: "co_occurring_context_not_causation",
+      relationship: "related_evidence_for_assessment",
+      inference_guidance: "state_strongest_supported_inference_and_confidence",
+      answer_order: [
+        "strongest_supported_assessment",
+        "observation_values_times_and_official_citations",
+        "direct_observation_then_labelled_inference",
+        "confidence_and_evidence_that_would_change_it",
+      ],
+      support: {
+        level: "official_observations_in_every_chain",
+        chains_with_observations: 2,
+      },
       related_chains: [
         {
           hazard: "flood_storm",
-          evidence_scope: "water_only_no_wind_damage_causation",
+          evidence_scope: "regional_water_and_rain_observations",
+          strongest_observation: { name: "Gage height", value: 4.2 },
         },
+      ],
+    });
+    expect(output).toMatchObject({
+      citations: [
+        { hazard: "wind_storm", source: "noaa_ncei_global_hourly", product: "NOAA GHCNh" },
+        { hazard: "flood_storm", source: "usgs_instantaneous_values", product: "USGS IV" },
       ],
     });
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
@@ -104,7 +144,9 @@ describe("contextual WebMCP tools", () => {
     expect(output).toMatchObject({
       status: "ready_for_discussion",
       ui_updated: true,
-      evidence_scope: "wind_only_no_rain_flood_or_water_gages",
+      evidence_scope: "regional_wind_observations",
+      assessment: "Official regional wind evidence makes wind contribution plausible.",
+      confidence: "moderate",
       no_claim_decision: true,
     });
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);

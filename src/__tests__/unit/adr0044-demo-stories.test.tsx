@@ -13,6 +13,7 @@ import { QueryProvider, useQueryDraft } from "@/components/query/query-provider"
 import { GuidedQuery } from "@/components/query/guided-query";
 import {
   DEMO_STORIES,
+  WEBMCP_DEMO_SCENARIOS,
   demoStoryPlace,
   resolveDemoStoryDates,
 } from "@/data/places/demo-stories";
@@ -24,6 +25,23 @@ import { latestCompletedUtcDate } from "@/lib/ui/date-input";
 // ---------------------------------------------------------------------------
 
 describe("ADR-0044 demo-story catalog", () => {
+  it("provides three evidence-forward historical Agent prompts with concrete concerns", () => {
+    expect(WEBMCP_DEMO_SCENARIOS).toHaveLength(3);
+    expect(WEBMCP_DEMO_SCENARIOS.map((scenario) => scenario.id)).toEqual([
+      "houston-beryl-roof",
+      "los-angeles-smoke-health",
+      "tucson-heat-pets",
+    ]);
+    expect(WEBMCP_DEMO_SCENARIOS.map((scenario) => scenario.analysisInput.concern))
+      .toEqual(["home", "health", "pets"]);
+    for (const scenario of WEBMCP_DEMO_SCENARIOS) {
+      expect(scenario.prompt).toMatch(/strongest/i);
+      expect(scenario.prompt).toMatch(/confidence level/i);
+      expect(scenario.prompt).not.toMatch(/do not infer/i);
+      expect(scenario.analysisInput.start_date).toBe(scenario.analysisInput.end_date);
+    }
+  });
+
   it("covers six stories over six distinct places and all seven hazard lines", () => {
     expect(DEMO_STORIES).toHaveLength(6);
     const placeIds = DEMO_STORIES.map((story) => story.placeId);
@@ -170,7 +188,7 @@ afterEach(() => {
 });
 
 describe("ADR-0044 demo gallery flow", () => {
-  it("one tap pre-fills place, radius, hazard, and dates — only concern stays open", async () => {
+  it("one tap pre-fills place, radius, hazard, and dates with an optional general lens", async () => {
     renderGuidedQuery();
     click(byTestId("t-gq-place-demo-houston"));
     await flush();
@@ -182,9 +200,8 @@ describe("ADR-0044 demo gallery flow", () => {
     expect(probe.getAttribute("data-start-ts")).toBe("2024-07-08T00:00:00Z");
     expect(probe.getAttribute("data-end-ts")).toBe("2024-07-08T23:59:59Z");
 
-    // The one remaining decision is the concern; submit says so.
-    expect((byTestId("find-evidence-btn") as HTMLButtonElement).disabled).toBe(true);
-    expect(byTestId("submit-hint").textContent).toMatch(/concern/i);
+    expect((byTestId("concern-select") as HTMLSelectElement).value).toBe("general");
+    expect((byTestId("find-evidence-btn") as HTMLButtonElement).disabled).toBe(false);
 
     setSelectValue(byTestId("concern-select") as HTMLSelectElement, "home");
     await flush();

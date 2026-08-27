@@ -42,8 +42,19 @@ function buildClaimDiscussion(result: StormQueryResult): StormClaimDiscussion {
       ? [`The selected in-area GHCNh station recorded a peak wind speed of ${speed.value} ${speed.unit} on the selected UTC date.`]
       : []),
   ];
+  const assessmentSummary = event && gust?.value !== undefined
+    ? "The official regional damage report and the selected in-area station gust make wind contribution a credible explanation worth documenting for this roof concern."
+    : event
+      ? "The official regional damage report makes wind contribution a plausible explanation worth comparing with property-specific evidence."
+      : gust?.value !== undefined || speed?.value !== undefined
+        ? "The selected in-area wind observation makes wind contribution a plausible explanation worth comparing with property-specific evidence."
+        : "No positive regional wind observation was returned for this assessment.";
   return {
     title: "Storm claim discussion preparation",
+    assessmentSummary,
+    assessmentConfidence: event && (gust?.value !== undefined || speed?.value !== undefined)
+      ? "moderate"
+      : evidence?.confidence.level ?? "insufficient",
     supportedStatements: supportedStatements.length > 0
       ? supportedStatements
       : ["No property-relevant wind observation was returned. Missing evidence is not evidence that damaging wind did not occur."],

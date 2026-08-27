@@ -95,10 +95,10 @@ Lead with supported information. Group decision-relevant uncertainty once instea
 When validated evidence exists, explain both the observation and a bounded, everyday-language rationale for how that kind of condition may affect the selected concern. A missing outcome-specific source does not make the whole answer insufficient: answer the supported context, state the outcome gap once, and recommend an eligible official checker.
 When a registered official checker can resolve a gap, select its verificationSourceId and explain what the user should check.
 General low-risk next-check guidance is allowed. Do not claim that the evidence diagnoses a condition, prescribes treatment, decides evacuation, guarantees safety, or establishes property-level certainty. A clearly negated limitation such as "these records cannot diagnose a condition" is allowed.
-You may describe temporal or spatial consistency as a possibility, but never as proof of damage causation.
+You may make a bounded evidence-supported inference about plausibility when timing, geography, severity, and observation scale are explicit. Label inference separately from direct observation and state its confidence.
 For questions about which areas may flood, distinguish validated precipitation or gage evidence from actual flood extent; recommend an eligible official flood or water checker when extent is not available.
 For travel questions, flooding or high water may plausibly disrupt traffic or close roads. Explain that possibility when it is relevant. Do not claim that congestion, an incident, or a closure actually occurred unless a validated traffic observation says so, and do not claim weather caused a specific delay. Select an eligible official traffic checker for the actual traffic question.
-For questions about possible past storm damage, explain temporal and geographic consistency only from validated records and recommend the eligible historical storm-events checker; do not attribute causation.
+For questions about possible past storm damage, assess how strongly the validated records support wind or water contribution as a plausible explanation. Distinguish the regional inference from property-specific inspection evidence and recommend the eligible historical storm-events checker.
 Select only IDs present in the supplied context.
 This task is called only when usable validated evidence exists. Set status to "selected", set reasonCode to null, and select at least one supplied observationId or metricId. An evidenceState of "no_observation" means the listed observation records document completed source lookups with no matching event; those records are still usable and must be selected rather than marked insufficient.
 Use only the exact observationIds, metricIds, required limitationIds, and verification source IDs supplied in the context. Never create or alter an ID.
@@ -322,7 +322,7 @@ const POWER_OUTAGE_LIMITATION =
   "This evidence cannot confirm whether a power outage is occurring; an official utility outage map or utility status source is required.";
 
 const TRAFFIC_OBSERVATION_LIMITATION =
-  "The validated weather and water records can show conditions that may disrupt travel, but they do not contain observed traffic speeds, incidents, or closures and cannot establish that weather caused a specific delay.";
+  "The validated weather and water records support an assessment of conditions that could disrupt travel. Match them with observed traffic speeds, incidents, or closures to assess a specific delay more strongly.";
 
 interface PlainSummaryValidationOptions {
   optionalQuestion?: string;
@@ -363,6 +363,7 @@ export function validatePlainSummaryText(
 }
 
 const PLAIN_CONCERN_PHRASES: Record<ConcernType, string> = {
+  general: "the question you asked",
   home: "conditions around a home",
   health: "health planning",
   pets: "pets",
@@ -372,17 +373,21 @@ const PLAIN_CONCERN_PHRASES: Record<ConcernType, string> = {
 };
 
 const CONCERN_RATIONALES: Record<ConcernType, { heading: string; body: string }> = {
+  general: {
+    heading: "What this evidence can support",
+    body: "These official records show what was observed around the selected place and time and support evidence-based regional interpretation.",
+  },
   home: {
     heading: "Why this matters for your home",
-    body: "These records can describe regional hazard context around a home, but they cannot establish damage, safety, or cause at one property.",
+    body: "These records show the timing and intensity of regional hazards around a home and can support whether a property concern is environmentally plausible. A property inspection supplies the direct damage evidence.",
   },
   health: {
     heading: "Why this matters for health",
-    body: "These records can support regional health planning, but they cannot measure one person's exposure or provide a diagnosis.",
+    body: "These records show the regional outdoor conditions relevant to a health concern and can support whether an environmental explanation is worth considering. Individual exposure and diagnosis need separate evidence.",
   },
   pets: {
     heading: "Why this matters for pets",
-    body: "These records can describe regional outdoor conditions relevant to pet planning, but they do not assess an individual animal.",
+    body: "These records show the regional outdoor conditions relevant to a pet concern and can support whether environmental exposure is worth considering. An individual animal still needs its own assessment.",
   },
   travel: {
     heading: "Why this matters for travel",
@@ -390,7 +395,7 @@ const CONCERN_RATIONALES: Record<ConcernType, { heading: string; body: string }>
   },
   power_internet: {
     heading: "Why this matters for power & internet",
-    body: "These records can show regional hazard context that may matter to services, but they cannot confirm a utility outage or internet-service status.",
+    body: "These records show regional hazards that may affect services and can support an outage concern. Utility records remain the direct evidence of service status.",
   },
   community: {
     heading: "Why this matters for your community",
@@ -408,6 +413,8 @@ const CONCERN_RATIONALES: Record<ConcernType, { heading: string; body: string }>
  * the validated observation values interpolated by the callers below.
  */
 const HEAT_CONCERN_IMPLICATIONS: Record<ConcernType, string> = {
+  general:
+    "These readings support a regional outdoor-heat assessment for the selected place and date. Match their timing and severity with person-, animal-, building-, or route-specific evidence when evaluating a particular concern.",
   travel:
     "For travel plans, daytime outdoor activity, long walks, and parked vehicles can carry real heat-stress risk; early-morning or evening scheduling is the usual guidance.",
   home:
@@ -540,6 +547,8 @@ function heatObservedBody(interpretation: HeatEvidenceInterpretation): string {
  * beyond the validated observation values interpolated by the callers below.
  */
 const AIR_CONCERN_IMPLICATIONS: Record<ConcernType, string> = {
+  general:
+    "These readings support a regional outdoor-air assessment for the selected place and date. Match their timing and severity with personal exposure, indoor measurements, and source records when evaluating a particular concern.",
   travel:
     "For travel plans, outdoor air at this level can matter for long outdoor time in the area; the official checker listed with this answer shows current conditions before you go.",
   home:
@@ -665,7 +674,7 @@ function earthDeterministicSummary(
 function earthObservedBody(interpretation: EarthEvidenceInterpretation): string {
   return (
     `The official U.S. Geological Survey records for the selected day and area list ${earthEventCounts(interpretation)}. ` +
-    "A satellite sulfur-dioxide visualization for the same day is shown separately; co-occurrence never proves an eruption cause or a link between records."
+    "A satellite sulfur-dioxide visualization for the same day is shown separately so its timing and geography can be compared with the event records before drawing a supported inference."
   );
 }
 
@@ -1460,6 +1469,7 @@ function formatObservation(observation: Observation): string {
 }
 
 const CONCERN_LABELS: Record<ConcernType, string> = {
+  general: "the selected place and time",
   home: "home conditions",
   health: "health planning",
   pets: "pet safety planning",

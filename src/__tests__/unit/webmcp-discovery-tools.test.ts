@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { HAZARD_IDS } from "@/contracts/common";
+import { CONCERN_TYPES, HAZARD_IDS } from "@/contracts/common";
+import { WEBMCP_DEMO_SCENARIOS } from "@/data/places/demo-stories";
 import { SOURCE_COVERAGE_PROFILES } from "@/data/source-coverage";
 import {
   createGetEnvironmentalSourceCoverageTool,
   createListEnvironmentalHazardsTool,
   GET_COVERAGE_INPUT_SCHEMA,
   GET_COVERAGE_TOOL_NAME,
+  LIST_HAZARDS_INPUT_SCHEMA,
   LIST_HAZARDS_TOOL_NAME,
   MAX_DISCOVERY_TOOL_OUTPUT_CHARACTERS,
 } from "@/lib/webmcp/discovery-tools";
@@ -17,6 +19,8 @@ describe("WebMCP discovery tools", () => {
     const tool = createListEnvironmentalHazardsTool();
     const output = await tool.execute({}, options) as {
       hazards: Array<{ hazard: string; default_related_hazards: string[] }>;
+      concerns: string[];
+      demo_scenarios: Array<{ id: string; title: string }>;
     };
 
     expect(tool.name).toBe(LIST_HAZARDS_TOOL_NAME);
@@ -25,11 +29,13 @@ describe("WebMCP discovery tools", () => {
     expect(output).toMatchObject({
       status: "hazard_catalog",
       default_analysis_scope: "related_context",
-      relationship: "co_occurring_context_not_causation",
+      relationship: "related_evidence_for_assessment",
       ui_updated: false,
-      no_data_is_not_no_danger: true,
     });
     expect(output.hazards.map((item) => item.hazard)).toEqual(HAZARD_IDS);
+    expect(output.concerns).toEqual(CONCERN_TYPES);
+    expect(output.concerns[0]).toBe("general");
+    expect(output.demo_scenarios).toHaveLength(3);
     expect(output.hazards.find((item) => item.hazard === "wind_storm"))
       .toMatchObject({ default_related_hazards: ["flood_storm"] });
     expect(output.hazards.find((item) => item.hazard === "earth_volcanoes"))
@@ -39,7 +45,33 @@ describe("WebMCP discovery tools", () => {
     );
   });
 
-  it("rejects input for the no-input hazard catalog", async () => {
+  it("returns one selected demo through the existing discovery tool", async () => {
+    const tool = createListEnvironmentalHazardsTool();
+    for (const scenario of WEBMCP_DEMO_SCENARIOS) {
+      const output = await tool.execute({ demo_id: scenario.id }, options);
+      expect(output).toMatchObject({
+        status: "demo_scenario",
+        scenario: {
+          id: scenario.id,
+          prompt: scenario.prompt,
+          analysis_input: {
+            hazard: scenario.analysisInput.hazard,
+            concern: scenario.analysisInput.concern,
+            analysis_scope: "related_context",
+          },
+        },
+        ui_updated: false,
+      });
+      expect(JSON.stringify(output).length).toBeLessThanOrEqual(
+        MAX_DISCOVERY_TOOL_OUTPUT_CHARACTERS
+      );
+    }
+    for (const property of Object.values(LIST_HAZARDS_INPUT_SCHEMA.properties)) {
+      expect(property.description.length).toBeLessThanOrEqual(150);
+    }
+  });
+
+  it("rejects unexpected hazard-catalog input", async () => {
     const output = await createListEnvironmentalHazardsTool().execute(
       { hazard: "fire_smoke" },
       options
@@ -71,7 +103,6 @@ describe("WebMCP discovery tools", () => {
         coverage_scope: "pipeline_eligibility_not_observation",
         live_sources_queried: false,
         actual_observation_not_established: true,
-        no_data_is_not_no_danger: true,
       });
       expect(output.sources.map((item) => item.source_id)).toEqual(
         expected.map((profile) => profile.sourceId)

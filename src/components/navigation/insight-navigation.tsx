@@ -169,12 +169,11 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
               Related context also checked: {activeAnalysis.request.evidenceBundle.includedHazardIds
                 .filter((hazardId) => hazardId !== activeAnalysis.request.hazardId)
                 .map((hazardId) => HAZARD_LABELS[hazardId])
-                .join(", ")}. Each chain remains separate; co-occurrence is not causation.
+                .join(", ")}. Compare their timing, strength, and confidence to see how much they reinforce the concern.
             </p>
           )}
           <p style={{ margin: "3px 0 0" }}>
-            The map and Insight now share this result. Review the evidence and limitations
-            before relying on it.
+            The map and Insight now share this result. The strongest evidence and citations are ready to review.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", marginTop: "8px" }}>
             <button
@@ -605,8 +604,8 @@ function RelatedEvidenceChains({
               Related {HAZARD_LABELS[outcome.hazardId]} evidence
             </h3>
             <p style={{ margin: "0 0 12px", color: "var(--text-secondary)", fontSize: "14px" }}>
-              Collected automatically under related-context scope. This remains a separate evidence chain;
-              co-occurrence does not establish that one hazard caused another.
+              Collected automatically for the same place and time. Compare its direct observations,
+              confidence, and citations with the primary result to judge how strongly it reinforces the concern.
             </p>
             <ResultFailureGapBoundary result={outcome.result} tab={tab}>
               {outcome.hazardId === "fire_smoke" ? (

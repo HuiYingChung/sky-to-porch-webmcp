@@ -66,6 +66,7 @@ export type DataMode = (typeof DATA_MODES)[number];
 // ---------------------------------------------------------------------------
 
 export const CONCERN_TYPES = [
+  "general",
   "home",
   "health",
   "pets",

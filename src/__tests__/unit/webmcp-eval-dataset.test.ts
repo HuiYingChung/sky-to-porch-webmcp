@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { HAZARD_IDS } from "@/contracts/common";
 import {
   ANALYZE_HAZARD_INPUT_SCHEMA,
   ANALYZE_HAZARD_TOOL_NAME,
@@ -8,8 +9,15 @@ import {
 import {
   GET_COVERAGE_INPUT_SCHEMA,
   GET_COVERAGE_TOOL_NAME,
+  LIST_HAZARDS_INPUT_SCHEMA,
   LIST_HAZARDS_TOOL_NAME,
 } from "@/lib/webmcp/discovery-tools";
+import {
+  INSPECT_EVIDENCE_INPUT_SCHEMA,
+  INSPECT_EVIDENCE_TOOL_NAME,
+  PREPARE_STORM_CLAIM_INPUT_SCHEMA,
+  PREPARE_STORM_CLAIM_TOOL_NAME,
+} from "@/lib/webmcp/context-tools";
 
 interface EvalCall {
   functionName: string;
@@ -18,6 +26,7 @@ interface EvalCall {
 
 interface EvalCase {
   id: string;
+  availableAfter?: "completed_environmental_analysis" | "completed_home_wind_analysis";
   messages: Array<{ role: "user"; content: string }>;
   expectedCall: EvalCall[];
 }
@@ -38,8 +47,10 @@ describe("WebMCP tool-selection eval dataset", () => {
   it("keeps expected calls aligned with the registered tool contract", () => {
     const schemas = {
       [ANALYZE_HAZARD_TOOL_NAME]: ANALYZE_HAZARD_INPUT_SCHEMA.properties,
-      [LIST_HAZARDS_TOOL_NAME]: {},
+      [LIST_HAZARDS_TOOL_NAME]: LIST_HAZARDS_INPUT_SCHEMA.properties,
       [GET_COVERAGE_TOOL_NAME]: GET_COVERAGE_INPUT_SCHEMA.properties,
+      [INSPECT_EVIDENCE_TOOL_NAME]: INSPECT_EVIDENCE_INPUT_SCHEMA.properties,
+      [PREPARE_STORM_CLAIM_TOOL_NAME]: PREPARE_STORM_CLAIM_INPUT_SCHEMA.properties,
     };
     for (const item of dataset) {
       expect(item.messages).toHaveLength(1);
@@ -61,6 +72,32 @@ describe("WebMCP tool-selection eval dataset", () => {
     }
   });
 
+  it("gives every registered baseline and contextual tool a natural trigger case", () => {
+    const calledTools = new Set(dataset.flatMap((item) =>
+      item.expectedCall.map((call) => call.functionName)
+    ));
+    expect(calledTools).toEqual(new Set([
+      ANALYZE_HAZARD_TOOL_NAME,
+      LIST_HAZARDS_TOOL_NAME,
+      GET_COVERAGE_TOOL_NAME,
+      INSPECT_EVIDENCE_TOOL_NAME,
+      PREPARE_STORM_CLAIM_TOOL_NAME,
+    ]));
+    expect(dataset.find((item) => item.id === "inspect-after-custom-analysis")?.availableAfter)
+      .toBe("completed_environmental_analysis");
+    expect(dataset.find((item) => item.id === "prepare-claim-after-home-wind")?.availableAfter)
+      .toBe("completed_home_wind_analysis");
+  });
+
+  it("covers every hazard with non-demo questions through the shared analysis tool", () => {
+    const analyzedHazards = new Set(dataset.flatMap((item) =>
+      item.expectedCall
+        .filter((call) => call.functionName === ANALYZE_HAZARD_TOOL_NAME)
+        .map((call) => call.arguments.hazard)
+    ));
+    expect(analyzedHazards).toEqual(new Set(HAZARD_IDS));
+  });
+
   it("uses discovery only for capability questions and keeps concrete asks direct", () => {
     expect(dataset.find((item) => item.id === "capability-discovery")?.expectedCall[0])
       .toMatchObject({ functionName: LIST_HAZARDS_TOOL_NAME, arguments: {} });
@@ -73,10 +110,33 @@ describe("WebMCP tool-selection eval dataset", () => {
       "direct-fire-place",
       "implicit-heat-pets",
       "beryl-broad-home-damage-auto-bundle",
+      "los-angeles-health-demo",
+      "tucson-pets-demo",
+      "historical-wind-no-concern",
     ]) {
       expect(dataset.find((item) => item.id === id)?.expectedCall[0]?.functionName)
         .toBe(ANALYZE_HAZARD_TOOL_NAME);
     }
+  });
+
+  it("lets narrow historical evidence asks proceed without concern and broad goals ask first", () => {
+    const narrow = dataset.find((item) => item.id === "historical-wind-no-concern");
+    const broad = dataset.find((item) => item.id === "broad-goal-ask-clarification");
+    expect(narrow?.expectedCall[0]).toMatchObject({
+      functionName: ANALYZE_HAZARD_TOOL_NAME,
+      arguments: { place: "Houston", hazard: "wind_storm" },
+    });
+    expect(narrow?.expectedCall[0].arguments).not.toHaveProperty("concern");
+    expect(broad?.expectedCall).toEqual([]);
+  });
+
+  it("selects a curated demo through the existing discovery tool before analysis", () => {
+    const selected = dataset.find((item) => item.id === "selected-tucson-demo");
+    expect(selected?.expectedCall.map((call) => call.functionName)).toEqual([
+      LIST_HAZARDS_TOOL_NAME,
+      ANALYZE_HAZARD_TOOL_NAME,
+    ]);
+    expect(selected?.expectedCall[0].arguments).toEqual({ demo_id: "tucson-heat-pets" });
   });
 
   it("uses single scope only for explicit asks and defaults broad questions to related context", () => {

@@ -8,6 +8,7 @@ import {
   coverageProfileRegistryEntry,
   coverageProfilesForHazard,
 } from "@/data/source-coverage";
+import { WEBMCP_DEMO_SCENARIOS } from "@/data/places/demo-stories";
 import { DEFAULT_RELATED_HAZARDS } from "@/lib/webmcp/analyze-tool";
 
 export const LIST_HAZARDS_TOOL_NAME = "list_environmental_hazards";
@@ -15,6 +16,19 @@ export const GET_COVERAGE_TOOL_NAME = "get_environmental_source_coverage";
 export const MAX_DISCOVERY_TOOL_OUTPUT_CHARACTERS = 1_500;
 
 const SOURCE_IDS = [...new Set(SOURCE_COVERAGE_PROFILES.map((profile) => profile.sourceId))];
+const DEMO_SCENARIO_IDS = WEBMCP_DEMO_SCENARIOS.map((scenario) => scenario.id);
+
+export const LIST_HAZARDS_INPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    demo_id: {
+      type: "string",
+      enum: DEMO_SCENARIO_IDS,
+      description: "Optional curated historical demo ID. Omit it to list supported hazards and the compact demo index.",
+    },
+  },
+} as const;
 
 export const GET_COVERAGE_INPUT_SCHEMA = {
   type: "object",
@@ -44,7 +58,6 @@ function invalidInput(message: string) {
     status: "invalid_input",
     message,
     ui_updated: false,
-    no_data_is_not_no_danger: true,
   } as const;
 }
 
@@ -64,7 +77,6 @@ function coverageSummary(hazard: HazardId, profiles: SourceCoverageProfile[]) {
     live_sources_queried: false,
     actual_observation_not_established: true,
     next_step: "Use analyze_environmental_hazard for actual place/time evidence.",
-    no_data_is_not_no_danger: true,
   } as const;
 }
 
@@ -93,7 +105,6 @@ function coverageDetail(hazard: HazardId, profile: SourceCoverageProfile) {
     coverage_scope: "pipeline_eligibility_not_observation",
     live_sources_queried: false,
     actual_observation_not_established: true,
-    no_data_is_not_no_danger: true,
   } as const;
 }
 
@@ -102,16 +113,36 @@ export function createListEnvironmentalHazardsTool(): WebMCP.ModelContextTool {
     name: LIST_HAZARDS_TOOL_NAME,
     title: "List environmental hazards",
     description:
-      "List Sky to Porch hazard IDs, user concerns, and default related-context companions. Use only when the person asks what the site supports or the hazard is genuinely ambiguous. For a concrete place-and-hazard question, call analyze_environmental_hazard directly.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-    },
+      "List supported hazards and a compact index of curated historical demos, or return one demo prompt by demo_id. Use only for capability questions, genuine hazard ambiguity, or when the person asks to choose a demo. Concrete place-and-hazard questions go directly to analyze_environmental_hazard.",
+    inputSchema: LIST_HAZARDS_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute: async (input) => {
-      if (Object.keys(input).length > 0) {
-        return invalidInput("This tool takes no input.");
+      const unexpected = Object.keys(input).find((key) => key !== "demo_id");
+      if (unexpected) {
+        return invalidInput(`Unexpected input field: ${unexpected}.`);
+      }
+      if (input.demo_id !== undefined) {
+        if (typeof input.demo_id !== "string") {
+          return invalidInput("demo_id must be a curated demo ID.");
+        }
+        const scenario = WEBMCP_DEMO_SCENARIOS.find((item) => item.id === input.demo_id);
+        if (!scenario) {
+          return invalidInput(`demo_id must be one of: ${DEMO_SCENARIO_IDS.join(", ")}.`);
+        }
+        return {
+          status: "demo_scenario",
+          scenario: {
+            id: scenario.id,
+            title: scenario.title,
+            prompt: scenario.prompt,
+            analysis_input: {
+              ...scenario.analysisInput,
+              analysis_scope: "related_context",
+            },
+          },
+          next_step: "Call analyze_environmental_hazard directly with analysis_input when the person chooses this demo.",
+          ui_updated: false,
+        };
       }
       return {
         status: "hazard_catalog",
@@ -121,12 +152,17 @@ export function createListEnvironmentalHazardsTool(): WebMCP.ModelContextTool {
           default_related_hazards: DEFAULT_RELATED_HAZARDS[hazard],
         })),
         concerns: CONCERN_TYPES,
+        concern_guidance:
+          "Concern is optional. Infer it when explicit; ask only when a broad goal needs it; otherwise use general and proceed.",
+        demo_scenarios: WEBMCP_DEMO_SCENARIOS.map((scenario) => ({
+          id: scenario.id,
+          title: scenario.title,
+        })),
         default_analysis_scope: "related_context",
-        relationship: "co_occurring_context_not_causation",
+        relationship: "related_evidence_for_assessment",
         selection_guidance:
           "Use single_hazard_only only when the person explicitly restricts the question to one hazard.",
         ui_updated: false,
-        no_data_is_not_no_danger: true,
       };
     },
   };

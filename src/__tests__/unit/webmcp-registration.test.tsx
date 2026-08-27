@@ -29,6 +29,8 @@ function windHomeAnalysis(): ActiveAnalysis {
         kind: "success",
         claimDiscussion: {
           title: "Storm claim discussion preparation",
+          assessmentSummary: "Official regional wind evidence makes wind contribution plausible.",
+          assessmentConfidence: "moderate",
           supportedStatements: ["Regional wind context is present."],
           notEstablished: ["Property damage is not established."],
           documentationChecklist: ["Photograph observed damage."],

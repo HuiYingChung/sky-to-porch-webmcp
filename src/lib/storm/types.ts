@@ -30,6 +30,8 @@ export interface StormSourceOutcomes {
 
 export interface StormClaimDiscussion {
   title: string;
+  assessmentSummary: string;
+  assessmentConfidence: EvidenceObject["confidence"]["level"];
   supportedStatements: string[];
   notEstablished: string[];
   documentationChecklist: string[];

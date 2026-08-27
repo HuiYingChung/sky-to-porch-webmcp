@@ -1,6 +1,6 @@
 # ADR-0003: Related hazard context is the Agent default
 
-**Status:** Accepted
+**Status:** Superseded in part by ADR-0005
 **Date:** 2026-08-26
 
 ## Context

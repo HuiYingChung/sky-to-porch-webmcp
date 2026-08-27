@@ -324,10 +324,9 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
   }
 
   /**
-   * ADR-0044: a demo-story choice pre-fills everything except the concern
-   * and optional question — place, radius, hazard, live mode (the product
-   * default), and the hazard's own date range — then moves focus to the
-   * concern, the one decision that stays with the user.
+   * ADR-0044/ADR-0005: a demo-story choice pre-fills place, radius, hazard,
+   * live mode, and the hazard's date range. The optional explanation lens
+   * stays at neutral general unless the person chooses a more specific one.
    */
   function handleDemoStorySelect(story: DemoStory, hazard: DemoStoryHazard) {
     clearAllResults();
@@ -343,7 +342,7 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
       dispatch({ type: "SET_HAZARD", value: hazard.hazardId });
       handleSelection(sel);
       setSearchQuery("");
-      setTimeout(() => document.getElementById(ids.concernSelect)?.focus(), 0);
+      setTimeout(() => document.getElementById(ids.optionalQuestion)?.focus(), 0);
     } catch (e) {
       handleSelectionError(e instanceof Error ? e.message : String(e));
     }
@@ -623,7 +622,7 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
             htmlFor={ids.concernSelect}
             style={{ display: "block", fontSize: "14px", color: "var(--text-secondary)", marginBottom: "4px" }}
           >
-            What matters to you?
+            What matters to you? (optional)
           </label>
           <select
             id={ids.concernSelect}
@@ -644,7 +643,6 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
               boxSizing: "border-box",
             }}
           >
-            <option value="">Select a concern…</option>
             {CONCERN_TYPES.map((c) => (
               <option key={c} value={c}>
                 {CONCERN_LABELS[c]}

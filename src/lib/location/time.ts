@@ -122,3 +122,29 @@ export const TIME_RANGE_DISPLAY_LABELS: Record<TimeRangeType, string> = {
   past_30d: "Past 30 days",
   custom: "Custom range",
 };
+
+const MONTH_LABELS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+] as const;
+
+/** Deterministic English date label that never shifts with local timezone. */
+export function formatUtcDateLabel(value: string): string {
+  const isoDate = value.slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(isoDate);
+  if (!match) return isoDate;
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  if (monthIndex < 0 || monthIndex >= MONTH_LABELS.length || day < 1 || day > 31) {
+    return isoDate;
+  }
+  return `${MONTH_LABELS[monthIndex]} ${day}, ${match[1]}`;
+}
+
+export function formatTimeSelectionLabel(time: TimeSelection): string {
+  if (time.type !== "custom") return TIME_RANGE_DISPLAY_LABELS[time.type];
+  if (!time.startTs || !time.endTs) return TIME_RANGE_DISPLAY_LABELS.custom;
+  const start = formatUtcDateLabel(time.startTs);
+  const end = formatUtcDateLabel(time.endTs);
+  return start === end ? start : `${start} – ${end}`;
+}
