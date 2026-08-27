@@ -11,9 +11,10 @@
 - W0 repository baseline: complete
 - W1 shared analysis application layer: complete for the vertical slice
 - W2 shared client controller and state: complete with renderer compatibility
-- W3 WebMCP tool: implemented; supported-browser agent verification pending
+- W3 WebMCP tools: three baseline tools plus two contextual tools implemented;
+  supported-browser agent verification pending
 - W4 provider cleanup: complete; deterministic-only application runtime
-- W5 verification: typecheck, lint, 1270 unit tests, 132 integration tests,
+- W5 verification: typecheck, lint, 1277 unit tests, 132 integration tests,
   production build, 224 browser journeys, and secret check pass;
   supported-browser and model eval runs pending
 - W5a shared-view UX: complete; full deterministic and browser regression pass
@@ -115,9 +116,13 @@ optional question; execute the deterministic analysis pipeline; update the
 shared map and evidence panel; and return a compact structured result with
 state, observations, provenance, limitations, and verification links.
 
-A second read-only tool may expose source coverage or the current analysis only
-if agent-selection evals demonstrate a clear need. Avoid tool sequences that
-are easy to call in the wrong order.
+Two baseline discovery tools expose the governed hazard vocabulary and the
+checked-in source-coverage catalog. Their descriptions direct a concrete
+place-and-hazard question straight to the analysis tool, so discovery is not a
+mandatory or fragile preflight sequence. Coverage output states that pipeline
+eligibility is not proof of an observation. Contextual tools expose the current
+validated evidence and, only after Home + Wind, the bounded claim-discussion
+guide.
 
 ### W4 — Provider cleanup
 

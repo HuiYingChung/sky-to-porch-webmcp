@@ -16,14 +16,16 @@ These tests do not prove that a language model will select the right tool.
 ## Agent-selection dataset
 
 `tests/webmcp/tool-selection-evals.json` follows the current Chrome WebMCP
-`messages` plus `expectedCall` examples. It includes direct, implicit,
-coordinate, dated, ambiguous-place, and out-of-scope prompts. It locks the
-scope rule: an explicitly narrow gust, gage, temperature, fire, or air-quality
-question selects `single_hazard_only`; a broad question leaves the default
-`related_context` in force. Broad examples cover Wind with Flood, Heat with
-Drought, Fire/Smoke with Air Quality, and Volcanoes with Air Quality and Heat.
-The tool then runs the governed combination without merging observations or
-causation.
+`messages` plus `expectedCall` examples. It includes capability discovery,
+coverage-only discovery, direct, implicit, coordinate, dated,
+ambiguous-place, and out-of-scope prompts. Concrete questions must select
+`analyze_environmental_hazard` directly instead of first calling either
+discovery tool. It locks the scope rule: an explicitly narrow gust, gage,
+temperature, fire, or air-quality question selects `single_hazard_only`; a
+broad question leaves the default `related_context` in force. Broad examples
+cover Wind with Flood, Heat with Drought, Fire/Smoke with Air Quality, and
+Volcanoes with Air Quality and Heat. The tool then runs the governed
+combination without merging observations or causation.
 
 Before release, run the dataset repeatedly with the challenge agent and record:
 
@@ -35,6 +37,13 @@ Before release, run the dataset repeatedly with the challenge agent and record:
 6. whether `single_hazard_only` appears only for an explicitly restricted ask;
 7. whether named or strongly implied extra hazards are included without
    exceeding the bounded related-chain limit.
+8. whether capability questions select `list_environmental_hazards` without
+   running evidence retrieval;
+9. whether source eligibility questions select
+   `get_environmental_source_coverage` and preserve the distinction between
+   coverage and an actual observation;
+10. whether concrete environmental questions bypass discovery and call the
+    analysis tool directly.
 
 Do not call this dataset "passed" until the model-backed runs and raw outcomes
 have been retained for the exact tool definition under review.

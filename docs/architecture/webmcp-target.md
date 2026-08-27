@@ -23,6 +23,25 @@ The service owns:
 
 ## Implemented tool surface
 
+Three baseline tools are registered whenever WebMCP is available. Two more
+tools are registered only while the necessary validated page state exists.
+
+### list_environmental_hazards
+
+Returns the governed hazard IDs, user-concern vocabulary, and non-recursive
+related-context defaults. It is read-only and intended only for capability
+questions or genuine hazard ambiguity. Its description tells the Agent not to
+insert it before a concrete analysis request.
+
+### get_environmental_source_coverage
+
+Reads the same checked-in source-coverage catalog shown by the human About UI.
+A hazard-only call returns a compact source index; an optional `source_id`
+returns one detailed coverage profile with its official documentation link.
+It makes no live request and labels every result
+`pipeline_eligibility_not_observation`, so region or time eligibility cannot be
+presented as an actual observation for a selected place and date.
+
 ### analyze_environmental_hazard
 
 Runs the complete safe analysis path and synchronizes the visible UI.
@@ -48,6 +67,9 @@ Output:
 - a stable analysis identifier.
 
 The output excludes raw source payloads and long prose.
+
+Its description tells the Agent to call it directly for a concrete
+place-and-hazard question rather than creating a discovery-tool waterfall.
 
 ### inspect_current_environmental_evidence
 
@@ -99,14 +121,17 @@ reminder for missing, incomplete, quiet, stale, or failed evidence.
 
 Register tools from a client component after feature detection. Tie
 registration to an AbortController so unmounting or replacement unregisters
-the tools. Keep definitions stable and use the shared controller's current
-state through safe closures.
+the tools. The three baseline tools share one registration lifecycle. Keep
+definitions stable and use the shared controller's current state through safe
+closures for the two contextual tools.
 
 ## Security and failure behavior
 
 - The tool does not mutate persistent or external state, but its
   `readOnlyHint` is false because synchronizing the visible page is an
   intentional state change.
+- Hazard and coverage discovery are accurately marked read-only and never
+  update the shared UI or query a live source.
 - External observations are marked as untrusted content.
 - Cross-origin exposure is disabled unless an exact trusted origin is
   explicitly required.

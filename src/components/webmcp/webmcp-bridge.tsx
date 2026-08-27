@@ -9,6 +9,10 @@ import {
   createInspectEvidenceTool,
   createStormClaimDiscussionTool,
 } from "@/lib/webmcp/context-tools";
+import {
+  createGetEnvironmentalSourceCoverageTool,
+  createListEnvironmentalHazardsTool,
+} from "@/lib/webmcp/discovery-tools";
 
 interface WebMcpBridgeProps {
   runAnalysis: (
@@ -45,11 +49,15 @@ export function WebMcpBridge({
   onOpenStormClaimDiscussion = () => {},
   onStatusChange,
 }: WebMcpBridgeProps) {
-  const tool = useMemo(
-    () => createAnalyzeHazardTool({
-      runAnalysis,
-      ...(runAnalysisBundle ? { runAnalysisBundle } : {}),
-    }),
+  const baselineTools = useMemo(
+    () => [
+      createAnalyzeHazardTool({
+        runAnalysis,
+        ...(runAnalysisBundle ? { runAnalysisBundle } : {}),
+      }),
+      createListEnvironmentalHazardsTool(),
+      createGetEnvironmentalSourceCoverageTool(),
+    ],
     [runAnalysis, runAnalysisBundle]
   );
 
@@ -60,19 +68,23 @@ export function WebMcpBridge({
     }
     const controller = new AbortController();
     onStatusChange?.("registering");
-    void document.modelContext
-      .registerTool(tool, { signal: controller.signal })
+    void Promise.all(
+      baselineTools.map((tool) =>
+        document.modelContext!.registerTool(tool, { signal: controller.signal })
+      )
+    )
       .then(() => {
         if (!controller.signal.aborted) onStatusChange?.("ready");
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
           onStatusChange?.("error");
-          console.error("WebMCP tool registration failed", error);
+          console.error("WebMCP baseline tool registration failed", error);
+          controller.abort(error);
         }
       });
     return () => controller.abort();
-  }, [onStatusChange, tool]);
+  }, [baselineTools, onStatusChange]);
 
   useEffect(() => {
     if (!document.modelContext || !activeAnalysis) return;

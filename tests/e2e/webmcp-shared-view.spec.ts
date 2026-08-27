@@ -39,21 +39,41 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
   await expect(page.locator('[data-testid="webmcp-ready-badge"]:visible'))
     .toHaveText("Agent-ready");
 
-  const registered = await page.evaluate(() => {
+  const registered = await page.evaluate(async () => {
     const state = globalThis as typeof globalThis & {
       __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
     };
-    const tool = state.__skyToPorchWebMcpTools?.analyze_environmental_hazard;
-    return tool
-      ? {
-          name: tool.name,
-          annotations: tool.annotations,
-        }
-      : null;
+    const tools = state.__skyToPorchWebMcpTools;
+    const analysisTool = tools?.analyze_environmental_hazard;
+    const listTool = tools?.list_environmental_hazards;
+    const coverageTool = tools?.get_environmental_source_coverage;
+    if (!analysisTool || !listTool || !coverageTool) return null;
+    const options = { signal: new AbortController().signal };
+    return {
+      names: Object.keys(tools),
+      analysisAnnotations: analysisTool.annotations,
+      hazardCatalog: await listTool.execute({}, options),
+      coverageCatalog: await coverageTool.execute({ hazard: "air_quality" }, options),
+    };
   });
-  expect(registered).toEqual({
-    name: "analyze_environmental_hazard",
-    annotations: { readOnlyHint: false, untrustedContentHint: true },
+  expect(registered).toMatchObject({
+    names: [
+      "analyze_environmental_hazard",
+      "list_environmental_hazards",
+      "get_environmental_source_coverage",
+    ],
+    analysisAnnotations: { readOnlyHint: false, untrustedContentHint: true },
+    hazardCatalog: {
+      status: "hazard_catalog",
+      ui_updated: false,
+    },
+    coverageCatalog: {
+      status: "coverage_catalog",
+      hazard: "air_quality",
+      coverage_scope: "pipeline_eligibility_not_observation",
+      live_sources_queried: false,
+      actual_observation_not_established: true,
+    },
   });
 
   const executeAgentAnalysis = async (input: {

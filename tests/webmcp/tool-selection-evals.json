@@ -1,5 +1,37 @@
 [
   {
+    "id": "capability-discovery",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What kinds of environmental hazards can Sky to Porch help me investigate?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "list_environmental_hazards",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "id": "coverage-discovery-air-quality",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Which source regions and time ranges are eligible for Air Quality evidence? Do not run an observation query yet."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_environmental_source_coverage",
+        "arguments": {
+          "hazard": "air_quality"
+        }
+      }
+    ]
+  },
+  {
     "id": "direct-fire-place",
     "messages": [
       {

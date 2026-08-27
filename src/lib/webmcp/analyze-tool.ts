@@ -862,7 +862,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Resolve a place, retrieve bounded evidence, and synchronize Sky to Porch. Related context is the default: the product automatically runs separate evidence chains for associated hazards. Use single_hazard_only only when the person explicitly limits the question to one hazard. Extra named or implied hazards can be added without merging causation. Missing data never means no danger.",
+      "Directly answer a concrete place-and-hazard question: resolve the place, retrieve bounded source evidence, and synchronize Sky to Porch. Do not call discovery tools first. Related context runs separate associated-hazard chains by default; use single_hazard_only only for an explicit restriction. Return only validated observations and limitations—never invent values, merge causation, or treat missing data as no danger.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

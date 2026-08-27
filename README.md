@@ -14,12 +14,14 @@ verified locally with deterministic unit, integration, and browser tests.
 The primary tool is `analyze_environmental_hazard`. It resolves a place or
 accepts selected coordinates, runs the same hazard-analysis application layer
 as the human form, updates the map and Insight panel, and returns a compact
-evidence result. After a result exists, a read-only evidence-inspection tool is
-available; a Home + Wind result also makes a local storm-claim discussion tool
-available. Supported-browser discovery with the challenge agent and
-model-backed tool-selection evals remain release gates; this repository does
-not yet claim a public live WebMCP experience. The exact local verification
-record is in
+evidence result. Two baseline read-only tools list the governed hazards and the
+checked-in source-coverage catalog; they are for capability questions, not
+mandatory preflight calls before a concrete analysis. After a result exists, a
+read-only evidence-inspection tool is available; a Home + Wind result also
+makes a local storm-claim discussion tool available. Supported-browser
+discovery with the challenge agent and model-backed tool-selection evals remain
+release gates; this repository does not yet claim a public live WebMCP
+experience. The exact local verification record is in
 [docs/testing/wind-storm-verification-2026-08-26.md](docs/testing/wind-storm-verification-2026-08-26.md).
 
 The original application and the exact prior-work boundary are documented in
@@ -121,6 +123,13 @@ rate limits.
 
 - Feature-detects `document.modelContext` and registers from a client
   component.
+- Registers `analyze_environmental_hazard`, `list_environmental_hazards`, and
+  `get_environmental_source_coverage` as the baseline surface. Concrete
+  environmental questions go directly to analysis; discovery is reserved for
+  capability or source-eligibility questions.
+- Reads coverage from the same deterministic catalog as the human About UI,
+  performs no live request, and labels it pipeline eligibility rather than an
+  observation for a place or date.
 - Uses an `AbortController` for registration lifecycle and forwards tool-call
   cancellation through geocoding and evidence retrieval.
 - Rejects unknown fields, invalid coordinates, invalid or incomplete dates,
