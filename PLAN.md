@@ -12,20 +12,16 @@
 - W1 shared analysis application layer: complete for the vertical slice
 - W2 shared client controller and state: complete with renderer compatibility
 - W3 WebMCP tools: three baseline tools plus two contextual tools implemented;
-  production native discovery, analysis, no-observation, shared-UI, and
-  contextual-tool journeys pass at `c6f3c8c`. Contextual inspection is now
-  production-conformant at 2,219 characters. Local candidate `ceb182a` fixes
-  the exposed primary-bundle cap, strengthens ambiguity handling with
-  label-only choices and a tested selected-label continuation, and separates
-  missing-hazard help from concrete analysis; publication and production
-  re-verification remain pending
+  local product commit `72f3a36` fixes the production-reported Houston
+  ambiguity loop with distinguishable locality/type labels, stable upstream
+  place IDs, original-query continuation, exact retry arguments, and stale-ID
+  rejection. Publication and production-native re-verification remain pending
 - W4 provider cleanup: complete; deterministic-only application runtime
-- W5 verification: the published `c6f3c8c` candidate passed exact remote CI at
-  run `33105415851`; exact local candidate `ceb182a` passes typecheck, lint,
-  1,309 unit tests, 132 integration tests, a 14-page production build, a clean
-  230-journey desktop/mobile Playwright run, and a tracked-archive secret scan.
+- W5 verification: exact local product commit `72f3a36` passes typecheck, lint,
+  1,321 unit tests, 132 integration tests, a 14-page production build, a clean
+  230-journey desktop/mobile Playwright run, and the repository secret gate.
   Final-schema `gpt-5-mini` with low reasoning passes three independent runs:
-  66/66 semantic selection/argument cases and 6/6 ambiguity wait/resume cases
+  66/66 semantic selection/argument cases and 12/12 ambiguity wait/resume cases
 - W5a shared-view UX: complete; full deterministic and browser regression pass
 - W5b Canadian Flood ground evidence: complete; bounded ECCC GeoMet live smoke
   and the full 220-journey browser regression passed
@@ -38,14 +34,11 @@
 - W5d compound environmental context: locally verified for Heat–Drought,
   Fire/Smoke–Air Quality, and Volcano–Air Quality–Heat, including one parallel
   shared-view transaction; supported-browser Agent verification pending
-- W6 release and submission: private release preparation in progress; the repo
-  remains private; published commit `c6f3c8c` passed its mechanical
-  reachable-history preflight, and Devpost/video drafts are prepared. The new
-  product corrections are committed at `ceb182a`; PR #5 head `e00e7c4` passed
-  exact remote CI run `33120305386` and its Vercel preview check. Production
-  deployment and native-Agent re-verification remain pending.
-  Visibility, deployment, push, video publication, and submission still require
-  explicit authorization
+- W6 release and submission: private release preparation remains in progress;
+  the repo stays private by owner direction. Stable-place product commit
+  `72f3a36` is locally verified; PR CI, merge, deployment, and production-native
+  re-verification are still pending. Public visibility, video publication, and
+  submission remain separate owner decisions
 
 The production/local/native evidence split for the current acceptance package
 is recorded in
@@ -252,19 +245,16 @@ Technical WebMCP details remain Codex's responsibility.
 ## 7. Definition of done
 
 - WebMCP tools are discoverable in the supported production in-app browser.
-  Production discovery, primary execution, shared UI, ambiguity,
-  no-observation, and contextual registration pass at `c6f3c8c`; contextual
-  output is within its limit. Candidate `ceb182a` fixes the primary limit and
+  Product commit `72f3a36` fixes the reported same-label ambiguity loop and
   passes local deterministic, browser, and three-run model checks; it still
-  awaits publication and production native-Agent re-verification.
+  awaits publication and production-native re-verification.
 - Human and agent interactions share one evidence pipeline and UI state.
 - The deterministic safety model is unchanged or stronger.
 - Tool descriptions and outputs stay within current implementation guidance.
 - All deterministic tests and exact-candidate checks pass locally. The
-  separate model gate passes 66/66 semantic selection/argument cases and 6/6
-  ambiguity wait/resume journeys across three runs. PR #5 exact-head CI passes
-  at `e00e7c4`; production-native evidence still applies only to published
-  `c6f3c8c` until this candidate is merged and deployed.
+  separate model gate passes 66/66 semantic selection/argument cases and 12/12
+  ambiguity wait/resume journeys across three runs. PR-head, post-merge main,
+  deployment, and production-native evidence remain pending and separate.
 - Prior work and new work are unambiguous.
 - The repository is publicly reproducible under a recognized open-source
   license.

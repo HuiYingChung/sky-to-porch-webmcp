@@ -142,11 +142,11 @@ that assessment.
 
 | Layer | Current evidence |
 | --- | --- |
-| Deterministic product | Exact local `ceb182a`: typecheck, lint, 1,309 unit tests, 132 integration tests, 14-page production build, tracked-archive secret scan, and 230/230 desktop/mobile Playwright journeys pass |
-| Native WebMCP | Exact `c6f3c8c` production discovery, analysis, shared UI, no-observation, and contextual tools pass. Local `ceb182a` adds bounded primary output, selected-label ambiguity continuation, and the clarified help/analysis contract; publication and production recheck remain separate |
+| Deterministic product | Exact local product commit `72f3a36`: typecheck, lint, 1,321 unit tests, 132 integration tests, 14-page production build, secret gate, and 230/230 desktop/mobile Playwright journeys pass |
+| Native WebMCP | A production Houston transcript exposed a same-label ambiguity loop. Local `72f3a36` adds distinguishable locality/type labels, stable upstream place IDs, original-query continuation, exact retry arguments, and stale-ID rejection; publication and production recheck remain separate |
 | Historical official sources | All six primary and related chains in the three curated demos returned observations |
 | Generic product path | Albuquerque non-demo browser journey plus selection cases across all seven hazards |
-| Tool selection | Final-schema `gpt-5-mini`, low reasoning, three runs: 66/66 semantic selection/argument cases and 6/6 ambiguity wait/resume journeys pass. Resume scoring executes the selected-place tool and checks the final no-observation safety boundary |
+| Tool selection | Final-schema `gpt-5-mini`, low reasoning, three runs: 66/66 semantic selection/argument cases and 12/12 ambiguity wait/resume journeys pass. Resume scoring executes the stable-ID selection and checks the final no-observation safety boundary |
 
 Evidence records:
 
@@ -155,6 +155,7 @@ Evidence records:
 - [Evidence-forward historical demos](docs/testing/evidence-forward-demo-live-verification-2026-08-27.md)
 - [WebMCP evaluation boundary](docs/testing/webmcp-evals.md)
 - [Final local candidate verification](docs/testing/webmcp-final-local-verification-2026-08-27.md)
+- [Stable place-choice regression verification](docs/testing/webmcp-identical-place-choice-regression-2026-08-27.md)
 - [Target architecture](docs/architecture/webmcp-target.md)
 
 ## Evidence boundary
