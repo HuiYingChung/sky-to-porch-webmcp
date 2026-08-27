@@ -21,8 +21,9 @@ read-only evidence-inspection tool is available; a Home + Wind result also
 makes a local storm-claim discussion tool available. Supported-browser
 discovery with the challenge agent and model-backed tool-selection evals remain
 release gates; this repository does not yet claim a public live WebMCP
-experience. The exact local verification record is in
-[docs/testing/wind-storm-verification-2026-08-26.md](docs/testing/wind-storm-verification-2026-08-26.md).
+experience. Exact local verification records include
+[the related-context analysis](docs/testing/wind-storm-verification-2026-08-26.md)
+and [the bounded discovery tools](docs/testing/discovery-tools-verification-2026-08-26.md).
 
 The original application and the exact prior-work boundary are documented in
 [PRIOR_WORK.md](PRIOR_WORK.md).
