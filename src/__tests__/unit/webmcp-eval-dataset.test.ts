@@ -46,12 +46,21 @@ describe("WebMCP tool-selection eval dataset", () => {
     }
   });
 
-  it("uses a narrow wind chain for a gust question and auto-bundles broad storm damage", () => {
+  it("uses single scope only for explicit asks and defaults broad questions to related context", () => {
     const gust = dataset.find((item) => item.id === "beryl-specific-wind-gust");
     const water = dataset.find((item) => item.id === "completed-flood-date");
     const broad = dataset.find((item) => item.id === "beryl-broad-home-damage-auto-bundle");
+    const heatDrought = dataset.find((item) => item.id === "broad-heat-drought-context");
+    const smokeAir = dataset.find((item) => item.id === "broad-smoke-air-context");
+    const volcanoAirHeat = dataset.find((item) => item.id === "broad-volcano-air-heat-context");
     expect(gust?.expectedCall.map((call) => call.arguments.hazard)).toEqual(["wind_storm"]);
+    expect(gust?.expectedCall[0].arguments.analysis_scope).toBe("single_hazard_only");
     expect(water?.expectedCall.map((call) => call.arguments.hazard)).toEqual(["flood_storm"]);
-    expect(broad?.expectedCall.map((call) => call.arguments.hazard)).toEqual(["storm_impacts"]);
+    expect(water?.expectedCall[0].arguments.analysis_scope).toBe("single_hazard_only");
+    expect(broad?.expectedCall.map((call) => call.arguments.hazard)).toEqual(["wind_storm"]);
+    expect(broad?.expectedCall[0].arguments.analysis_scope).toBeUndefined();
+    expect(heatDrought?.expectedCall[0].arguments.hazard).toBe("extreme_heat");
+    expect(smokeAir?.expectedCall[0].arguments.hazard).toBe("fire_smoke");
+    expect(volcanoAirHeat?.expectedCall[0].arguments.hazard).toBe("earth_volcanoes");
   });
 });

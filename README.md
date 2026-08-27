@@ -70,7 +70,7 @@ threshold. Missing or failed GeoMet evidence remains visible and never becomes
 a claim of no flooding, safe travel, or no property impact. Other GeoMet
 weather and AQHI collections are not part of this integration.
 
-## Wind and water are separate evidence chains
+## Related environmental context, without merged causation
 
 `Wind & Storm` uses selected-area NOAA GHCNh wind speed and gust observations.
 For Hurricane Beryl on 2024-07-08, a pinned NWS Houston/Galveston report may
@@ -80,10 +80,19 @@ at a roof, property damage, causation, policy coverage, or a claim outcome.
 
 `Flood & Heavy Rain` is the existing `flood_storm` path. It uses rainfall,
 flood extent, inundation, and water-gage evidence; it does not establish wind
-damage. Every WebMCP result includes a machine-readable evidence scope. If a
-question broadly asks what a storm may have damaged, the Agent uses
-`storm_impacts`; the tool automatically runs both analyses and returns two
-related but unmerged evidence chains.
+damage. Every WebMCP result includes a machine-readable evidence scope. A broad
+storm-impact question uses `wind_storm` with the default `related_context`
+scope, so the tool automatically runs both analyses and returns two related but
+unmerged evidence chains.
+
+The same product-owned relationship table covers Extreme Heat with Drought &
+Land, Fire & Smoke with Air Quality, and Earth & Volcanoes with both Air
+Quality and Extreme Heat. Related context is the Agent default. Only a question
+that explicitly limits itself to one hazard uses `single_hazard_only`. Each
+chain preserves its own source coverage, observation time, evidence state,
+freshness, confidence, provenance, and limitations. The bundle label
+`co_occurring_context_not_causation` prevents the Agent from presenting a
+co-occurrence as proof that one hazard caused another.
 
 The Houston Beryl roof-and-insurer journey is one practical Home use case, not
 the definition of the site. Sky to Porch also supports Travel, Pets, Health,
@@ -126,15 +135,17 @@ rate limits.
   danger.
 - Marks source-derived output as untrusted content and does not claim the tool
   is read-only because it intentionally changes the visible page state.
-- Labels Wind results `wind_only_no_rain_flood_or_water_gages` and Flood
-  results `water_only_no_wind_damage_causation`, even when both refer to the
-  same named storm. For a broad damage or insurance question, the Agent selects
-  the Agent-only `storm_impacts` value; one tool execution automatically
-  gathers both chains and returns them as an unmerged bundle. The user does not
-  need to name wind or flood sources.
+- Defaults Agent requests to `related_context`, using a bounded product-owned
+  relationship table. `single_hazard_only` is reserved for an explicitly
+  narrow question. One tool execution can therefore gather two or three
+  separately labelled chains without asking the person to know the hazard or
+  source taxonomy.
+- Labels every bundle `co_occurring_context_not_causation`. Wind and water,
+  heat and drought, smoke and ambient air quality, and volcano, air, and heat
+  never substitute for one another or silently become a causal conclusion.
 - Registers `inspect_current_environmental_evidence` only while a completed
-  analysis is active. It reads the bounded current result without starting a
-  second hazard query.
+  analysis is active. It reads the bounded primary result and related-chain
+  statuses without starting another hazard query.
 - Registers `prepare_storm_claim_discussion` only after a Home + Wind result.
   It opens a documentation checklist in the current page and never submits a
   claim or decides causation, coverage, liability, repair scope, or outcome.

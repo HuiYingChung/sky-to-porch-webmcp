@@ -10,14 +10,23 @@ import type { StormQueryResult } from "@/lib/storm/types";
 export type AnalysisEvidenceMode = "live" | "fixture";
 export type AnalysisOrigin = "human" | "agent";
 
+export interface EvidenceBundleContext {
+  /** The hazard the Agent chose as the main subject of the question. */
+  primaryHazardId: HazardId;
+  /** All independently executed evidence chains, including the primary chain. */
+  includedHazardIds: HazardId[];
+  /** Controls shared-view preservation while the bundle runs sequentially. */
+  role: "start_context" | "context" | "primary";
+}
+
 export interface AnalysisRequest {
   hazardId: HazardId;
   concern: ConcernType;
   placeSelection: PlaceSelection;
   optionalQuestion?: string;
   evidenceMode?: AnalysisEvidenceMode;
-  /** Internal WebMCP orchestration marker; never changes a source's evidence domain. */
-  stormBundleRole?: "water" | "wind";
+  /** Internal WebMCP orchestration metadata; never changes source ownership. */
+  evidenceBundle?: EvidenceBundleContext;
 }
 
 export type AnalysisOutcome =

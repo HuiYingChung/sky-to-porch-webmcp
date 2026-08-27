@@ -94,6 +94,8 @@ interface QueryContextValue {
   setFloodEvidenceMode: (mode: FloodEvidenceMode) => void;
   /** Water evidence retained beside the active Wind result for a storm bundle. */
   relatedStormFloodResult: FloodQueryResult | null;
+  /** Independently validated context chains retained beside a bundle's primary result. */
+  relatedAnalyses: ActiveAnalysis[];
   /** Wind & Storm stays source-distinct from Flood & Heavy Rain. */
   windResult: StormQueryResult | null;
   windLoading: boolean;
@@ -147,7 +149,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [floodResult, setFloodResultState] = useState<FloodQueryResult | null>(null);
   const [floodLoading, setFloodLoadingState] = useState(false);
   const [floodEvidenceMode, setFloodEvidenceModeState] = useState<FloodEvidenceMode | null>("live");
-  const [relatedStormFloodResult, setRelatedStormFloodResult] = useState<FloodQueryResult | null>(null);
+  const [relatedAnalyses, setRelatedAnalyses] = useState<ActiveAnalysis[]>([]);
   const [windResult, setWindResultState] = useState<StormQueryResult | null>(null);
   const [windLoading, setWindLoadingState] = useState(false);
   const [stormClaimDiscussionOpen, setStormClaimDiscussionOpen] = useState(false);
@@ -168,6 +170,12 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   const analysisAbortRef = useRef<AbortController | null>(null);
   const activeAnalysisRef = useRef<ActiveAnalysis | null>(null);
   const previousAnalysisRef = useRef<ActiveAnalysis | null>(null);
+  const relatedStormFloodResult = relatedAnalyses
+    .find((analysis) => analysis.outcome.hazardId === "flood_storm")
+    ?.outcome;
+  const relatedStormFlood = relatedStormFloodResult?.hazardId === "flood_storm"
+    ? relatedStormFloodResult.result
+    : null;
 
   const commitActiveAnalysis = useCallback((analysis: ActiveAnalysis | null) => {
     activeAnalysisRef.current = analysis;
@@ -238,7 +246,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     commitPreviousAnalysis(null);
     setAnalysisLoading(false);
     clearResultState();
-    setRelatedStormFloodResult(null);
+    setRelatedAnalyses([]);
     setFireLoadingState(false);
     setFloodLoadingState(false);
     setWindLoadingState(false);
@@ -291,7 +299,9 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     analysisQueryGenRef.current += 1;
     const generation = analysisQueryGenRef.current;
     analysisAbortRef.current?.abort();
-    if (origin === "agent" && request.stormBundleRole !== "wind") {
+    const bundleRole = request.evidenceBundle?.role;
+    const bundleContinuation = bundleRole === "context" || bundleRole === "primary";
+    if (origin === "agent" && !bundleContinuation) {
       commitPreviousAnalysis(activeAnalysisRef.current);
     } else if (origin === "human") {
       commitPreviousAnalysis(null);
@@ -309,7 +319,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     }
 
     clearResultState();
-    if (request.stormBundleRole !== "wind") setRelatedStormFloodResult(null);
+    if (!bundleContinuation) setRelatedAnalyses([]);
     setFireLoadingState(request.hazardId === "fire_smoke");
     setFloodLoadingState(request.hazardId === "flood_storm");
     setWindLoadingState(request.hazardId === "wind_storm");
@@ -339,14 +349,102 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         completedAt: new Date().toISOString(),
       };
       commitOutcome(snapshot);
-      if (
-        request.stormBundleRole === "water" &&
-        outcome.hazardId === "flood_storm"
-      ) {
-        setRelatedStormFloodResult(outcome.result);
+      if (bundleRole === "start_context") {
+        setRelatedAnalyses([snapshot]);
+      } else if (bundleRole === "context") {
+        setRelatedAnalyses((current) => [...current, snapshot]);
       }
       commitActiveAnalysis(snapshot);
       return snapshot;
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        return null;
+      }
+      throw error;
+    } finally {
+      if (externalSignal) {
+        externalSignal.removeEventListener("abort", abortFromCaller);
+      }
+      if (generation === analysisQueryGenRef.current) {
+        setFireLoadingState(false);
+        setFloodLoadingState(false);
+        setWindLoadingState(false);
+        setHeatLoadingState(false);
+        setDroughtLoadingState(false);
+        setCoverageGapLoadingState(false);
+        setAnalysisLoading(false);
+        if (analysisAbortRef.current === controller) {
+          analysisAbortRef.current = null;
+        }
+      }
+    }
+  }, [
+    clearResultState,
+    commitActiveAnalysis,
+    commitOutcome,
+    commitPreviousAnalysis,
+    synchronizeRequestState,
+  ]);
+
+  const runAnalysisBundle = useCallback(async (
+    requests: AnalysisRequest[],
+    origin: "agent" = "agent",
+    externalSignal?: AbortSignal
+  ): Promise<ActiveAnalysis[] | null> => {
+    if (requests.length === 0) return [];
+    analysisQueryGenRef.current += 1;
+    const generation = analysisQueryGenRef.current;
+    analysisAbortRef.current?.abort();
+    commitPreviousAnalysis(activeAnalysisRef.current);
+
+    const controller = new AbortController();
+    analysisAbortRef.current = controller;
+    const abortFromCaller = () => controller.abort(externalSignal?.reason);
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort(externalSignal.reason);
+      } else {
+        externalSignal.addEventListener("abort", abortFromCaller, { once: true });
+      }
+    }
+
+    clearResultState();
+    setRelatedAnalyses([]);
+    setFireLoadingState(requests.some((request) => request.hazardId === "fire_smoke"));
+    setFloodLoadingState(requests.some((request) => request.hazardId === "flood_storm"));
+    setWindLoadingState(requests.some((request) => request.hazardId === "wind_storm"));
+    setStormClaimDiscussionOpen(false);
+    setHeatLoadingState(requests.some((request) => request.hazardId === "extreme_heat"));
+    setDroughtLoadingState(requests.some((request) => request.hazardId === "drought_land"));
+    setCoverageGapLoadingState(requests.some(
+      (request) => request.hazardId === "air_quality" || request.hazardId === "earth_volcanoes"
+    ));
+    commitActiveAnalysis(null);
+    setAnalysisLoading(true);
+    synchronizeRequestState(requests[requests.length - 1]);
+
+    try {
+      const outcomes = await Promise.all(
+        requests.map((request) => executeAnalysisRequest(request, { signal: controller.signal }))
+      );
+      if (generation !== analysisQueryGenRef.current) return null;
+
+      const completedAt = new Date().toISOString();
+      const snapshots = requests.map((request, index): ActiveAnalysis => ({
+        analysisId: `analysis-${generation}-${index}-${request.hazardId}`,
+        origin,
+        request,
+        outcome: outcomes[index],
+        completedAt,
+      }));
+      const primary = snapshots[snapshots.length - 1];
+      setRelatedAnalyses(snapshots.slice(0, -1));
+      commitOutcome(primary);
+      commitActiveAnalysis(primary);
+      return snapshots;
     } catch (error) {
       if (
         controller.signal.aborted ||
@@ -395,7 +493,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     setHeatLoadingState(false);
     setDroughtLoadingState(false);
     setCoverageGapLoadingState(false);
-    setRelatedStormFloodResult(null);
+    setRelatedAnalyses([]);
     synchronizeRequestState(snapshot.request);
     commitOutcome(snapshot);
     commitActiveAnalysis(snapshot);
@@ -424,7 +522,8 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         floodLoading,
         floodEvidenceMode,
         setFloodEvidenceMode,
-        relatedStormFloodResult,
+        relatedStormFloodResult: relatedStormFlood,
+        relatedAnalyses,
         windResult,
         windLoading,
         stormClaimDiscussionOpen,
@@ -450,7 +549,9 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     >
       <WebMcpBridge
         runAnalysis={runAnalysis}
+        runAnalysisBundle={runAnalysisBundle}
         activeAnalysis={activeAnalysis}
+        relatedAnalyses={relatedAnalyses}
         onOpenStormClaimDiscussion={openStormClaimDiscussion}
         onStatusChange={setWebMcpStatus}
       />

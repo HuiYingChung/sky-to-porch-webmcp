@@ -34,6 +34,7 @@ import {
   formatAnalysisTime,
   summarizeAnalysisTrust,
 } from "@/lib/analysis/presentation";
+import type { ActiveAnalysis } from "@/lib/analysis/types";
 
 export type InsightTab = "meaning" | "evidence" | "missions";
 
@@ -42,6 +43,8 @@ const TABS: { id: InsightTab; label: string }[] = [
   { id: "evidence", label: "Evidence" },
   { id: "missions", label: "Missions" },
 ];
+
+const KEEP_CLOSED = () => undefined;
 
 interface InsightNavigationProps {
   /** Prefix for tab/panel element IDs; keeps IDs unique in the DOM. */
@@ -161,6 +164,14 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
             {HAZARD_LABELS[activeAnalysis.request.hazardId]} ·{" "}
             {formatAnalysisPlace(activeAnalysis)} · {formatAnalysisTime(activeAnalysis)}
           </p>
+          {activeAnalysis.request.evidenceBundle?.role === "primary" && (
+            <p data-testid="agent-related-context-receipt" style={{ margin: "3px 0 0" }}>
+              Related context also checked: {activeAnalysis.request.evidenceBundle.includedHazardIds
+                .filter((hazardId) => hazardId !== activeAnalysis.request.hazardId)
+                .map((hazardId) => HAZARD_LABELS[hazardId])
+                .join(", ")}. Each chain remains separate; co-occurrence is not causation.
+            </p>
+          )}
           <p style={{ margin: "3px 0 0" }}>
             The map and Insight now share this result. Review the evidence and limitations
             before relying on it.
@@ -339,6 +350,7 @@ function InsightPanelContent({
     floodResult,
     floodLoading,
     relatedStormFloodResult,
+    relatedAnalyses,
     windResult,
     windLoading,
     stormClaimDiscussionOpen,
@@ -351,6 +363,17 @@ function InsightPanelContent({
     coverageGapLoading,
   } = useQueryDraft();
 
+  const relatedPanels = (
+    <RelatedEvidenceChains
+      analyses={relatedAnalyses.filter(
+        (analysis) => !(windResult !== null && analysis.outcome.hazardId === "flood_storm")
+      )}
+      tab={tab}
+      missionSelection={missionSelection}
+      onMissionSelectionChange={onMissionSelectionChange}
+    />
+  );
+
   if (
     (draft.hazardId === "air_quality" || draft.hazardId === "earth_volcanoes") &&
     coverageGapLoading
@@ -360,14 +383,17 @@ function InsightPanelContent({
 
   if (coverageGapResult !== null) {
     return (
-      <ResultFailureGapBoundary result={coverageGapResult} tab={tab}>
-        <CoverageGapInsightPanel
-          result={coverageGapResult}
-          tab={tab}
-          missionSelection={missionSelection}
-          onMissionSelectionChange={onMissionSelectionChange}
-        />
-      </ResultFailureGapBoundary>
+      <>
+        <ResultFailureGapBoundary result={coverageGapResult} tab={tab}>
+          <CoverageGapInsightPanel
+            result={coverageGapResult}
+            tab={tab}
+            missionSelection={missionSelection}
+            onMissionSelectionChange={onMissionSelectionChange}
+          />
+        </ResultFailureGapBoundary>
+        {relatedPanels}
+      </>
     );
   }
 
@@ -377,14 +403,17 @@ function InsightPanelContent({
 
   if (droughtResult !== null) {
     return (
-      <ResultFailureGapBoundary result={droughtResult} tab={tab}>
-        <DroughtEvidenceInsightPanel
-          result={droughtResult}
-          tab={tab}
-          missionSelection={missionSelection}
-          onMissionSelectionChange={onMissionSelectionChange}
-        />
-      </ResultFailureGapBoundary>
+      <>
+        <ResultFailureGapBoundary result={droughtResult} tab={tab}>
+          <DroughtEvidenceInsightPanel
+            result={droughtResult}
+            tab={tab}
+            missionSelection={missionSelection}
+            onMissionSelectionChange={onMissionSelectionChange}
+          />
+        </ResultFailureGapBoundary>
+        {relatedPanels}
+      </>
     );
   }
 
@@ -394,14 +423,17 @@ function InsightPanelContent({
 
   if (heatResult !== null) {
     return (
-      <ResultFailureGapBoundary result={heatResult} tab={tab}>
-        <HeatEvidenceInsightPanel
-          result={heatResult}
-          tab={tab}
-          missionSelection={missionSelection}
-          onMissionSelectionChange={onMissionSelectionChange}
-        />
-      </ResultFailureGapBoundary>
+      <>
+        <ResultFailureGapBoundary result={heatResult} tab={tab}>
+          <HeatEvidenceInsightPanel
+            result={heatResult}
+            tab={tab}
+            missionSelection={missionSelection}
+            onMissionSelectionChange={onMissionSelectionChange}
+          />
+        </ResultFailureGapBoundary>
+        {relatedPanels}
+      </>
     );
   }
 
@@ -415,30 +447,36 @@ function InsightPanelContent({
 
   if (windResult !== null) {
     return (
-      <ResultFailureGapBoundary result={windResult} tab={tab}>
-        <StormEvidenceInsightPanel
-          result={windResult}
-          tab={tab}
-          claimDiscussionOpen={stormClaimDiscussionOpen}
-          onClaimDiscussionOpenChange={setStormClaimDiscussionOpen}
-          relatedFloodResult={relatedStormFloodResult}
-          missionSelection={missionSelection}
-          onMissionSelectionChange={onMissionSelectionChange}
-        />
-      </ResultFailureGapBoundary>
+      <>
+        <ResultFailureGapBoundary result={windResult} tab={tab}>
+          <StormEvidenceInsightPanel
+            result={windResult}
+            tab={tab}
+            claimDiscussionOpen={stormClaimDiscussionOpen}
+            onClaimDiscussionOpenChange={setStormClaimDiscussionOpen}
+            relatedFloodResult={relatedStormFloodResult}
+            missionSelection={missionSelection}
+            onMissionSelectionChange={onMissionSelectionChange}
+          />
+        </ResultFailureGapBoundary>
+        {relatedPanels}
+      </>
     );
   }
 
   if (floodResult !== null) {
     return (
-      <ResultFailureGapBoundary result={floodResult} tab={tab}>
-        <FloodEvidenceInsightPanel
-          result={floodResult}
-          tab={tab}
-          missionSelection={missionSelection}
-          onMissionSelectionChange={onMissionSelectionChange}
-        />
-      </ResultFailureGapBoundary>
+      <>
+        <ResultFailureGapBoundary result={floodResult} tab={tab}>
+          <FloodEvidenceInsightPanel
+            result={floodResult}
+            tab={tab}
+            missionSelection={missionSelection}
+            onMissionSelectionChange={onMissionSelectionChange}
+          />
+        </ResultFailureGapBoundary>
+        {relatedPanels}
+      </>
     );
   }
 
@@ -449,14 +487,17 @@ function InsightPanelContent({
   // WP-05: show fire evidence panels when a result is available
   if (fireResult !== null) {
     return (
-      <ResultFailureGapBoundary result={fireResult} tab={tab}>
-        <FireEvidenceInsightPanel
-          result={fireResult}
-          tab={tab}
-          missionSelection={missionSelection}
-          onMissionSelectionChange={onMissionSelectionChange}
-        />
-      </ResultFailureGapBoundary>
+      <>
+        <ResultFailureGapBoundary result={fireResult} tab={tab}>
+          <FireEvidenceInsightPanel
+            result={fireResult}
+            tab={tab}
+            missionSelection={missionSelection}
+            onMissionSelectionChange={onMissionSelectionChange}
+          />
+        </ResultFailureGapBoundary>
+        {relatedPanels}
+      </>
     );
   }
 
@@ -530,5 +571,93 @@ function InsightPanelContent({
       the evidence, with clearly labelled example imagery. Ask a question first
       to create a result.
     </p>
+  );
+}
+
+function RelatedEvidenceChains({
+  analyses,
+  tab,
+  missionSelection,
+  onMissionSelectionChange,
+}: {
+  analyses: ActiveAnalysis[];
+  tab: InsightTab;
+  missionSelection: MissionSelectionState;
+  onMissionSelectionChange: (selection: MissionSelectionState) => void;
+}) {
+  if (analyses.length === 0) return null;
+  return (
+    <div data-testid="related-evidence-chains">
+      {analyses.map((analysis) => {
+        const outcome = analysis.outcome;
+        return (
+          <section
+            key={analysis.analysisId}
+            aria-label={`Related ${HAZARD_LABELS[outcome.hazardId]} evidence chain`}
+            data-testid={`related-${outcome.hazardId}-evidence-chain`}
+            style={{
+              marginTop: "18px",
+              paddingTop: "14px",
+              borderTop: "2px solid var(--border-default)",
+            }}
+          >
+            <h3 style={{ margin: "0 0 5px", fontSize: "16px" }}>
+              Related {HAZARD_LABELS[outcome.hazardId]} evidence
+            </h3>
+            <p style={{ margin: "0 0 12px", color: "var(--text-secondary)", fontSize: "14px" }}>
+              Collected automatically under related-context scope. This remains a separate evidence chain;
+              co-occurrence does not establish that one hazard caused another.
+            </p>
+            <ResultFailureGapBoundary result={outcome.result} tab={tab}>
+              {outcome.hazardId === "fire_smoke" ? (
+                <FireEvidenceInsightPanel
+                  result={outcome.result}
+                  tab={tab}
+                  missionSelection={missionSelection}
+                  onMissionSelectionChange={onMissionSelectionChange}
+                />
+              ) : outcome.hazardId === "flood_storm" ? (
+                <FloodEvidenceInsightPanel
+                  result={outcome.result}
+                  tab={tab}
+                  missionSelection={missionSelection}
+                  onMissionSelectionChange={onMissionSelectionChange}
+                />
+              ) : outcome.hazardId === "wind_storm" ? (
+                <StormEvidenceInsightPanel
+                  result={outcome.result}
+                  tab={tab}
+                  claimDiscussionOpen={false}
+                  onClaimDiscussionOpenChange={KEEP_CLOSED}
+                  missionSelection={missionSelection}
+                  onMissionSelectionChange={onMissionSelectionChange}
+                />
+              ) : outcome.hazardId === "extreme_heat" ? (
+                <HeatEvidenceInsightPanel
+                  result={outcome.result}
+                  tab={tab}
+                  missionSelection={missionSelection}
+                  onMissionSelectionChange={onMissionSelectionChange}
+                />
+              ) : outcome.hazardId === "drought_land" ? (
+                <DroughtEvidenceInsightPanel
+                  result={outcome.result}
+                  tab={tab}
+                  missionSelection={missionSelection}
+                  onMissionSelectionChange={onMissionSelectionChange}
+                />
+              ) : (
+                <CoverageGapInsightPanel
+                  result={outcome.result}
+                  tab={tab}
+                  missionSelection={missionSelection}
+                  onMissionSelectionChange={onMissionSelectionChange}
+                />
+              )}
+            </ResultFailureGapBoundary>
+          </section>
+        );
+      })}
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 # ADR-0002: Keep wind and water evidence as separate hazard chains
 
-**Status:** Accepted
+**Status:** Accepted for evidence separation; orchestration superseded by ADR-0003
 **Date:** 2026-08-26
 
 ## Context
@@ -28,15 +28,15 @@ Maintain two explicit evidence chains:
   damage or wind causation.
 
 Every primary WebMCP result exposes a machine-readable `evidence_scope`.
-Contextual evidence inspection repeats that scope. The primary tool also
-accepts the Agent-only `storm_impacts` orchestration value. For a broad storm
-damage or insurance-discussion question, it automatically runs both domain
-analyses and returns one compact bundle containing two labelled, unmerged
-chains. The user does not need to know which sources or hazards to request.
+Contextual evidence inspection repeats that scope. For a broad storm damage or
+insurance-discussion question, the default related-context orchestration runs
+both domain analyses and returns one compact bundle containing two labelled,
+unmerged chains. The user does not need to know which sources or hazards to
+request. ADR-0003 generalizes this orchestration to other related hazards.
 
-The Agent uses a single `wind_storm` or `flood_storm` analysis only when the
-question is clearly narrow, such as a maximum-gust question or a water-gage
-question.
+The Agent uses `single_hazard_only` with `wind_storm` or `flood_storm` only
+when the question is clearly narrow, such as a maximum-gust question or a
+water-gage question.
 
 The Houston Beryl roof-and-insurer story is one useful Home workflow. Sky to
 Porch remains a general environmental-evidence product for Home, Travel, Pets,

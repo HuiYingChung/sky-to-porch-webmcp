@@ -12,7 +12,8 @@
         "functionName": "analyze_environmental_hazard",
         "arguments": {
           "place": "Tucson",
-          "hazard": "fire_smoke"
+          "hazard": "fire_smoke",
+          "analysis_scope": "single_hazard_only"
         }
       }
     ]
@@ -31,6 +32,7 @@
         "arguments": {
           "place": "Phoenix",
           "hazard": "extreme_heat",
+          "analysis_scope": "single_hazard_only",
           "concern": "pets"
         }
       }
@@ -50,6 +52,7 @@
         "arguments": {
           "place": "41.8781, -87.6298",
           "hazard": "air_quality",
+          "analysis_scope": "single_hazard_only",
           "concern": "health",
           "latitude": 41.8781,
           "longitude": -87.6298,
@@ -72,6 +75,7 @@
         "arguments": {
           "place": "Houston",
           "hazard": "flood_storm",
+          "analysis_scope": "single_hazard_only",
           "concern": "travel",
           "start_date": "2024-07-08",
           "end_date": "2024-07-08"
@@ -93,6 +97,7 @@
         "arguments": {
           "place": "Houston",
           "hazard": "wind_storm",
+          "analysis_scope": "single_hazard_only",
           "concern": "home",
           "start_date": "2024-07-08",
           "end_date": "2024-07-08"
@@ -113,11 +118,68 @@
         "functionName": "analyze_environmental_hazard",
         "arguments": {
           "place": "Houston",
-          "hazard": "storm_impacts",
+          "hazard": "wind_storm",
           "concern": "home",
           "start_date": "2024-07-08",
           "end_date": "2024-07-08",
           "question": "Could Hurricane Beryl have damaged my home or roof, and what evidence can help me discuss a claim with my insurer?"
+        }
+      }
+    ]
+  },
+  {
+    "id": "broad-heat-drought-context",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Could persistent extreme heat and dry conditions around Phoenix affect my dog and our outdoor plans? Check all related evidence."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Phoenix",
+          "hazard": "extreme_heat",
+          "concern": "pets"
+        }
+      }
+    ]
+  },
+  {
+    "id": "broad-smoke-air-context",
+    "messages": [
+      {
+        "role": "user",
+        "content": "How might wildfire smoke and the overall air conditions around Los Angeles affect my health? Gather the related evidence."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Los Angeles",
+          "hazard": "fire_smoke",
+          "concern": "health"
+        }
+      }
+    ]
+  },
+  {
+    "id": "broad-volcano-air-heat-context",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Near Hilo, help me understand volcanic activity together with air quality and extreme heat for community planning."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Hilo",
+          "hazard": "earth_volcanoes",
+          "concern": "community"
         }
       }
     ]
@@ -135,7 +197,8 @@
         "functionName": "analyze_environmental_hazard",
         "arguments": {
           "place": "Springfield",
-          "hazard": "fire_smoke"
+          "hazard": "fire_smoke",
+          "analysis_scope": "single_hazard_only"
         }
       }
     ]

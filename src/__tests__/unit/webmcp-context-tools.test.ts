@@ -74,6 +74,24 @@ describe("contextual WebMCP tools", () => {
     expect(flood).toMatchObject({ evidence_scope: "water_only_no_wind_damage_causation" });
   });
 
+  it("inspects related context as separate non-causal chains", async () => {
+    const output = await createInspectEvidenceTool(
+      analysis("wind_storm", "home"),
+      [analysis("flood_storm", "home")]
+    ).execute({}, options);
+    expect(output).toMatchObject({
+      hazard: "wind_storm",
+      relationship: "co_occurring_context_not_causation",
+      related_chains: [
+        {
+          hazard: "flood_storm",
+          evidence_scope: "water_only_no_wind_damage_causation",
+        },
+      ],
+    });
+    expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
+  });
+
   it("registers claim preparation only for a Home + Wind result and only updates local UI", async () => {
     const open = vi.fn();
     const windHome = analysis("wind_storm", "home");

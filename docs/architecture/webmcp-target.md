@@ -31,6 +31,9 @@ Inputs:
 
 - place text or selected-area coordinates;
 - hazard;
+- analysis scope (`related_context` by default, or `single_hazard_only` only
+  for an explicitly narrow question);
+- optional additional related hazards named or implied by a broad question;
 - time window;
 - everyday concern;
 - optional question.
@@ -49,9 +52,9 @@ The output excludes raw source payloads and long prose.
 ### inspect_current_environmental_evidence
 
 Registered only while a completed result is active. It reads the compact
-current evidence, source identifiers, limitations, and the hazard-specific
-evidence scope. It does not run another query and is not required before or
-after the primary tool.
+primary evidence, source identifiers, limitations, the hazard-specific scope,
+and any separately retained related-chain statuses. It does not run another
+query and is not required before or after the primary tool.
 
 ### prepare_storm_claim_discussion
 
@@ -61,14 +64,20 @@ returns a compact documentation checklist. It does not contact an insurer,
 submit a claim, or decide damage, causation, coverage, liability, repair scope,
 or outcome.
 
-Wind and water are intentionally separate. `wind_storm` covers wind speed,
-gust, and governed wind-event context. `flood_storm` covers rainfall,
-inundation, flood extent, and water gages. Every result exposes an
-`evidence_scope`. For a broad storm-impact question, the Agent passes the
-Agent-only `storm_impacts` orchestration value to the primary tool. The tool
-resolves the place once, runs both domain analyses, and returns one compact
-bundle with separately labelled wind and water chains. Narrow gust or gage
-questions still use a single domain.
+Related context is the Agent default. Deterministic code expands the selected
+primary hazard through a bounded, non-recursive relationship table: Wind with
+Flood, Heat with Drought, Fire/Smoke with Air Quality, and Volcanoes with Air
+Quality and Heat. The Agent may add hazards that a broad question names or
+strongly implies, up to three context chains. It uses `single_hazard_only` only
+when the person explicitly restricts the request to one hazard.
+
+Every result exposes a hazard-specific `evidence_scope`. The tool resolves the
+place once, runs independent domain analyses in parallel under one cancellation
+and stale-generation guard, and returns one compact bundle labelled
+`co_occurring_context_not_causation`. The shared UI commits the finished bundle
+as one transaction, renders the primary evidence first, and keeps related
+chains in separate sections. No companion observation repairs another chain's
+no-data or source-failure state.
 
 When no coordinates are supplied, place search returns at most three choices.
 One result proceeds; multiple results return `needs_place_choice` with

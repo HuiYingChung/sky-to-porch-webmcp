@@ -17,10 +17,24 @@ import {
 export const ANALYZE_HAZARD_TOOL_NAME = "analyze_environmental_hazard";
 const DEFAULT_RADIUS_KM = 25;
 const MAX_OUTPUT_CHARACTERS = 1_500;
-const AGENT_HAZARD_IDS = [...HAZARD_IDS, "storm_impacts"] as const;
-type AgentHazardId = (typeof AGENT_HAZARD_IDS)[number];
+const ANALYSIS_SCOPES = ["related_context", "single_hazard_only"] as const;
+type AnalysisScope = (typeof ANALYSIS_SCOPES)[number];
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/;
+
+/**
+ * Product-owned default relationships. These are retrieval companions, not
+ * causal claims, and they do not recurse beyond the chosen primary hazard.
+ */
+export const DEFAULT_RELATED_HAZARDS: Readonly<Record<HazardId, readonly HazardId[]>> = {
+  fire_smoke: ["air_quality"],
+  flood_storm: ["wind_storm"],
+  wind_storm: ["flood_storm"],
+  extreme_heat: ["drought_land"],
+  drought_land: ["extreme_heat"],
+  air_quality: ["fire_smoke"],
+  earth_volcanoes: ["air_quality", "extreme_heat"],
+};
 
 const INPUT_KEYS = new Set([
   "place",
@@ -32,6 +46,8 @@ const INPUT_KEYS = new Set([
   "start_date",
   "end_date",
   "question",
+  "analysis_scope",
+  "related_hazards",
 ]);
 
 export interface AnalyzeHazardToolDependencies {
@@ -40,13 +56,20 @@ export interface AnalyzeHazardToolDependencies {
     origin?: "agent",
     signal?: AbortSignal
   ) => Promise<ActiveAnalysis | null>;
+  runAnalysisBundle?: (
+    requests: AnalysisRequest[],
+    origin?: "agent",
+    signal?: AbortSignal
+  ) => Promise<ActiveAnalysis[] | null>;
   fetchImpl?: typeof fetch;
   now?: () => Date;
 }
 
 interface ParsedInput {
   place: string;
-  hazard: AgentHazardId;
+  hazard: HazardId;
+  analysisScope: AnalysisScope;
+  relatedHazards: HazardId[];
   concern: ConcernType;
   latitude?: number;
   longitude?: number;
@@ -99,10 +122,14 @@ interface ToolSuccess {
   evidence_scope:
     | "wind_only_no_rain_flood_or_water_gages"
     | "water_only_no_wind_damage_causation"
-    | "selected_hazard_only";
+    | "heat_conditions_no_drought_or_volcano_causation"
+    | "drought_land_context_no_heat_or_fire_causation"
+    | "fire_smoke_indicators_no_air_quality_inference"
+    | "air_quality_conditions_no_source_attribution"
+    | "earth_volcano_observations_no_air_or_heat_causation";
   request: {
     place: string;
-    hazard: AgentHazardId;
+    hazard: HazardId;
     concern: ConcernType;
     radius_km: number;
     time: string;
@@ -119,36 +146,39 @@ interface ToolSuccess {
   no_data_is_not_no_danger: true;
 }
 
-interface CompactStormChain {
-  hazard: "wind_storm" | "flood_storm";
-  evidence_scope:
-    | "wind_only_no_rain_flood_or_water_gages"
-    | "water_only_no_wind_damage_causation";
+type EvidenceScope = ToolSuccess["evidence_scope"];
+
+interface CompactEvidenceChain {
+  hazard: HazardId;
+  evidence_scope: EvidenceScope;
   status: string;
   observation: CompactObservation | null;
   limitation: string | null;
   verify_url: string | null;
 }
 
-interface ToolStormBundle {
-  status: "storm_evidence_bundle";
+interface ToolEvidenceBundle {
+  status: "related_environmental_evidence_bundle";
   analysis_id: string;
   ui_updated: true;
-  evidence_scope: "separate_wind_and_water_chains";
+  evidence_scope: "separate_related_hazard_chains";
+  relationship: "co_occurring_context_not_causation";
   request: {
     place: string;
-    hazard: "storm_impacts";
+    hazard: HazardId;
+    analysis_scope: "related_context";
     concern: ConcernType;
     radius_km: number;
     time: string;
   };
-  chains: { wind: CompactStormChain; water: CompactStormChain };
+  included_chains: HazardId[];
+  chains: CompactEvidenceChain[];
   claim_discussion_available: boolean;
-  water_evidence_visible_in_shared_view: true;
+  related_evidence_visible_in_shared_view: true;
   no_data_is_not_no_danger: true;
 }
 
-export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess | ToolStormBundle;
+export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess | ToolEvidenceBundle;
 
 export const ANALYZE_HAZARD_INPUT_SCHEMA = {
   type: "object",
@@ -163,8 +193,21 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     },
     hazard: {
       type: "string",
-      enum: AGENT_HAZARD_IDS,
-      description: "Use storm_impacts for broad storm damage or claim questions; it gathers separate wind and water chains. Use one hazard only for a narrow ask.",
+      enum: HAZARD_IDS,
+      description: "Main hazard named or most central to the person's question.",
+    },
+    analysis_scope: {
+      type: "string",
+      enum: ANALYSIS_SCOPES,
+      default: "related_context",
+      description: "Default to related_context. Use single_hazard_only only when the person explicitly restricts the question to one hazard.",
+    },
+    related_hazards: {
+      type: "array",
+      items: { type: "string", enum: HAZARD_IDS },
+      uniqueItems: true,
+      maxItems: 3,
+      description: "Extra plausible context hazards named or implied by a broad question, beyond the product defaults. Maximum three.",
     },
     concern: {
       type: "string",
@@ -272,9 +315,41 @@ function parseInput(
   }
   if (
     typeof raw.hazard !== "string" ||
-    !(AGENT_HAZARD_IDS as readonly string[]).includes(raw.hazard)
+    !(HAZARD_IDS as readonly string[]).includes(raw.hazard)
   ) {
-    return failure("invalid_input", `hazard must be one of: ${AGENT_HAZARD_IDS.join(", ")}.`);
+    return failure("invalid_input", `hazard must be one of: ${HAZARD_IDS.join(", ")}.`);
+  }
+  const analysisScope = raw.analysis_scope ?? "related_context";
+  if (
+    typeof analysisScope !== "string" ||
+    !(ANALYSIS_SCOPES as readonly string[]).includes(analysisScope)
+  ) {
+    return failure("invalid_input", `analysis_scope must be one of: ${ANALYSIS_SCOPES.join(", ")}.`);
+  }
+  if (
+    raw.related_hazards !== undefined &&
+    (!Array.isArray(raw.related_hazards) ||
+      raw.related_hazards.length > 3 ||
+      new Set(raw.related_hazards).size !== raw.related_hazards.length ||
+      raw.related_hazards.some(
+        (hazard) => typeof hazard !== "string" || !(HAZARD_IDS as readonly string[]).includes(hazard)
+      ))
+  ) {
+    return failure("invalid_input", "related_hazards must contain up to three unique supported hazards.");
+  }
+  const relatedHazards = (raw.related_hazards ?? []) as HazardId[];
+  if (relatedHazards.includes(raw.hazard as HazardId)) {
+    return failure("invalid_input", "related_hazards must not repeat the primary hazard.");
+  }
+  if (analysisScope === "single_hazard_only" && relatedHazards.length > 0) {
+    return failure("invalid_input", "single_hazard_only cannot include related_hazards.");
+  }
+  const plannedRelatedCount = new Set([
+    ...DEFAULT_RELATED_HAZARDS[raw.hazard as HazardId],
+    ...relatedHazards,
+  ]).size;
+  if (plannedRelatedCount > 3) {
+    return failure("invalid_input", "A related-context request can include at most three context hazards.");
   }
   const concern = raw.concern ?? "home";
   if (
@@ -341,11 +416,16 @@ function parseInput(
   if (
     typeof raw.start_date === "string" &&
     typeof raw.end_date === "string" &&
-    raw.hazard !== "fire_smoke" &&
-    raw.hazard !== "flood_storm" &&
+    (analysisScope === "related_context" ||
+      (raw.hazard !== "fire_smoke" && raw.hazard !== "flood_storm")) &&
     raw.start_date !== raw.end_date
   ) {
-    return failure("invalid_input", `${raw.hazard} accepts exactly one completed UTC date.`);
+    return failure(
+      "invalid_input",
+      analysisScope === "related_context"
+        ? "related_context accepts one completed UTC date so every evidence chain has the same temporal anchor."
+        : `${raw.hazard} accepts exactly one completed UTC date.`
+    );
   }
 
   if (
@@ -360,7 +440,9 @@ function parseInput(
 
   return {
     place: raw.place.trim(),
-    hazard: raw.hazard as AgentHazardId,
+    hazard: raw.hazard as HazardId,
+    analysisScope: analysisScope as AnalysisScope,
+    relatedHazards,
     concern: concern as ConcernType,
     ...(hasLatitude
       ? {
@@ -390,7 +472,7 @@ function selectionTime(
         : `${input.startDate}/${input.endDate}`,
     };
   }
-  if (input.hazard === "fire_smoke") {
+  if (input.hazard === "fire_smoke" && input.analysisScope === "single_hazard_only") {
     return { type: "latest", display: "latest completed source date" };
   }
   const completed = latestCompletedUtcDate(now);
@@ -498,6 +580,25 @@ function compactObservation(observation: Observation): CompactObservation {
   };
 }
 
+export function evidenceScopeForHazard(hazard: HazardId): EvidenceScope {
+  switch (hazard) {
+    case "wind_storm":
+      return "wind_only_no_rain_flood_or_water_gages";
+    case "flood_storm":
+      return "water_only_no_wind_damage_causation";
+    case "extreme_heat":
+      return "heat_conditions_no_drought_or_volcano_causation";
+    case "drought_land":
+      return "drought_land_context_no_heat_or_fire_causation";
+    case "fire_smoke":
+      return "fire_smoke_indicators_no_air_quality_inference";
+    case "air_quality":
+      return "air_quality_conditions_no_source_attribution";
+    case "earth_volcanoes":
+      return "earth_volcano_observations_no_air_or_heat_causation";
+  }
+}
+
 function resultDetails(analysis: ActiveAnalysis): {
   kind: string;
   evidence?: EvidenceObject;
@@ -546,11 +647,7 @@ function compactSuccess(
     status: details.kind,
     analysis_id: analysis.analysisId,
     ui_updated: true,
-    evidence_scope: analysis.request.hazardId === "wind_storm"
-      ? "wind_only_no_rain_flood_or_water_gages"
-      : analysis.request.hazardId === "flood_storm"
-        ? "water_only_no_wind_damage_causation"
-        : "selected_hazard_only",
+    evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
     request: {
       place: truncate(analysis.request.placeSelection.label, 100),
       hazard: analysis.request.hazardId,
@@ -584,10 +681,7 @@ function compactSuccess(
   return reduced;
 }
 
-function compactStormChain(
-  analysis: ActiveAnalysis,
-  hazard: "wind_storm" | "flood_storm"
-): CompactStormChain {
+function compactEvidenceChain(analysis: ActiveAnalysis): CompactEvidenceChain {
   const details = resultDetails(analysis);
   const evidence = details.evidence;
   const observation = evidence?.observations[0];
@@ -596,10 +690,8 @@ function compactStormChain(
     .map((item) => item.provenance.sourceUrl)
     .find((url): url is string => typeof url === "string" && url.length <= 300) ?? null;
   return {
-    hazard,
-    evidence_scope: hazard === "wind_storm"
-      ? "wind_only_no_rain_flood_or_water_gages"
-      : "water_only_no_wind_damage_causation",
+    hazard: analysis.request.hazardId,
+    evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
     status: details.kind,
     observation: observation ? compactObservation(observation) : null,
     limitation: limitation ? truncate(limitation, 130) : null,
@@ -607,40 +699,51 @@ function compactStormChain(
   };
 }
 
-function compactStormBundle(
-  wind: ActiveAnalysis,
-  water: ActiveAnalysis,
+function compactEvidenceBundle(
+  analyses: ActiveAnalysis[],
+  primary: ActiveAnalysis,
   timeDisplay: string
-): ToolStormBundle {
-  const bundle: ToolStormBundle = {
-    status: "storm_evidence_bundle",
-    analysis_id: `storm-bundle:${wind.analysisId}:${water.analysisId}`,
+): ToolEvidenceBundle {
+  const includedChains = analyses.map((analysis) => analysis.request.hazardId);
+  const bundle: ToolEvidenceBundle = {
+    status: "related_environmental_evidence_bundle",
+    analysis_id: `related-bundle:${analyses.map((analysis) => analysis.analysisId).join(":")}`,
     ui_updated: true,
-    evidence_scope: "separate_wind_and_water_chains",
+    evidence_scope: "separate_related_hazard_chains",
+    relationship: "co_occurring_context_not_causation",
     request: {
-      place: truncate(wind.request.placeSelection.label, 100),
-      hazard: "storm_impacts",
-      concern: wind.request.concern,
-      radius_km: wind.request.placeSelection.analysisArea.radiusKm,
+      place: truncate(primary.request.placeSelection.label, 100),
+      hazard: primary.request.hazardId,
+      analysis_scope: "related_context",
+      concern: primary.request.concern,
+      radius_km: primary.request.placeSelection.analysisArea.radiusKm,
       time: timeDisplay,
     },
-    chains: {
-      wind: compactStormChain(wind, "wind_storm"),
-      water: compactStormChain(water, "flood_storm"),
-    },
+    included_chains: includedChains,
+    chains: analyses.map(compactEvidenceChain),
     claim_discussion_available:
-      wind.outcome.hazardId === "wind_storm" && Boolean(wind.outcome.result.claimDiscussion),
-    water_evidence_visible_in_shared_view: true,
+      primary.outcome.hazardId === "wind_storm" && Boolean(primary.outcome.result.claimDiscussion),
+    related_evidence_visible_in_shared_view: true,
     no_data_is_not_no_danger: true,
   };
   if (JSON.stringify(bundle).length <= MAX_OUTPUT_CHARACTERS) return bundle;
   return {
     ...bundle,
-    chains: {
-      wind: { ...bundle.chains.wind, observation: null, verify_url: null },
-      water: { ...bundle.chains.water, observation: null, verify_url: null },
-    },
+    chains: bundle.chains.map((chain) => ({
+      ...chain,
+      observation: null,
+      verify_url: null,
+    })),
   };
+}
+
+function plannedHazards(input: ParsedInput): HazardId[] {
+  if (input.analysisScope === "single_hazard_only") return [input.hazard];
+  const related = [...new Set([
+    ...DEFAULT_RELATED_HAZARDS[input.hazard],
+    ...input.relatedHazards,
+  ])].filter((hazard) => hazard !== input.hazard);
+  return [...related, input.hazard];
 }
 
 export async function executeAnalyzeHazardTool(
@@ -678,41 +781,60 @@ export async function executeAnalyzeHazardTool(
     );
   }
 
-  if (input.hazard === "storm_impacts") {
+  const hazards = plannedHazards(input);
+  if (hazards.length > 1) {
     const commonRequest = {
       concern: input.concern,
       placeSelection,
       ...(input.question ? { optionalQuestion: input.question } : {}),
       evidenceMode: "live" as const,
     };
-    const water = await dependencies.runAnalysis(
-      { ...commonRequest, hazardId: "flood_storm", stormBundleRole: "water" },
-      "agent",
-      options.signal
-    );
-    if (water === null) {
+    const requests = hazards.map((hazardId, index): AnalysisRequest => {
+      const role = index === 0
+        ? "start_context"
+        : index === hazards.length - 1
+          ? "primary"
+          : "context";
+      return {
+        ...commonRequest,
+        hazardId,
+        evidenceBundle: {
+          primaryHazardId: input.hazard,
+          includedHazardIds: hazards,
+          role,
+        },
+      };
+    });
+    let analyses: ActiveAnalysis[] | null;
+    if (dependencies.runAnalysisBundle) {
+      analyses = await dependencies.runAnalysisBundle(requests, "agent", options.signal);
+    } else {
+      analyses = [];
+      for (const request of requests) {
+        const analysis = await dependencies.runAnalysis(
+          request,
+          "agent",
+          options.signal
+        );
+        if (analysis === null) {
+          analyses = null;
+          break;
+        }
+        analyses.push(analysis);
+      }
+    }
+    if (analyses === null) {
       return failure(
         "superseded",
-        "A newer request replaced the storm investigation before both evidence chains completed."
+        "A newer request replaced the related-context investigation before every evidence chain completed."
       );
     }
-    const wind = await dependencies.runAnalysis(
-      { ...commonRequest, hazardId: "wind_storm", stormBundleRole: "wind" },
-      "agent",
-      options.signal
-    );
-    if (wind === null) {
-      return failure(
-        "superseded",
-        "A newer request replaced the storm investigation before both evidence chains completed."
-      );
-    }
-    return compactStormBundle(wind, water, time.display);
+    return compactEvidenceBundle(analyses, analyses[analyses.length - 1], time.display);
   }
 
   const analysis = await dependencies.runAnalysis(
     {
-      hazardId: input.hazard as HazardId,
+      hazardId: input.hazard,
       concern: input.concern,
       placeSelection,
       ...(input.question ? { optionalQuestion: input.question } : {}),
@@ -740,7 +862,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Resolve a place, retrieve bounded evidence, and synchronize Sky to Porch. For broad storm damage or claim questions, use storm_impacts: it automatically gathers separate wind and water chains. Use wind_storm or flood_storm only for a clearly narrow question. Ambiguous places require user choice. Missing data never means no danger.",
+      "Resolve a place, retrieve bounded evidence, and synchronize Sky to Porch. Related context is the default: the product automatically runs separate evidence chains for associated hazards. Use single_hazard_only only when the person explicitly limits the question to one hazard. Extra named or implied hazards can be added without merging causation. Missing data never means no danger.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

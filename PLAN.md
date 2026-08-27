@@ -13,15 +13,18 @@
 - W2 shared client controller and state: complete with renderer compatibility
 - W3 WebMCP tool: implemented; supported-browser agent verification pending
 - W4 provider cleanup: complete; deterministic-only application runtime
-- W5 verification: typecheck, lint, 1261 unit tests, 132 integration tests,
-  production build, 220 browser journeys, and secret check pass;
+- W5 verification: typecheck, lint, 1270 unit tests, 132 integration tests,
+  production build, 224 browser journeys, and secret check pass;
   supported-browser and model eval runs pending
 - W5a shared-view UX: complete; full deterministic and browser regression pass
 - W5b Canadian Flood ground evidence: complete; bounded ECCC GeoMet live smoke
   and the full 220-journey browser regression passed
 - W5c Wind & Storm evidence: locally verified, including a live localhost
-  `storm_impacts` Agent bundle with separate successful wind and water chains;
+  related-context Agent bundle with separate successful wind and water chains;
   supported-browser Agent verification pending
+- W5d compound environmental context: locally verified for Heat–Drought,
+  Fire/Smoke–Air Quality, and Volcano–Air Quality–Heat, including one parallel
+  shared-view transaction; supported-browser Agent verification pending
 - W6 release and submission: pending explicit authorization
 
 ## 1. Goal
@@ -152,9 +155,10 @@ are easy to call in the wrong order.
 - add pinned official Beryl regional context only within its governed date and
   area;
 - expose machine-readable wind-only and water-only evidence scopes to WebMCP;
-- let the Agent select `storm_impacts` for broad damage or claim questions so
-  one tool execution automatically gathers both chains without asking the user
-  to name the relevant data types;
+- default broad Agent questions to `related_context`, so a Wind question
+  automatically gathers the separate Flood chain without asking the user to
+  name the relevant data types; reserve `single_hazard_only` for an explicitly
+  narrow request;
 - make the insurer-discussion checklist conditional on a completed Home + Wind
   result and keep it local, bounded, and non-adjudicative;
 - retain Home, Travel, Pets, Health, Power & Internet, and Community as the
@@ -184,8 +188,12 @@ The product owner has ruled on the first three checkpoints:
    wind could have damaged a roof and what official evidence can support an
    insurer discussion; this is one use case, not the site's entire purpose;
 5. wind and water remain separate evidence chains. For a broad storm-impact
-   question, the Agent selects one `storm_impacts` orchestration that runs and
-   labels both analyses instead of asking the user to enumerate hazards.
+   question, the default related-context orchestration runs and labels both
+   analyses instead of asking the user to enumerate hazards;
+6. the same default applies to Heat–Drought, Fire/Smoke–Air Quality, and
+   Volcano–Air Quality–Heat. Every chain remains independently sourced and the
+   bundle states that co-occurrence is not causation. Only an explicitly
+   single-hazard question may select `single_hazard_only`.
 
 Technical WebMCP details remain Codex's responsibility.
 

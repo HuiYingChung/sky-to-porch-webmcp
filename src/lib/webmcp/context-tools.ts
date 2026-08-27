@@ -3,6 +3,7 @@
 import type { EvidenceObject } from "@/contracts/evidence";
 import type { ActiveAnalysis } from "@/lib/analysis/types";
 import type { StormQueryResult } from "@/lib/storm/types";
+import { evidenceScopeForHazard } from "@/lib/webmcp/analyze-tool";
 
 export const INSPECT_EVIDENCE_TOOL_NAME = "inspect_current_environmental_evidence";
 export const PREPARE_STORM_CLAIM_TOOL_NAME = "prepare_storm_claim_discussion";
@@ -19,13 +20,14 @@ function evidenceFrom(analysis: ActiveAnalysis): EvidenceObject | null {
 }
 
 export function createInspectEvidenceTool(
-  analysis: ActiveAnalysis
+  analysis: ActiveAnalysis,
+  relatedAnalyses: ActiveAnalysis[] = []
 ): WebMCP.ModelContextTool {
   return {
     name: INSPECT_EVIDENCE_TOOL_NAME,
     title: "Inspect current environmental evidence",
     description:
-      "Read the validated result currently shown in Sky to Porch. Use after analysis to inspect source roles and limitations. It does not run another hazard or mix wind evidence with flood evidence.",
+      "Read the validated primary result and any separate related-context chains currently shown in Sky to Porch. It does not run another query or merge cross-hazard causation.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -41,11 +43,17 @@ export function createInspectEvidenceTool(
         status: evidence ? "ok" : "no_evidence",
         analysis_id: analysis.analysisId,
         hazard: analysis.request.hazardId,
-        evidence_scope: analysis.request.hazardId === "wind_storm"
-          ? "wind_only_no_rain_flood_or_water_gages"
-          : analysis.request.hazardId === "flood_storm"
-            ? "water_only_no_wind_damage_causation"
-            : "selected_hazard_only",
+        evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
+        ...(relatedAnalyses.length > 0
+          ? {
+              relationship: "co_occurring_context_not_causation" as const,
+              related_chains: relatedAnalyses.map((related) => ({
+                hazard: related.request.hazardId,
+                status: (related.outcome.result as { kind: string }).kind,
+                evidence_scope: evidenceScopeForHazard(related.request.hazardId),
+              })),
+            }
+          : {}),
         sources: evidence
           ? [...new Set(evidence.observations.map((item) => item.provenance.sourceId))]
           : [],

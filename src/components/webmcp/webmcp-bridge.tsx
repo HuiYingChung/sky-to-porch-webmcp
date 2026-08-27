@@ -16,7 +16,13 @@ interface WebMcpBridgeProps {
     origin?: "agent",
     signal?: AbortSignal
   ) => Promise<ActiveAnalysis | null>;
+  runAnalysisBundle?: (
+    requests: AnalysisRequest[],
+    origin?: "agent",
+    signal?: AbortSignal
+  ) => Promise<ActiveAnalysis[] | null>;
   activeAnalysis?: ActiveAnalysis | null;
+  relatedAnalyses?: ActiveAnalysis[];
   onOpenStormClaimDiscussion?: () => void;
   onStatusChange?: (status: WebMcpStatus) => void;
 }
@@ -28,14 +34,24 @@ export type WebMcpStatus =
   | "ready"
   | "error";
 
+const EMPTY_RELATED_ANALYSES: ActiveAnalysis[] = [];
+
 /** Registers browser-native WebMCP against the same application service as the UI. */
 export function WebMcpBridge({
   runAnalysis,
+  runAnalysisBundle,
   activeAnalysis = null,
+  relatedAnalyses = EMPTY_RELATED_ANALYSES,
   onOpenStormClaimDiscussion = () => {},
   onStatusChange,
 }: WebMcpBridgeProps) {
-  const tool = useMemo(() => createAnalyzeHazardTool({ runAnalysis }), [runAnalysis]);
+  const tool = useMemo(
+    () => createAnalyzeHazardTool({
+      runAnalysis,
+      ...(runAnalysisBundle ? { runAnalysisBundle } : {}),
+    }),
+    [runAnalysis, runAnalysisBundle]
+  );
 
   useEffect(() => {
     if (!document.modelContext) {
@@ -62,7 +78,7 @@ export function WebMcpBridge({
     if (!document.modelContext || !activeAnalysis) return;
     const controller = new AbortController();
     const contextualTools = [
-      createInspectEvidenceTool(activeAnalysis),
+      createInspectEvidenceTool(activeAnalysis, relatedAnalyses),
       createStormClaimDiscussionTool(activeAnalysis, onOpenStormClaimDiscussion),
     ].filter((item): item is WebMCP.ModelContextTool => item !== null);
     void Promise.all(
@@ -75,7 +91,7 @@ export function WebMcpBridge({
       }
     });
     return () => controller.abort();
-  }, [activeAnalysis, onOpenStormClaimDiscussion]);
+  }, [activeAnalysis, onOpenStormClaimDiscussion, relatedAnalyses]);
 
   return null;
 }
