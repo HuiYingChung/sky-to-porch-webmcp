@@ -142,11 +142,11 @@ that assessment.
 
 | Layer | Current evidence |
 | --- | --- |
-| Deterministic product | Unit, integration, production-build, and desktop/mobile Playwright gates |
-| Native WebMCP | Exact `c6f3c8c` production discovery, analysis, shared UI, no-observation, and contextual tools pass; contextual inspection is within 2,400 characters. A newly exposed primary-bundle cap fix and stronger ambiguous-place STOP/wait contract pass the full local gate and await publication/recheck |
+| Deterministic product | Exact local `b3859f9`: typecheck, lint, 1,294 unit tests, 132 integration tests, 14-page production build, tracked-snapshot secret scan, and 230/230 desktop/mobile Playwright journeys pass |
+| Native WebMCP | Exact `c6f3c8c` production discovery, analysis, shared UI, no-observation, and contextual tools pass. Local `b3859f9` adds the bounded primary output and selected-label ambiguity continuation; publication and production recheck remain separate |
 | Historical official sources | All six primary and related chains in the three curated demos returned observations |
 | Generic product path | Albuquerque non-demo browser journey plus selection cases across all seven hazards |
-| Tool selection | Every registered tool has a distinct natural-trigger case; repeated model-scored runs, including the post-ambiguity wait behavior, remain a separate evaluation gate |
+| Tool selection | Final-schema `gpt-5-mini`: 18/22 semantic selection/arguments; both ambiguity wait and post-choice resume cases pass. Four misses remain documented rather than being counted as a passed model gate |
 
 Evidence records:
 
@@ -154,6 +154,7 @@ Evidence records:
 - [Production native Agent verification](docs/testing/native-agent-production-verification-2026-08-27.md)
 - [Evidence-forward historical demos](docs/testing/evidence-forward-demo-live-verification-2026-08-27.md)
 - [WebMCP evaluation boundary](docs/testing/webmcp-evals.md)
+- [Final local candidate verification](docs/testing/webmcp-final-local-verification-2026-08-27.md)
 - [Target architecture](docs/architecture/webmcp-target.md)
 
 ## Evidence boundary

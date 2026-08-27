@@ -14,18 +14,18 @@
 - W3 WebMCP tools: three baseline tools plus two contextual tools implemented;
   production native discovery, analysis, no-observation, shared-UI, and
   contextual-tool journeys pass at `c6f3c8c`. Contextual inspection is now
-  production-conformant at 2,219 characters. The same rerun exposed a
-  2,524-character primary bundle above its 2,400-character contract; its local
-  correction passes a production-shaped regression. A reported challenge-Agent
-  ambiguity continuation also prompted a stronger local STOP/wait contract,
-  pending publication and production/model re-verification
+  production-conformant at 2,219 characters. Local candidate `b3859f9` fixes
+  the exposed primary-bundle cap and strengthens ambiguity handling with
+  label-only choices, no public coordinate bypass, required time intent, and a
+  tested selected-label continuation; publication and production
+  re-verification remain pending
 - W4 provider cleanup: complete; deterministic-only application runtime
 - W5 verification: the published `c6f3c8c` candidate passed exact remote CI at
-  run `33105415851`; the current private local corrections pass typecheck, lint,
-  1,292 unit tests, 132 integration tests, a production build, 228 browser
-  journeys, and secret check. Repeated model-scored evals remain pending:
-  free-tier use is owner-authorized, but no model key is configured and no
-  request has been made
+  run `33105415851`; exact local candidate `b3859f9` passes typecheck, lint,
+  1,294 unit tests, 132 integration tests, a 14-page production build, a clean
+  230-journey desktop/mobile Playwright run, and a tracked-snapshot secret
+  scan. The final-schema `gpt-5-mini` run is a truthful partial model pass:
+  18/22 selection/argument semantics and 2/2 ambiguity wait/resume cases
 - W5a shared-view UX: complete; full deterministic and browser regression pass
 - W5b Canadian Flood ground evidence: complete; bounded ECCC GeoMet live smoke
   and the full 220-journey browser regression passed
@@ -253,16 +253,15 @@ Technical WebMCP details remain Codex's responsibility.
 - WebMCP tools are discoverable in the supported production in-app browser.
   Production discovery, primary execution, shared UI, ambiguity,
   no-observation, and contextual registration pass at `c6f3c8c`; contextual
-  output is within its limit. The primary bundle exceeded that limit and has a
-  local correction awaiting publication and production re-verification. The
-  stronger ambiguity STOP/wait contract also awaits challenge-Agent recheck.
+  output is within its limit. Candidate `b3859f9` fixes the primary limit and
+  passes local deterministic, browser, and ambiguity model checks; it still
+  awaits publication and production native-Agent re-verification.
 - Human and agent interactions share one evidence pipeline and UI state.
 - The deterministic safety model is unchanged or stronger.
 - Tool descriptions and outputs stay within current implementation guidance.
-- All deterministic tests, model evals, CI, and exact-candidate checks pass.
-  (Exact remote CI passes for published `c6f3c8c`; the current local corrections
-  pass their full local gate at `f42cc37` but still need repeated model-scored
-  evals, publication, and exact remote CI.)
+- All deterministic tests and exact-candidate checks pass locally. Model
+  selection remains a separate partial gate at 18/22; exact remote CI still
+  applies only to published `c6f3c8c` until the owner pushes this candidate.
 - Prior work and new work are unambiguous.
 - The repository is publicly reproducible under a recognized open-source
   license.
