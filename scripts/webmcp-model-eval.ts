@@ -1,0 +1,384 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { loadEnvConfig } from "@next/env";
+import type { ActiveAnalysis } from "@/lib/analysis/types";
+import {
+  createAnalyzeHazardTool,
+} from "@/lib/webmcp/analyze-tool";
+import {
+  createInspectEvidenceTool,
+  createStormClaimDiscussionTool,
+} from "@/lib/webmcp/context-tools";
+import {
+  createGetEnvironmentalSourceCoverageTool,
+  createListEnvironmentalHazardsTool,
+} from "@/lib/webmcp/discovery-tools";
+
+interface EvalCall {
+  functionName: string;
+  arguments: Record<string, unknown>;
+}
+
+interface EvalCase {
+  id: string;
+  availableAfter?: "completed_environmental_analysis" | "completed_home_wind_analysis";
+  messages: Array<{ role: "user"; content: string }>;
+  expectedCall: EvalCall[];
+}
+
+interface ApiFunctionCall {
+  type: "function_call";
+  call_id: string;
+  name: string;
+  arguments: string;
+}
+
+interface ApiResponse {
+  id: string;
+  output?: Array<Record<string, unknown>>;
+  output_text?: string;
+  usage?: Record<string, unknown>;
+  error?: unknown;
+}
+
+interface RunOutcome {
+  case_id: string;
+  run: number;
+  expected_calls: EvalCall[];
+  actual_calls: EvalCall[];
+  exact_match: boolean;
+  expected_argument_subset_match: boolean;
+  response_ids: string[];
+  response_text: string;
+  usage: Array<Record<string, unknown> | undefined>;
+  raw_responses: ApiResponse[];
+}
+
+const SYSTEM_INSTRUCTIONS = [
+  "You are evaluating a browser Agent against the exact WebMCP tools registered by Sky to Porch.",
+  "Follow each tool description and JSON schema exactly.",
+  "Call tools only when needed. Do not invent coordinates for a named place.",
+  "If a tool result requires user input, ask the user and wait; do not choose or call another tool before a new user message.",
+].join(" ");
+
+function parseArgs() {
+  const values = process.argv.slice(2);
+  const option = (name: string) => {
+    const index = values.indexOf(name);
+    return index >= 0 ? values[index + 1] : undefined;
+  };
+  const runs = Number(option("--runs") ?? "1");
+  if (!Number.isInteger(runs) || runs < 1 || runs > 5) {
+    throw new Error("--runs must be an integer from 1 through 5");
+  }
+  return {
+    runs,
+    caseId: option("--case"),
+    model: option("--model") ?? "gpt-5-mini",
+    includePostTool: values.includes("--include-post-tool"),
+  };
+}
+
+function sampleCompletedAnalysis(): ActiveAnalysis {
+  return {
+    analysisId: "model-eval-context",
+    origin: "agent",
+    request: {
+      hazardId: "wind_storm",
+      concern: "home",
+      placeSelection: {},
+      evidenceMode: "live",
+    },
+    outcome: {
+      hazardId: "wind_storm",
+      result: {
+        kind: "success",
+        claimDiscussion: {},
+      },
+    },
+    completedAt: "2026-08-27T00:00:00.000Z",
+  } as unknown as ActiveAnalysis;
+}
+
+function availableTools(item?: EvalCase) {
+  const baseline = [
+    createAnalyzeHazardTool({ runAnalysis: async () => null }),
+    createListEnvironmentalHazardsTool(),
+    createGetEnvironmentalSourceCoverageTool(),
+  ];
+  if (!item?.availableAfter) return baseline;
+  const analysis = sampleCompletedAnalysis();
+  const contextual = [createInspectEvidenceTool(analysis)];
+  if (item.availableAfter === "completed_home_wind_analysis") {
+    const claim = createStormClaimDiscussionTool(analysis, () => {});
+    if (claim) contextual.push(claim);
+  }
+  return [...baseline, ...contextual];
+}
+
+function apiTools(tools: WebMCP.ModelContextTool[]) {
+  return tools.map((tool) => ({
+    type: "function",
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.inputSchema ?? {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+    },
+  }));
+}
+
+async function request(apiKey: string, body: Record<string, unknown>): Promise<ApiResponse> {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json() as ApiResponse;
+  if (!response.ok) {
+    const message = typeof payload.error === "object" && payload.error !== null
+      ? JSON.stringify(payload.error)
+      : `HTTP ${response.status}`;
+    throw new Error(`OpenAI Responses API failed: ${message}`);
+  }
+  return payload;
+}
+
+function functionCalls(response: ApiResponse): ApiFunctionCall[] {
+  return (response.output ?? [])
+    .filter((item) => item.type === "function_call")
+    .map((item) => item as unknown as ApiFunctionCall);
+}
+
+function responseText(response: ApiResponse): string {
+  if (typeof response.output_text === "string") return response.output_text;
+  return (response.output ?? []).flatMap((item) => {
+    if (item.type !== "message" || !Array.isArray(item.content)) return [];
+    return item.content.flatMap((part) => {
+      if (typeof part !== "object" || part === null) return [];
+      const record = part as Record<string, unknown>;
+      return record.type === "output_text" && typeof record.text === "string"
+        ? [record.text]
+        : [];
+    });
+  }).join("\n");
+}
+
+function parseCall(item: ApiFunctionCall): EvalCall {
+  let args: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(item.arguments) as unknown;
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      args = parsed as Record<string, unknown>;
+    }
+  } catch {
+    args = { __invalid_json: item.arguments };
+  }
+  return { functionName: item.name, arguments: args };
+}
+
+function sameValue(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return Array.isArray(actual) && actual.length === expected.length &&
+      expected.every((item, index) => sameValue(actual[index], item));
+  }
+  if (typeof expected === "object" && expected !== null) {
+    if (typeof actual !== "object" || actual === null || Array.isArray(actual)) return false;
+    const actualRecord = actual as Record<string, unknown>;
+    return Object.entries(expected as Record<string, unknown>)
+      .every(([key, value]) => sameValue(actualRecord[key], value));
+  }
+  return Object.is(actual, expected);
+}
+
+function exactCall(actual: EvalCall, expected: EvalCall): boolean {
+  return actual.functionName === expected.functionName &&
+    sameValue(actual.arguments, expected.arguments) &&
+    Object.keys(actual.arguments).length === Object.keys(expected.arguments).length;
+}
+
+async function executeForContinuation(
+  tools: WebMCP.ModelContextTool[],
+  call: ApiFunctionCall
+): Promise<unknown> {
+  const tool = tools.find((item) => item.name === call.name);
+  if (!tool) return { status: "unknown_tool" };
+  const parsed = parseCall(call).arguments;
+  return tool.execute(parsed, { signal: new AbortController().signal });
+}
+
+async function runSelectionCase(
+  apiKey: string,
+  model: string,
+  item: EvalCase,
+  run: number
+): Promise<RunOutcome> {
+  const tools = availableTools(item);
+  const actualCalls: EvalCall[] = [];
+  const responses: ApiResponse[] = [];
+  let input: unknown = item.messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+  }));
+  let previousResponseId: string | undefined;
+
+  for (let turn = 0; turn < Math.max(1, item.expectedCall.length); turn += 1) {
+    const response = await request(apiKey, {
+      model,
+      instructions: SYSTEM_INSTRUCTIONS,
+      input,
+      tools: apiTools(tools),
+      tool_choice: "auto",
+      parallel_tool_calls: false,
+      max_output_tokens: 500,
+      ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
+    });
+    responses.push(response);
+    const calls = functionCalls(response);
+    if (calls.length === 0) break;
+    const call = calls[0];
+    actualCalls.push(parseCall(call));
+    if (actualCalls.length >= item.expectedCall.length) break;
+    const result = await executeForContinuation(tools, call);
+    previousResponseId = response.id;
+    input = [{
+      type: "function_call_output",
+      call_id: call.call_id,
+      output: JSON.stringify(result),
+    }];
+  }
+
+  const exact = actualCalls.length === item.expectedCall.length && actualCalls.every(
+    (call, index) => exactCall(call, item.expectedCall[index])
+  );
+  const subset = actualCalls.length === item.expectedCall.length && actualCalls.every(
+    (call, index) => call.functionName === item.expectedCall[index].functionName &&
+      sameValue(call.arguments, item.expectedCall[index].arguments)
+  );
+  return {
+    case_id: item.id,
+    run,
+    expected_calls: item.expectedCall,
+    actual_calls: actualCalls,
+    exact_match: exact,
+    expected_argument_subset_match: subset,
+    response_ids: responses.map((response) => response.id),
+    response_text: responses.map(responseText).filter(Boolean).join("\n"),
+    usage: responses.map((response) => response.usage),
+    raw_responses: responses,
+  };
+}
+
+async function runPostToolCase(apiKey: string, model: string, run: number) {
+  const cases = JSON.parse(await readFile(resolve(
+    process.cwd(),
+    "tests/webmcp/post-tool-behavior-evals.json"
+  ), "utf8")) as Array<{
+    id: string;
+    messages: Array<Record<string, unknown>>;
+  }>;
+  const item = cases[0];
+  const toolMessage = item.messages[2] as {
+    functionName: string;
+    content: Record<string, unknown>;
+  };
+  const assistantMessage = item.messages[1] as {
+    functionCall: { functionName: string; arguments: Record<string, unknown> };
+  };
+  const callId = "call_ambiguous_place_eval";
+  const response = await request(apiKey, {
+    model,
+    instructions: SYSTEM_INSTRUCTIONS,
+    input: [
+      item.messages[0],
+      {
+        type: "function_call",
+        call_id: callId,
+        name: assistantMessage.functionCall.functionName,
+        arguments: JSON.stringify(assistantMessage.functionCall.arguments),
+      },
+      {
+        type: "function_call_output",
+        call_id: callId,
+        output: JSON.stringify(toolMessage.content),
+      },
+    ],
+    tools: apiTools(availableTools()),
+    tool_choice: "auto",
+    parallel_tool_calls: false,
+    max_output_tokens: 500,
+  });
+  const text = responseText(response);
+  const calls = functionCalls(response).map(parseCall);
+  return {
+    case_id: item.id,
+    run,
+    actual_calls: calls,
+    response_text: text,
+    asks_user_to_choose: /\b(which|choose|select)\b/iu.test(text),
+    waits_for_next_message: calls.length === 0,
+    appears_to_choose_candidate: /\b(I(?:'ll| will| choose| chose) (?:use|choose)?\s*(?:Springfield,\s*)?(?:Massachusetts|Illinois|Missouri))\b/iu.test(text),
+    response_id: response.id,
+    usage: response.usage,
+    raw_response: response,
+  };
+}
+
+async function main() {
+  loadEnvConfig(process.cwd());
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
+  const options = parseArgs();
+  const dataset = JSON.parse(await readFile(resolve(
+    process.cwd(),
+    "tests/webmcp/tool-selection-evals.json"
+  ), "utf8")) as EvalCase[];
+  const selected = options.caseId
+    ? dataset.filter((item) => item.id === options.caseId)
+    : dataset;
+  if (options.caseId && selected.length === 0 && options.caseId !== "ambiguous-place-must-wait-for-person") {
+    throw new Error(`Unknown case: ${options.caseId}`);
+  }
+
+  const outcomes: RunOutcome[] = [];
+  const postToolOutcomes: unknown[] = [];
+  for (let run = 1; run <= options.runs; run += 1) {
+    for (const item of selected) {
+      outcomes.push(await runSelectionCase(apiKey, options.model, item, run));
+      console.log(`[${run}/${options.runs}] ${item.id}: ${outcomes.at(-1)?.exact_match ? "PASS" : "CHECK"}`);
+    }
+    if (options.includePostTool || options.caseId === "ambiguous-place-must-wait-for-person") {
+      const outcome = await runPostToolCase(apiKey, options.model, run);
+      postToolOutcomes.push(outcome);
+      console.log(`[${run}/${options.runs}] ambiguous-place-must-wait-for-person: ${outcome.asks_user_to_choose && outcome.waits_for_next_message && !outcome.appears_to_choose_candidate ? "PASS" : "CHECK"}`);
+    }
+  }
+
+  const exactPasses = outcomes.filter((item) => item.exact_match).length;
+  const subsetPasses = outcomes.filter((item) => item.expected_argument_subset_match).length;
+  const timestamp = new Date().toISOString().replaceAll(":", "-");
+  const outputDirectory = resolve(process.cwd(), "artifacts/webmcp-evals");
+  await mkdir(outputDirectory, { recursive: true });
+  const outputPath = resolve(outputDirectory, `${timestamp}-${options.model}.json`);
+  await writeFile(outputPath, JSON.stringify({
+    generated_at: new Date().toISOString(),
+    model: options.model,
+    runs: options.runs,
+    selection_summary: {
+      exact_passes: exactPasses,
+      expected_argument_subset_passes: subsetPasses,
+      total: outcomes.length,
+    },
+    outcomes,
+    post_tool_outcomes: postToolOutcomes,
+  }, null, 2));
+  console.log(`Selection exact: ${exactPasses}/${outcomes.length}`);
+  console.log(`Selection expected-subset: ${subsetPasses}/${outcomes.length}`);
+  console.log(`Raw outcomes: ${outputPath}`);
+}
+
+await main();
