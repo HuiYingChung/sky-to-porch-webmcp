@@ -1,5 +1,10 @@
 # WebMCP final local candidate verification — 2026-08-27
 
+> Superseded for same-label place continuation by
+> [Stable place-choice regression verification](webmcp-identical-place-choice-regression-2026-08-27.md).
+> This record remains historical evidence for PR #5 and must not be read as
+> verification of the later stable-ID fix.
+
 ## Candidate and boundary
 
 - Branch: `fix/webmcp-place-choice-evaluation`

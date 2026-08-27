@@ -110,7 +110,7 @@ const SYSTEM_INSTRUCTIONS = [
   "You are evaluating a browser Agent against the exact WebMCP tools registered by Sky to Porch.",
   "Follow each tool description and JSON schema exactly.",
   "Call tools only when needed. Do not invent coordinates for a named place.",
-  "For analysis time, use latest_completed unless the user stated exact dates; never invent a date or use today.",
+  "For initial analysis time, use latest_completed unless the user stated exact dates; never invent a date or use today. After needs_place_choice, ignore that initial-time default and copy retry_with_original_arguments exactly, including its time.",
   "If a tool result requires user input, ask the user and wait; do not choose or call another tool before a new user message.",
   "When the user then chooses a returned place, resume the unfinished task with that choice and continue through the requested result.",
 ].join(" ");
@@ -179,9 +179,22 @@ function modelEvalAnalysis(request: AnalysisRequest): ActiveAnalysis {
 function modelEvalGeocoder(_url: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const body = JSON.parse(String(init?.body ?? "{}")) as { query?: string };
   const query = typeof body.query === "string" ? body.query : "Selected place";
+  const results = query === "Springfield"
+    ? [
+        { id: "osm-r-1001", label: "Springfield, Massachusetts", lon: -72.5898, lat: 42.1015 },
+        { id: "osm-r-1002", label: "Springfield, Illinois", lon: -89.6501, lat: 39.7817 },
+        { id: "osm-r-1003", label: "Springfield, Missouri", lon: -93.2923, lat: 37.209 },
+      ]
+    : query === "Houston"
+      ? [
+          { id: "osm-r-2688911", label: "Houston, Texas, United States", lon: -95.3676974, lat: 29.7589382 },
+          { id: "osm-r-1840945", label: "Houston, Texas, United States", lon: -95.390805, lat: 31.3378465 },
+          { id: "osm-r-1074368", label: "Houston, Georgia, United States", lon: -83.631394, lat: 32.4659752 },
+        ]
+      : [{ id: "osm-r-selected", label: query, lon: -89.6501, lat: 39.7817 }];
   return Promise.resolve(new Response(JSON.stringify({
     ok: true,
-    results: [{ label: query, lon: -89.6501, lat: 39.7817 }],
+    results,
   }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
@@ -337,8 +350,18 @@ function semanticArgumentsMatch(actual: EvalCall, expected: EvalCall): boolean {
     if (!sameValue(actualValue, expectedValue)) return false;
   }
 
-  for (const key of ["start_date", "end_date", "latitude", "longitude"] as const) {
-    if (!(key in expectedArgs) && key in actualArgs) return false;
+  for (const key of [
+    "start_date",
+    "end_date",
+    "latitude",
+    "longitude",
+    "place_choice_id",
+  ] as const) {
+    if (
+      !(key in expectedArgs) &&
+      key in actualArgs &&
+      !(key === "place_choice_id" && actualArgs[key] === null)
+    ) return false;
   }
   return true;
 }
@@ -524,7 +547,7 @@ async function runPostToolCase(
   );
   const asksUserToChoose = /\b(which|choose|select)\b/iu.test(text);
   const waitsForNextMessage = calls.length === 0;
-  const appearsToChooseCandidate = /\b(I(?:'ll| will| choose| chose) (?:use|choose)?\s*(?:Springfield,\s*)?(?:Massachusetts|Illinois|Missouri))\b/iu.test(text);
+  const appearsToChooseCandidate = /\bI(?:'ll| will| choose| chose)\s+(?:use|choose)?\s*(?:(?:Springfield,\s*)?(?:Massachusetts|Illinois|Missouri)|(?:the\s+)?(?:first|second)\s+Houston)\b/iu.test(text);
   let toolExecutionOutput: unknown;
   let finalResponseText = "";
   let finalCalls: EvalCall[] = [];

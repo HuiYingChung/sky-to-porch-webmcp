@@ -203,7 +203,7 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
   });
 });
 
-test("an ambiguous place waits for a person, then the selected label completes the shared analysis", async ({
+test("an identical-label place choice resumes by stable id and completes the shared analysis", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -223,12 +223,21 @@ test("an ambiguous place waits for a person, then the selected label completes t
 
   await page.route("**/api/geocode", async (route) => {
     const body = route.request().postDataJSON() as { query: string };
-    const results = body.query === "Springfield, Illinois"
-      ? [{ label: "Springfield, Illinois", lon: -89.6501, lat: 39.7817 }]
-      : [
-          { label: "Springfield, Illinois", lon: -89.6501, lat: 39.7817 },
-          { label: "Springfield, Missouri", lon: -93.2923, lat: 37.209 },
-        ];
+    expect(body.query).toBe("Houston");
+    const results = [
+      {
+        id: "osm-r-2688911",
+        label: "Houston, Texas, United States",
+        lon: -95.3676974,
+        lat: 29.7589382,
+      },
+      {
+        id: "osm-r-1840945",
+        label: "Houston, Texas, United States",
+        lon: -95.390805,
+        lat: 31.3378465,
+      },
+    ];
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -253,21 +262,22 @@ test("an ambiguous place waits for a person, then the selected label completes t
   });
 
   await gotoHydrated(page, "/");
-  const execute = (place: string) => page.evaluate(async (agentPlace) => {
+  const execute = (place: string, placeChoiceId?: string) => page.evaluate(async (args) => {
     const state = globalThis as typeof globalThis & {
       __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
     };
     const tool = state.__skyToPorchWebMcpTools?.analyze_environmental_hazard;
     if (!tool) throw new Error("WebMCP analysis tool was not registered");
     return tool.execute({
-      place: agentPlace,
+      place: args.place,
+      ...(args.placeChoiceId ? { place_choice_id: args.placeChoiceId } : {}),
       hazard: "fire_smoke",
       time: "latest_completed",
       analysis_scope: "single_hazard_only",
     }, { signal: new AbortController().signal });
-  }, place) as Promise<Record<string, unknown>>;
+  }, { place, placeChoiceId }) as Promise<Record<string, unknown>>;
 
-  const ambiguous = await execute("Springfield");
+  const ambiguous = await execute("Houston");
   expect(ambiguous).toMatchObject({
     status: "needs_place_choice",
     ui_updated: false,
@@ -276,21 +286,21 @@ test("an ambiguous place waits for a person, then the selected label completes t
     must_not_select_place: true,
     must_not_retry_before_user_reply: true,
     choices: [
-      { choice_id: "place-1", label: "Springfield, Illinois" },
-      { choice_id: "place-2", label: "Springfield, Missouri" },
+      { choice_id: "place-osm-r-2688911", label: "Houston, Texas, United States" },
+      { choice_id: "place-osm-r-1840945", label: "Houston, Texas, United States" },
     ],
   });
   expect(analysisQueries).toBe(0);
 
-  const completed = await execute("Springfield, Illinois");
+  const completed = await execute("Houston", "place-osm-r-2688911");
   expect(completed).toMatchObject({
     status: "unsupported_place",
     ui_updated: true,
-    request: { place: "Springfield, Illinois (OSM search)" },
+    request: { place: "Houston, Texas, United States (OSM search)" },
   });
   expect(analysisQueries).toBe(1);
   await expect(page.locator('[data-testid="agent-analysis-receipt"]:visible'))
-    .toContainText("Springfield, Illinois");
+    .toContainText("Houston, Texas, United States");
 });
 
 test("registers WebMCP and shares an agent analysis with the visible product", async ({

@@ -31,11 +31,14 @@ Volcanoes with Air Quality and Heat. The tool then runs the governed
 combination and reports how strongly official observations across the chains
 support an inference.
 
-`tests/webmcp/post-tool-behavior-evals.json` separately captures the missing
-multi-turn boundary reported during challenge-Agent use: after an ambiguous
+`tests/webmcp/post-tool-behavior-evals.json` separately captures four multi-turn
+cases: wait and resume for ordinary Springfield choices, plus wait and stable-ID
+resume when Houston candidates can share a display label. After an ambiguous
 tool result, the model must ask the person to choose, make no second tool call,
-select no candidate, and wait for the next user message. Its deterministic test
-only validates the retained scenario and contract; it is not a model pass.
+select no candidate, and wait for the next user message. On reply it must keep
+the original place query, copy the selected `choice_id`, preserve the exact
+retry arguments, execute the analysis, and finish the answer. Its deterministic
+test only validates the retained scenarios and contract; it is not a model pass.
 
 The dataset also includes post-analysis availability context for
 `inspect_current_environmental_evidence` and the Home + Wind-only
@@ -79,7 +82,7 @@ have been retained for the exact tool definition under review.
 
 ## Execution status — 2026-08-27
 
-The full 22-case dataset and two multi-turn ambiguity cases remain checked in;
+The full 22-case dataset and four multi-turn ambiguity cases remain checked in;
 their deterministic structure tests pass. The owner authorized paid OpenAI
 evaluation with a key stored only in gitignored `.env.local`. The runner loads
 the key without logging or retaining it, sends only public eval prompts and
@@ -89,26 +92,27 @@ tool metadata, and writes raw responses under ignored
 Several calibration runs were deliberately retained. They exposed guessed
 coordinates, optional-date invention, discovery-selector guessing, and one
 overly permissive continuation scorer. Those findings caused the selector-free
-discovery surface, label-only place choices, removal of public coordinate
-fields, required `time` intent, and semantic continuation scoring in
-ADR-0006. Failed calibration scores are not release evidence.
+discovery surface, stable place IDs, distinguishable locality/type labels,
+removal of public coordinate fields, required `time` intent, exact retry
+arguments, and semantic continuation scoring in ADR-0006. Failed calibration
+scores are not release evidence.
 
-The final candidate used `gpt-5-mini` with low reasoning and low text verbosity
-for three complete, independent runs. Raw artifact:
-`2026-08-27T21-43-45.875Z-gpt-5-mini.json`.
+The stable-place candidate used `gpt-5-mini` with low reasoning and low text
+verbosity for three complete, independent runs. Raw artifact:
+`2026-08-27T23-32-18.065Z-gpt-5-mini.json`.
 
 - semantic tool selection and arguments: **66/66** (22 cases x 3 runs);
-- exact calls: **18/66**;
-- expected-argument subset: **51/66**;
-- ambiguity wait and selected-place resume journeys: **6/6**
-  (2 cases x 3 runs);
-- resumed analysis actually executed the selected Springfield label, received
-  a deterministic no-observation result, produced a final answer, and retained
-  the boundary that missing observations do not prove safety;
-- API usage: 81 responses, 91,371 input tokens (21,632 cached) and 12,937
+- exact calls: **20/66**;
+- expected-argument subset: **53/66**;
+- ambiguity wait and selected-place resume journeys: **12/12**
+  (4 cases x 3 runs);
+- resumed analyses executed the selected stable ID for Springfield and Houston,
+  produced a final answer, and retained the boundary that missing observations
+  do not prove safety;
+- API usage: 88 responses, 113,101 input tokens (74,368 cached) and 13,610
   output tokens;
 - estimated API cost at the public `gpt-5-mini` token rates checked on
-  2026-08-27: **$0.04384955**; account-specific billing adjustments are not
+  2026-08-27: **$0.03876245**; account-specific billing adjustments are not
   included.
 
 Exact-string and expected-subset counts remain diagnostics rather than the
@@ -116,7 +120,7 @@ release score: the semantic scorer permits harmless place qualifiers, natural
 question wording, and additional optional arguments while still rejecting
 invented coordinates/dates, wrong hazards/scopes, extra tool calls, unsafe
 missing-data conclusions, or a failure to ask and wait. The semantic scorer
-has 14 deterministic unit tests.
+has 20 deterministic unit tests.
 
 The earlier 18/22 artifact remains a retained calibration record. Its four
 misses led to sharper single-versus-related hazard descriptions, a dedicated
@@ -130,7 +134,7 @@ The release candidate must also be tested in a supported browser for these
 complete journeys:
 
 - direct place query → evidence → visible map and Insight update;
-- ambiguous place → user choice → selected-label follow-up → evidence;
+- ambiguous place → user choice → stable-ID follow-up → evidence;
 - applicable official-source paths exhausted → strongest available evidence;
   only an actually empty result uses the explicit missing-data state;
 - replacement or cancellation → stale result cannot overwrite the current view.

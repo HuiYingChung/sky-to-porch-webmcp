@@ -69,7 +69,7 @@ describe("WebMCP tool-selection eval dataset", () => {
   });
 
   it("locks the ambiguous-place stop-and-wait behavior for model-backed runs", () => {
-    expect(postToolDataset).toHaveLength(2);
+    expect(postToolDataset).toHaveLength(4);
     const item = postToolDataset.find(
       (candidate) => candidate.id === "ambiguous-place-must-wait-for-person"
     );
@@ -92,6 +92,8 @@ describe("WebMCP tool-selection eval dataset", () => {
         after_user_choice: {
           required_next_action: "retry_analysis_with_selected_place",
           continue_task: true,
+          set_place_choice_id_to_selected_choice_id: true,
+          preserve_original_place: true,
         },
       },
     });
@@ -125,7 +127,8 @@ describe("WebMCP tool-selection eval dataset", () => {
       toolCallsAfterUserReply: [{
         functionName: ANALYZE_HAZARD_TOOL_NAME,
         arguments: {
-          place: "Springfield, Illinois",
+          place: "Springfield",
+          place_choice_id: "place-osm-r-1002",
           hazard: "fire_smoke",
           time: "latest_completed",
           analysis_scope: "single_hazard_only",
@@ -134,6 +137,34 @@ describe("WebMCP tool-selection eval dataset", () => {
       assistantMustContinueTask: true,
       assistantMustFinishAfterToolResult: true,
       assistantMustPreserveNoObservationBoundary: true,
+    });
+  });
+
+  it("locks identical-label Houston continuation to the selected stable id", () => {
+    const item = postToolDataset.find(
+      (candidate) => candidate.id === "identical-label-place-resumes-by-choice-id"
+    );
+    expect(item).toBeDefined();
+    if (!item) throw new Error("Missing identical-label continuation eval case");
+
+    const toolOutput = item.messages[2] as {
+      content: { choices: Array<{ choice_id: string; label: string }> };
+    };
+    expect(toolOutput.content.choices.slice(0, 2)).toEqual([
+      { choice_id: "place-osm-r-2688911", label: "Houston, Texas, United States" },
+      { choice_id: "place-osm-r-1840945", label: "Houston, Texas, United States" },
+    ]);
+    expect(item.messages.at(-1)).toEqual({ role: "user", content: "first Houston" });
+    expect(item.expected.toolCallsAfterUserReply?.[0]).toEqual({
+      functionName: ANALYZE_HAZARD_TOOL_NAME,
+      arguments: {
+        place: "Houston",
+        place_choice_id: "place-osm-r-2688911",
+        hazard: "wind_storm",
+        concern: "home",
+        time: "2024-07-08",
+        analysis_scope: "related_context",
+      },
     });
   });
 

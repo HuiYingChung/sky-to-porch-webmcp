@@ -25,6 +25,12 @@ describe("WebMCP model-eval semantic scoring", () => {
     "This absence of data isn’t proof there’s no danger.",
     "The lack of observations does not mean the area is safe.",
     "I couldn't find any supported smoke observations. That doesn't prove there's no danger.",
+    "No recent observations were returned. This doesn't guarantee there's no wildfire risk.",
+    "No observations returned for wind or flood—insufficient evidence to assess roof risk.",
+    "No official observations were found. Confidence: insufficient.",
+    "No observations were returned, so I cannot determine whether the area is safe.",
+    "No observations found for Houston. Coverage is insufficient to assess hazard impact on the roof.",
+    "The sources returned no observations. That does not prove there's no hazard.",
   ])("accepts a truthful no-observation boundary: %s", (text) => {
     expect(preservesNoObservationBoundary(text)).toBe(true);
   });

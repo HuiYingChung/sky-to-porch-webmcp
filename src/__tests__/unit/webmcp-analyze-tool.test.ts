@@ -157,7 +157,12 @@ describe("WebMCP environmental hazard tool", () => {
     });
 
     const output = await executeAnalyzeHazardTool(
-      { place: "Springfield", hazard: "fire_smoke", time: "latest_completed" },
+      {
+        place: "Springfield",
+        place_choice_id: null,
+        hazard: "fire_smoke",
+        time: "latest_completed",
+      },
       toolOptions(),
       { runAnalysis, fetchImpl, now: () => NOW }
     );
@@ -173,17 +178,26 @@ describe("WebMCP environmental hazard tool", () => {
       after_user_choice: {
         required_next_action: "retry_analysis_with_selected_place",
         continue_task: true,
-        set_place_to_selected_label: true,
+        set_place_choice_id_to_selected_choice_id: true,
+        preserve_original_place: true,
         preserve_other_arguments: true,
+        retry_with_original_arguments: {
+          place: "Springfield",
+          hazard: "fire_smoke",
+          analysis_scope: "related_context",
+          concern: "general",
+          radius_km: 25,
+          time: "latest_completed",
+        },
       },
     });
     expect("choices" in output ? output.choices : undefined).toEqual([
       {
-        choice_id: "place-1",
+        choice_id: "place-coordinate-39.7800000--89.6500000",
         label: "Springfield, Illinois",
       },
       {
-        choice_id: "place-2",
+        choice_id: "place-coordinate-37.2100000--93.2900000",
         label: "Springfield, Missouri",
       },
     ]);
@@ -191,7 +205,7 @@ describe("WebMCP environmental hazard tool", () => {
     expect(message).toContain("PAUSE FOR USER:");
     expect(message).toContain("wait for a new user message");
     expect(message).toContain("continue the unfinished task");
-    expect(message).toContain("keep every other input unchanged");
+    expect(message).toContain("copy retry_with_original_arguments exactly");
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
     expect(runAnalysis).not.toHaveBeenCalled();
   });
@@ -199,21 +213,27 @@ describe("WebMCP environmental hazard tool", () => {
   it("tells the agent to wait for the person, then resume the unfinished task", () => {
     const tool = createAnalyzeHazardTool({ runAnalysis: vi.fn() });
 
-    expect(tool.description).toContain("Never infer coordinates");
+    expect(tool.description).toContain("First named-place call");
+    expect(tool.description).toContain("set place_choice_id=null");
+    expect(tool.description).toContain("never pre-qualify place");
     expect(tool.description).toContain("ask and wait");
-    expect(tool.description).toContain("after the reply");
-    expect(tool.description).toContain("after the reply retry");
-    expect(tool.description).toContain("execute, and finish");
+    expect(tool.description).toContain("After the reply");
+    expect(tool.description).toContain("copy selected choice_id to place_choice_id");
+    expect(tool.description).toContain("execute and finish");
     expect(tool.description).toContain("including fire+smoke or rain+flood+inundation+gages");
-    expect(tool.description).toContain("season/place/goal does not imply heat, air, or any hazard");
+    expect(tool.description).toContain("season/place/goal alone implies none");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.analysis_scope.description)
-      .toContain("all terms map to one enum");
+      .toContain("MUST use single_hazard_only when all terms fit one enum");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.hazard.description)
       .toContain("never infer from season/place/concern/generic conditions");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.hazard.description)
       .toContain("Volcano + air/heat uses earth_volcanoes/related_context");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.place.description)
       .toContain("'near my Houston home' becomes 'Houston'");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.place_choice_id.description)
+      .toContain("Initial call: use null");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.place_choice_id.description)
+      .toContain("Never derive it");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.concern.description)
       .toContain("pets for dog/cat/animal");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.concern.description)
@@ -263,7 +283,8 @@ describe("WebMCP environmental hazard tool", () => {
 
     const completed = await executeAnalyzeHazardTool(
       {
-        place: "Springfield, Illinois",
+        place: "Springfield",
+        place_choice_id: "place-coordinate-39.7800000--89.6500000",
         hazard: "fire_smoke",
         time: "latest_completed",
         analysis_scope: "single_hazard_only",
@@ -282,6 +303,120 @@ describe("WebMCP environmental hazard tool", () => {
       },
     });
     expect(completed.ui_updated).toBe(true);
+  });
+
+  it("resumes an identical-label Houston choice by stable id without looping", async () => {
+    const runAnalysis = vi.fn(async (request: AnalysisRequest) => successfulFireAnalysis(request));
+    const candidates = [
+      {
+        id: "osm-r-2688911",
+        label: "Houston, Texas, United States",
+        lon: -95.3676974,
+        lat: 29.7589382,
+      },
+      {
+        id: "osm-r-1840945",
+        label: "Houston, Texas, United States",
+        lon: -95.390805,
+        lat: 31.3378465,
+      },
+    ];
+    let lookupCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      lookupCount += 1;
+      return new Response(JSON.stringify({
+        ok: true,
+        results: lookupCount === 1 ? candidates : [...candidates].reverse(),
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    const ambiguous = await executeAnalyzeHazardTool(
+      {
+        place: "Houston",
+        hazard: "wind_storm",
+        concern: "home",
+        time: "2024-07-08",
+        analysis_scope: "single_hazard_only",
+      },
+      toolOptions(),
+      { runAnalysis, fetchImpl, now: () => NOW }
+    );
+    expect(ambiguous).toMatchObject({
+      status: "needs_place_choice",
+      ui_updated: false,
+      choices: [
+        { choice_id: "place-osm-r-2688911", label: "Houston, Texas, United States" },
+        { choice_id: "place-osm-r-1840945", label: "Houston, Texas, United States" },
+      ],
+    });
+    expect(runAnalysis).not.toHaveBeenCalled();
+
+    const completed = await executeAnalyzeHazardTool(
+      {
+        place: "Houston",
+        place_choice_id: "place-osm-r-2688911",
+        hazard: "wind_storm",
+        concern: "home",
+        time: "2024-07-08",
+        analysis_scope: "single_hazard_only",
+      },
+      toolOptions(),
+      { runAnalysis, fetchImpl, now: () => NOW }
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(runAnalysis).toHaveBeenCalledTimes(1);
+    expect(runAnalysis.mock.calls[0][0]).toMatchObject({
+      hazardId: "wind_storm",
+      concern: "home",
+      placeSelection: {
+        label: "Houston, Texas, United States (OSM search)",
+        coordinate: { lon: -95.3676974, lat: 29.7589382 },
+      },
+    });
+    expect(completed.ui_updated).toBe(true);
+  });
+
+  it("fails closed with refreshed choices when a prior place choice id no longer matches", async () => {
+    const runAnalysis = vi.fn();
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      results: [
+        { id: "osm-r-2688911", label: "Houston (city), Texas", lon: -95.36, lat: 29.75 },
+        { id: "osm-r-1840945", label: "Houston (county), Texas", lon: -95.39, lat: 31.33 },
+      ],
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Houston",
+        place_choice_id: "place-osm-r-expired",
+        hazard: "wind_storm",
+        time: "2024-07-08",
+        analysis_scope: "single_hazard_only",
+      },
+      toolOptions(),
+      { runAnalysis, fetchImpl, now: () => NOW }
+    );
+
+    expect(output).toMatchObject({
+      status: "needs_place_choice",
+      ui_updated: false,
+      choices: [
+        { choice_id: "place-osm-r-2688911" },
+        { choice_id: "place-osm-r-1840945" },
+      ],
+    });
+    expect("message" in output ? output.message : "").toContain(
+      "previous place choice no longer matches"
+    );
+    expect(runAnalysis).not.toHaveBeenCalled();
   });
 
   it("uses explicit coordinate text, defaults to general/latest, returns citations, and caps output", async () => {
@@ -738,6 +873,24 @@ describe("WebMCP environmental hazard tool", () => {
         time: "2026-02-30",
       },
       "real calendar dates",
+    ],
+    [
+      {
+        place: "Houston",
+        place_choice_id: "place-!",
+        hazard: "wind_storm",
+        time: "2024-07-08",
+      },
+      "copied unchanged",
+    ],
+    [
+      {
+        place: "29.7604, -95.3698",
+        place_choice_id: "place-osm-r-2688911",
+        hazard: "wind_storm",
+        time: "2024-07-08",
+      },
+      "cannot be combined",
     ],
   ])("fails closed on invalid input %#", async (input, expectedMessage) => {
     const runAnalysis = vi.fn();

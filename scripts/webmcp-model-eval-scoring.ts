@@ -31,7 +31,8 @@ export function preservesNoObservationBoundary(text: string): boolean {
     .replaceAll("’", "'")
     .replace(/\s+/gu, " ")
     .trim();
-  const statesNoObservation = /(?:no (?:supported |official |returned )?(?:observations?|data)|no (?:returned )?(?:sources|reports)|did not return (?:an )?(?:official )?observation|couldn't find any[^.]{0,80}observations?|absence of data|lack of (?:observations?|data)|no evidence (?:was )?returned)/u.test(normalized);
-  const rejectsSafetyInference = /(?:(?:doesn't|does not) (?:mean|guarantee|prove)[^.]{0,80}(?:safe|safety|no danger|no risk)|(?:isn't|is not) proof[^.]{0,80}(?:safe|safety|no danger|no risk)|not that[^.]{0,80}(?:safe|safety|no danger|no risk))/u.test(normalized);
-  return statesNoObservation && rejectsSafetyInference;
+  const statesNoObservation = /(?:no [^.]{0,60}(?:observations?|data)(?: (?:were )?(?:returned|found))?|no (?:returned )?(?:sources|reports)|did not return (?:an )?(?:official )?observation|couldn't find any[^.]{0,80}observations?|absence of data|lack of (?:observations?|data)|no evidence (?:was )?returned)/u.test(normalized);
+  const rejectsSafetyInference = /(?:(?:doesn't|does not) (?:mean|guarantee|prove)[^.]{0,80}(?:safe|safety|no [^.]{0,30}(?:danger|risk|hazard))|(?:isn't|is not) proof[^.]{0,80}(?:safe|safety|no [^.]{0,30}(?:danger|risk|hazard))|not that[^.]{0,80}(?:safe|safety|no [^.]{0,30}(?:danger|risk|hazard)))/u.test(normalized);
+  const statesInsufficientBasis = /(?:insufficient (?:evidence|confidence)|(?:evidence|confidence)[^.;]{0,20}insufficient|insufficient[^.;]{0,40}to (?:assess|determine|establish|conclude|infer)|(?:cannot|can't|unable to) (?:assess|determine|establish|conclude|infer))/u.test(normalized);
+  return statesNoObservation && (rejectsSafetyInference || statesInsufficientBasis);
 }

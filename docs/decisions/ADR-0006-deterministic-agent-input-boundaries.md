@@ -13,6 +13,12 @@ person had supplied neither. A guessed coordinate could bypass place
 ambiguity; an invented current date could make the resumed analysis fail
 before evidence retrieval.
 
+A later production-native Houston Beryl journey exposed a distinct identity
+failure: Photon returned Houston city and Houston County with the same assembled
+label. Retrying a selected label repeated the same lookup and ambiguity forever.
+The position-based `place-1` value was displayed but was not accepted by the
+analysis schema, so the Agent had no deterministic continuation parameter.
+
 The earlier discovery schemas also exposed `demo_id` and `source_id` selectors.
 Those selectors were deterministic once supplied, but a model could guess
 them instead of using the returned catalog.
@@ -23,10 +29,14 @@ them instead of using the returned catalog.
   places always use the product geocoder. If the person explicitly supplies a
   coordinate pair, the Agent copies it into `place` as `latitude, longitude`
   and deterministic code parses and validates it.
-- An ambiguous result returns label-only choices plus explicit stop, ask,
-  wait, and continuation instructions. It does not expose retry coordinates.
-  After the person's reply, the Agent calls the same analysis tool with the
-  selected label and preserves every other argument.
+- An ambiguous result returns labels plus opaque stable `choice_id` values and
+  explicit stop, ask, wait, and continuation instructions. It does not expose
+  retry coordinates. After the person's reply, the Agent calls the same
+  analysis tool with the original `place`, copies the selected `choice_id` to
+  `place_choice_id`, and preserves every other argument. Deterministic code
+  refreshes the geocoder candidates and accepts the ID only when it still
+  identifies one of them; candidate ordering and duplicate labels are not
+  identities.
 - Replace optional `start_date` and `end_date` with one required `time` value:
   `latest_completed`, one `YYYY-MM-DD`, or a bounded
   `YYYY-MM-DD/YYYY-MM-DD` range. Deterministic code still rejects invalid,
@@ -37,12 +47,14 @@ them instead of using the returned catalog.
   Keep source coverage hazard-wide and selector-free.
 - Evaluate the pre-choice wait and post-choice continuation separately from
   deterministic tool execution. A model score is not a substitute for the
-  browser test that proves the selected label reaches the shared controller
-  and updates the human UI.
+  browser test that proves the validated selected candidate reaches the shared
+  controller and updates the human UI.
 
 ## Consequences
 
 - A model cannot bypass named-place ambiguity with guessed coordinate fields.
+- Duplicate display labels and reordered geocoder results cannot trap a valid
+  human selection in a label-based clarification loop.
 - The required time intent survives a multi-turn place clarification and
   cannot silently become an invented current-day range.
 - Explicit coordinates remain supported without trusting a model-generated

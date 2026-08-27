@@ -23,6 +23,8 @@ export const GEOCODE_ATTRIBUTION =
   "Search results © OpenStreetMap contributors, via Photon (komoot)";
 
 export interface GeocodeResult {
+  /** Stable upstream identity when Photon supplies an OSM feature id. */
+  id?: string;
   /** Display label assembled from Photon properties (never invented). */
   label: string;
   lon: number;
@@ -140,11 +142,37 @@ export function parsePhotonResponse(body: unknown): GeocodeResult[] {
       lat < -90 ||
       lat > 90
     ) continue;
-    const parts = [properties.name, properties.city, properties.state, properties.country]
-      .filter((part): part is string => typeof part === "string" && part.trim().length > 0);
+    const name = typeof properties.name === "string" ? properties.name.trim() : "";
+    if (name.length === 0) continue;
+    const featureType = typeof properties.type === "string"
+      ? properties.type.trim().replaceAll("_", " ")
+      : "";
+    const primaryLabel = featureType.length > 0 ? `${name} (${featureType})` : name;
+    const context = [properties.city, properties.district, properties.county]
+      .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+      .map((part) => part.trim())
+      .filter((part) => part.toLocaleLowerCase("en-US") !== name.toLocaleLowerCase("en-US"));
+    const parts = [primaryLabel, ...context, properties.state, properties.country]
+      .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+      .map((part) => part.trim());
     const deduped = [...new Set(parts)];
     if (deduped.length === 0) continue;
-    results.push({ label: deduped.join(", "), lon, lat });
+    const osmType = typeof properties.osm_type === "string"
+      ? properties.osm_type.trim().toLocaleLowerCase("en-US")
+      : "";
+    const osmId = properties.osm_id;
+    const id = osmType.length > 0 &&
+      typeof osmId === "number" &&
+      Number.isSafeInteger(osmId) &&
+      osmId >= 0
+      ? `osm-${osmType}-${osmId}`
+      : undefined;
+    results.push({
+      ...(id ? { id } : {}),
+      label: deduped.join(", "),
+      lon,
+      lat,
+    });
   }
   return results;
 }

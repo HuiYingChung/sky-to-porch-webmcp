@@ -23,6 +23,7 @@
         "functionName": "analyze_environmental_hazard",
         "content": {
           "status": "needs_place_choice",
+          "message": "PAUSE FOR USER: I found 3 possible places for Springfield. Do not select a place or retry yet. Ask the person to choose one option below, then wait for a new user message. After the person replies, continue the unfinished task: call this tool again, copy retry_with_original_arguments exactly (especially time=latest_completed), and add the selected choice_id as place_choice_id.",
           "ui_updated": false,
           "requires_user_input": true,
           "required_next_action": "ask_user_to_choose_place_and_wait",
@@ -31,20 +32,29 @@
           "after_user_choice": {
             "required_next_action": "retry_analysis_with_selected_place",
             "continue_task": true,
-            "set_place_to_selected_label": true,
-            "preserve_other_arguments": true
+            "set_place_choice_id_to_selected_choice_id": true,
+            "preserve_original_place": true,
+            "preserve_other_arguments": true,
+            "retry_with_original_arguments": {
+              "place": "Springfield",
+              "hazard": "fire_smoke",
+              "analysis_scope": "single_hazard_only",
+              "concern": "general",
+              "radius_km": 25,
+              "time": "latest_completed"
+            }
           },
           "choices": [
             {
-              "choice_id": "place-1",
+              "choice_id": "place-osm-r-1001",
               "label": "Springfield, Massachusetts"
             },
             {
-              "choice_id": "place-2",
+              "choice_id": "place-osm-r-1002",
               "label": "Springfield, Illinois"
             },
             {
-              "choice_id": "place-3",
+              "choice_id": "place-osm-r-1003",
               "label": "Springfield, Missouri"
             }
           ]
@@ -82,6 +92,7 @@
         "functionName": "analyze_environmental_hazard",
         "content": {
           "status": "needs_place_choice",
+          "message": "PAUSE FOR USER: I found 3 possible places for Springfield. Do not select a place or retry yet. Ask the person to choose one option below, then wait for a new user message. After the person replies, continue the unfinished task: call this tool again, copy retry_with_original_arguments exactly (especially time=latest_completed), and add the selected choice_id as place_choice_id.",
           "ui_updated": false,
           "requires_user_input": true,
           "required_next_action": "ask_user_to_choose_place_and_wait",
@@ -90,20 +101,29 @@
           "after_user_choice": {
             "required_next_action": "retry_analysis_with_selected_place",
             "continue_task": true,
-            "set_place_to_selected_label": true,
-            "preserve_other_arguments": true
+            "set_place_choice_id_to_selected_choice_id": true,
+            "preserve_original_place": true,
+            "preserve_other_arguments": true,
+            "retry_with_original_arguments": {
+              "place": "Springfield",
+              "hazard": "fire_smoke",
+              "analysis_scope": "single_hazard_only",
+              "concern": "general",
+              "radius_km": 25,
+              "time": "latest_completed"
+            }
           },
           "choices": [
             {
-              "choice_id": "place-1",
+              "choice_id": "place-osm-r-1001",
               "label": "Springfield, Massachusetts"
             },
             {
-              "choice_id": "place-2",
+              "choice_id": "place-osm-r-1002",
               "label": "Springfield, Illinois"
             },
             {
-              "choice_id": "place-3",
+              "choice_id": "place-osm-r-1003",
               "label": "Springfield, Missouri"
             }
           ]
@@ -123,10 +143,171 @@
         {
           "functionName": "analyze_environmental_hazard",
           "arguments": {
-            "place": "Springfield, Illinois",
+            "place": "Springfield",
+            "place_choice_id": "place-osm-r-1002",
             "hazard": "fire_smoke",
             "time": "latest_completed",
             "analysis_scope": "single_hazard_only"
+          }
+        }
+      ],
+      "assistantMustContinueTask": true,
+      "assistantMustFinishAfterToolResult": true,
+      "assistantMustPreserveNoObservationBoundary": true
+    }
+  },
+  {
+    "id": "identical-label-place-must-wait-for-person",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Run the Houston Beryl roof demo."
+      },
+      {
+        "role": "assistant",
+        "functionCall": {
+          "functionName": "analyze_environmental_hazard",
+          "arguments": {
+            "place": "Houston",
+            "hazard": "wind_storm",
+            "concern": "home",
+            "time": "2024-07-08",
+            "analysis_scope": "related_context"
+          }
+        }
+      },
+      {
+        "role": "tool",
+        "functionName": "analyze_environmental_hazard",
+        "content": {
+          "status": "needs_place_choice",
+          "message": "PAUSE FOR USER: I found 3 possible places for Houston. Do not select a place or retry yet. Ask the person to choose one option below, then wait for a new user message. After the person replies, continue the unfinished task: call this tool again, copy retry_with_original_arguments exactly (especially time=2024-07-08), and add the selected choice_id as place_choice_id.",
+          "ui_updated": false,
+          "requires_user_input": true,
+          "required_next_action": "ask_user_to_choose_place_and_wait",
+          "must_not_select_place": true,
+          "must_not_retry_before_user_reply": true,
+          "after_user_choice": {
+            "required_next_action": "retry_analysis_with_selected_place",
+            "continue_task": true,
+            "set_place_choice_id_to_selected_choice_id": true,
+            "preserve_original_place": true,
+            "preserve_other_arguments": true,
+            "retry_with_original_arguments": {
+              "place": "Houston",
+              "hazard": "wind_storm",
+              "analysis_scope": "related_context",
+              "concern": "home",
+              "radius_km": 25,
+              "time": "2024-07-08"
+            }
+          },
+          "choices": [
+            {
+              "choice_id": "place-osm-r-2688911",
+              "label": "Houston, Texas, United States"
+            },
+            {
+              "choice_id": "place-osm-r-1840945",
+              "label": "Houston, Texas, United States"
+            },
+            {
+              "choice_id": "place-osm-r-1074368",
+              "label": "Houston, Georgia, United States"
+            }
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "toolCallsBeforeNextUserMessage": [],
+      "assistantMustAskUserToChoose": true,
+      "assistantMustNotChooseCandidate": true,
+      "assistantMustWaitForNextUserMessage": true
+    }
+  },
+  {
+    "id": "identical-label-place-resumes-by-choice-id",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Run the Houston Beryl roof demo."
+      },
+      {
+        "role": "assistant",
+        "functionCall": {
+          "functionName": "analyze_environmental_hazard",
+          "arguments": {
+            "place": "Houston",
+            "hazard": "wind_storm",
+            "concern": "home",
+            "time": "2024-07-08",
+            "analysis_scope": "related_context"
+          }
+        }
+      },
+      {
+        "role": "tool",
+        "functionName": "analyze_environmental_hazard",
+        "content": {
+          "status": "needs_place_choice",
+          "message": "PAUSE FOR USER: I found 3 possible places for Houston. Do not select a place or retry yet. Ask the person to choose one option below, then wait for a new user message. After the person replies, continue the unfinished task: call this tool again, copy retry_with_original_arguments exactly (especially time=2024-07-08), and add the selected choice_id as place_choice_id.",
+          "ui_updated": false,
+          "requires_user_input": true,
+          "required_next_action": "ask_user_to_choose_place_and_wait",
+          "must_not_select_place": true,
+          "must_not_retry_before_user_reply": true,
+          "after_user_choice": {
+            "required_next_action": "retry_analysis_with_selected_place",
+            "continue_task": true,
+            "set_place_choice_id_to_selected_choice_id": true,
+            "preserve_original_place": true,
+            "preserve_other_arguments": true,
+            "retry_with_original_arguments": {
+              "place": "Houston",
+              "hazard": "wind_storm",
+              "analysis_scope": "related_context",
+              "concern": "home",
+              "radius_km": 25,
+              "time": "2024-07-08"
+            }
+          },
+          "choices": [
+            {
+              "choice_id": "place-osm-r-2688911",
+              "label": "Houston, Texas, United States"
+            },
+            {
+              "choice_id": "place-osm-r-1840945",
+              "label": "Houston, Texas, United States"
+            },
+            {
+              "choice_id": "place-osm-r-1074368",
+              "label": "Houston, Georgia, United States"
+            }
+          ]
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "The site returned two identical Houston, Texas labels. Which should I use: first Houston, second Houston, or Houston, Georgia?"
+      },
+      {
+        "role": "user",
+        "content": "first Houston"
+      }
+    ],
+    "expected": {
+      "toolCallsAfterUserReply": [
+        {
+          "functionName": "analyze_environmental_hazard",
+          "arguments": {
+            "place": "Houston",
+            "place_choice_id": "place-osm-r-2688911",
+            "hazard": "wind_storm",
+            "concern": "home",
+            "time": "2024-07-08",
+            "analysis_scope": "related_context"
           }
         }
       ],
