@@ -8,6 +8,7 @@ import {
 import {
   GET_COVERAGE_INPUT_SCHEMA,
   GET_COVERAGE_TOOL_NAME,
+  LIST_HAZARDS_INPUT_SCHEMA,
   LIST_HAZARDS_TOOL_NAME,
 } from "@/lib/webmcp/discovery-tools";
 
@@ -38,7 +39,7 @@ describe("WebMCP tool-selection eval dataset", () => {
   it("keeps expected calls aligned with the registered tool contract", () => {
     const schemas = {
       [ANALYZE_HAZARD_TOOL_NAME]: ANALYZE_HAZARD_INPUT_SCHEMA.properties,
-      [LIST_HAZARDS_TOOL_NAME]: {},
+      [LIST_HAZARDS_TOOL_NAME]: LIST_HAZARDS_INPUT_SCHEMA.properties,
       [GET_COVERAGE_TOOL_NAME]: GET_COVERAGE_INPUT_SCHEMA.properties,
     };
     for (const item of dataset) {
@@ -73,10 +74,33 @@ describe("WebMCP tool-selection eval dataset", () => {
       "direct-fire-place",
       "implicit-heat-pets",
       "beryl-broad-home-damage-auto-bundle",
+      "los-angeles-health-demo",
+      "tucson-pets-demo",
+      "historical-wind-no-concern",
     ]) {
       expect(dataset.find((item) => item.id === id)?.expectedCall[0]?.functionName)
         .toBe(ANALYZE_HAZARD_TOOL_NAME);
     }
+  });
+
+  it("lets narrow historical evidence asks proceed without concern and broad goals ask first", () => {
+    const narrow = dataset.find((item) => item.id === "historical-wind-no-concern");
+    const broad = dataset.find((item) => item.id === "broad-goal-ask-clarification");
+    expect(narrow?.expectedCall[0]).toMatchObject({
+      functionName: ANALYZE_HAZARD_TOOL_NAME,
+      arguments: { place: "Houston", hazard: "wind_storm" },
+    });
+    expect(narrow?.expectedCall[0].arguments).not.toHaveProperty("concern");
+    expect(broad?.expectedCall).toEqual([]);
+  });
+
+  it("selects a curated demo through the existing discovery tool before analysis", () => {
+    const selected = dataset.find((item) => item.id === "selected-tucson-demo");
+    expect(selected?.expectedCall.map((call) => call.functionName)).toEqual([
+      LIST_HAZARDS_TOOL_NAME,
+      ANALYZE_HAZARD_TOOL_NAME,
+    ]);
+    expect(selected?.expectedCall[0].arguments).toEqual({ demo_id: "tucson-heat-pets" });
   });
 
   it("uses single scope only for explicit asks and defaults broad questions to related context", () => {

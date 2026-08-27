@@ -81,7 +81,7 @@ describe("WebMCP environmental hazard tool", () => {
     const tool = createAnalyzeHazardTool({ runAnalysis: vi.fn() });
 
     expect(tool.name).toBe("analyze_environmental_hazard");
-    expect(tool.description.length).toBeLessThanOrEqual(500);
+    expect(tool.description.length).toBeLessThanOrEqual(700);
     expect(tool.annotations).toEqual({
       readOnlyHint: false,
       untrustedContentHint: true,
@@ -138,7 +138,7 @@ describe("WebMCP environmental hazard tool", () => {
       evidence: null,
       limitations: ["Deterministic provider failure boundary."],
       no_data_is_not_no_danger: true,
-      evidence_scope: "wind_only_no_rain_flood_or_water_gages",
+      evidence_scope: "regional_wind_observations",
     });
   });
 
@@ -185,7 +185,7 @@ describe("WebMCP environmental hazard tool", () => {
     expect(runAnalysis).not.toHaveBeenCalled();
   });
 
-  it("uses supplied coordinates, defaults to home/latest, updates the UI, and caps output", async () => {
+  it("uses supplied coordinates, defaults to general/latest, returns citations, and caps output", async () => {
     const runAnalysis = vi.fn(async (
       request: AnalysisRequest,
       _origin?: "agent",
@@ -213,12 +213,26 @@ describe("WebMCP environmental hazard tool", () => {
     expect(runAnalysis).toHaveBeenCalledTimes(1);
     const [request, origin] = runAnalysis.mock.calls[0];
     expect(origin).toBe("agent");
-    expect(request.concern).toBe("home");
+    expect(request.concern).toBe("general");
     expect(request.evidenceMode).toBe("live");
     expect(request.placeSelection.selectionMethod).toBe("agent_coordinate");
     expect(request.placeSelection.timeSelection.type).toBe("latest");
     expect(output.ui_updated).toBe(true);
-    expect(output.no_data_is_not_no_danger).toBe(true);
+    expect(output.no_data_is_not_no_danger).toBeUndefined();
+    expect(output).toMatchObject({
+      support: {
+        level: "official_observations_returned",
+        confidence: "moderate",
+        observation_count: 5,
+        source_count: 1,
+      },
+      citations: [{
+        source: "noaa_hms_fire_points",
+        product: "test product",
+        observed_at: "2026-08-25T12:00:00.000Z",
+        retrieved_at: "2026-08-26T17:00:00.000Z",
+      }],
+    });
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
   });
 
@@ -256,8 +270,8 @@ describe("WebMCP environmental hazard tool", () => {
   });
 
   it.each([
-    ["wind_storm", "wind_only_no_rain_flood_or_water_gages"],
-    ["flood_storm", "water_only_no_wind_damage_causation"],
+    ["wind_storm", "regional_wind_observations"],
+    ["flood_storm", "regional_water_and_rain_observations"],
   ] as const)("labels the %s evidence chain so same-event data stays distinct", async (
     hazardId,
     evidenceScope
@@ -324,17 +338,84 @@ describe("WebMCP environmental hazard tool", () => {
     expect(output).toMatchObject({
       status: "related_environmental_evidence_bundle",
       evidence_scope: "separate_related_hazard_chains",
-      relationship: "co_occurring_context_not_causation",
+      relationship: "related_evidence_for_assessment",
+      inference_guidance: "state_strongest_supported_inference_and_confidence",
       included_chains: ["flood_storm", "wind_storm"],
       chains: [
         {
           hazard: "flood_storm",
-          evidence_scope: "water_only_no_wind_damage_causation",
+          evidence_scope: "regional_water_and_rain_observations",
         },
         {
           hazard: "wind_storm",
-          evidence_scope: "wind_only_no_rain_flood_or_water_gages",
+          evidence_scope: "regional_wind_observations",
         },
+      ],
+    });
+    expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
+  });
+
+  it("reports moderate assessment confidence when every chain has independent official sources", async () => {
+    const sources = {
+      air_quality: ["nasa_gibs_modis_aod", "airnow_daily_data"],
+      fire_smoke: ["noaa_hms_fire_points", "noaa_hms_smoke_polygons"],
+    } as const;
+    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => {
+      const base = evidenceWithLongContent();
+      const evidence: EvidenceObject = {
+        ...base,
+        evidenceId: `evidence-${request.hazardId}`,
+        hazardId: request.hazardId,
+        observations: sources[request.hazardId as keyof typeof sources].map((sourceId, index) => ({
+          ...base.observations[index],
+          observationId: `observation-${request.hazardId}-${index}`,
+          provenance: {
+            ...base.observations[index].provenance,
+            sourceId,
+            sourceUrl: `https://example.test/${sourceId}`,
+            product: `Official ${sourceId} product`,
+          },
+        })),
+      };
+      return {
+        analysisId: `analysis-${request.hazardId}`,
+        origin: "agent",
+        request,
+        outcome: {
+          hazardId: request.hazardId,
+          result: { kind: "success", evidence },
+        } as ActiveAnalysis["outcome"],
+        completedAt: "2026-08-26T18:00:01.000Z",
+      };
+    });
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Los Angeles, California",
+        hazard: "fire_smoke",
+        concern: "health",
+        latitude: 34.0522,
+        longitude: -118.2437,
+        start_date: "2025-01-09",
+        end_date: "2025-01-09",
+      },
+      toolOptions(),
+      { runAnalysis, now: () => NOW }
+    );
+
+    expect(output).toMatchObject({
+      support: {
+        level: "multi_chain_official_context",
+        assessment_confidence: "moderate",
+        basis: "independent_official_sources_across_every_chain",
+        chains_with_observations: 2,
+        total_chains: 2,
+        source_count: 4,
+      },
+      inference_guidance: "state_strongest_supported_inference_and_confidence",
+      chains: [
+        { hazard: "air_quality", citation: { source: "nasa_gibs_modis_aod" } },
+        { hazard: "fire_smoke", citation: { source: "noaa_hms_fire_points" } },
       ],
     });
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
@@ -375,7 +456,7 @@ describe("WebMCP environmental hazard tool", () => {
     expect(runAnalysis.mock.calls.map(([request]) => request.hazardId)).toEqual(expectedHazards);
     expect(output).toMatchObject({
       status: "related_environmental_evidence_bundle",
-      relationship: "co_occurring_context_not_causation",
+      relationship: "related_evidence_for_assessment",
       included_chains: expectedHazards,
     });
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
@@ -408,7 +489,7 @@ describe("WebMCP environmental hazard tool", () => {
 
     expect(runAnalysis).toHaveBeenCalledTimes(1);
     expect(output).toMatchObject({
-      evidence_scope: "heat_conditions_no_drought_or_volcano_causation",
+      evidence_scope: "regional_heat_observations",
       request: { hazard: "extreme_heat" },
     });
   });

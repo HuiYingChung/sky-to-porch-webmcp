@@ -119,10 +119,11 @@ Core tool:
 
 analyze_environmental_hazard
 
-It should accept a place or selected area, hazard, time window, concern, and
-optional question; execute the deterministic analysis pipeline; update the
-shared map and evidence panel; and return a compact structured result with
-state, observations, provenance, limitations, and verification links.
+It should accept a place or selected area, hazard, time window, optional
+concern, and optional question; execute the deterministic analysis pipeline;
+update the shared map and evidence panel; and return a compact structured
+result with evidence strength, confidence, observations, structured citations,
+and concise scope notes. Omitted concern resolves to neutral `general`.
 
 Two baseline discovery tools expose the governed hazard vocabulary and the
 checked-in source-coverage catalog. Their descriptions direct a concrete
@@ -130,7 +131,9 @@ place-and-hazard question straight to the analysis tool, so discovery is not a
 mandatory or fragile preflight sequence. Coverage output states that pipeline
 eligibility is not proof of an observation. Contextual tools expose the current
 validated evidence and, only after Home + Wind, the bounded claim-discussion
-guide.
+guide. The existing hazard-list tool also exposes a compact three-demo index
+and one selected scenario by `demo_id`; no separate demo or citation tool is
+added.
 
 ### W4 — Provider cleanup
 
@@ -143,7 +146,8 @@ guide.
 
 - deterministic tests for schemas, tool execution, UI updates, and failures;
 - tests for invalid input, unsupported coverage, no observation, source
-  failure, stale response, cancellation, and compact output;
+  failure, stale response, cancellation, structured citations, optional
+  concern, related-chain support, and bounded output;
 - agent evals for tool selection, parameters, sequencing, and full user
   journeys;
 - ChatGPT in-app-browser and supported-Chrome verification;
@@ -204,9 +208,18 @@ The product owner has ruled on the first three checkpoints:
    question, the default related-context orchestration runs and labels both
    analyses instead of asking the user to enumerate hazards;
 6. the same default applies to Heat–Drought, Fire/Smoke–Air Quality, and
-   Volcano–Air Quality–Heat. Every chain remains independently sourced and the
-   bundle states that co-occurrence is not causation. Only an explicitly
-   single-hazard question may select `single_hazard_only`.
+   Volcano–Air Quality–Heat. Every chain remains independently sourced, while
+   the bundle asks the Agent for the strongest evidence-supported inference
+   and confidence and distinguishes that inference from direct observation.
+   Only an explicitly single-hazard question may select `single_hazard_only`;
+7. concern is optional for Agent analysis. The Agent infers it when clear,
+   asks one short follow-up only when a broad goal needs it, and proceeds with
+   `general` for a narrow factual historical request;
+8. the curated Houston roof, Los Angeles health, and Tucson pet prompts require
+   actual historical observations, citations, and an evidence-forward
+   assessment. No-data and failure are last-resort states, not demo features;
+9. panel switching, generic expansion, map-layer controls, and Start over stay
+   as human UI actions for now rather than increasing the Agent tool count.
 
 Technical WebMCP details remain Codex's responsibility.
 

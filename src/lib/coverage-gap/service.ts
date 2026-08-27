@@ -480,7 +480,7 @@ export async function queryVolcanoEvidence(
       ? "The Earth & Volcanoes evidence chain failed closed; missing evidence is not safety, and no danger or prediction conclusion is supported."
       : satelliteOutcome !== "success"
         ? "No validated OMPS observation materially connected satellite evidence to the separate official earthquake or volcano records; no meaningful satellite connection is claimed."
-        : "Satellite SO2, HANS notices, and observed earthquake events are separate source roles; co-occurrence does not prove eruption cause, future timing, or danger.",
+        : "Satellite SO2, HANS notices, and observed earthquake events are separate source roles; compare their timing, geography, and confidence before drawing an evidence-supported inference. Future timing and emergency danger are outside these historical records.",
     evidence,
   };
 }

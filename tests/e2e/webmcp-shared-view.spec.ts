@@ -143,7 +143,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
       radius_km: 15,
     },
   });
-  expect(JSON.stringify(output).length).toBeLessThanOrEqual(1_500);
+  expect(JSON.stringify(output).length).toBeLessThanOrEqual(2_400);
   expect(requestBody).toMatchObject({
     placeId: "custom-area",
     mode: "live",
@@ -273,10 +273,10 @@ test("related-context scope automatically checks heat and drought as separate vi
   expect(queriedHazards).toEqual(expect.arrayContaining(["drought_land", "extreme_heat"]));
   expect(output).toMatchObject({
     status: "related_environmental_evidence_bundle",
-    relationship: "co_occurring_context_not_causation",
+    relationship: "related_evidence_for_assessment",
     included_chains: ["drought_land", "extreme_heat"],
   });
-  expect(JSON.stringify(output).length).toBeLessThanOrEqual(1_500);
+  expect(JSON.stringify(output).length).toBeLessThanOrEqual(2_400);
 
   const visibleReceipt = page.locator('[data-testid="agent-analysis-notice"]:visible');
   await expect(visibleReceipt.getByTestId("agent-analysis-receipt"))
@@ -284,13 +284,13 @@ test("related-context scope automatically checks heat and drought as separate vi
   await expect(visibleReceipt.getByTestId("agent-related-context-receipt"))
     .toContainText("Drought & Land");
   await expect(visibleReceipt.getByTestId("agent-related-context-receipt"))
-    .toContainText("co-occurrence is not causation");
+    .toContainText("timing, strength, and confidence");
 
   const visibleInsight = page.locator('[data-testid="insight-navigation"]:visible');
   await expect(visibleInsight.getByTestId("related-drought_land-evidence-chain"))
-    .toContainText("Collected automatically under related-context scope");
+    .toContainText("Collected automatically for the same place and time");
   await expect(visibleInsight.getByTestId("related-drought_land-evidence-chain"))
-    .toContainText("co-occurrence does not establish");
+    .toContainText("reinforces the concern");
 });
 
 test("volcano related context automatically adds separate air-quality and heat chains", async ({
@@ -385,10 +385,10 @@ test("volcano related context automatically adds separate air-quality and heat c
     "earth_volcanoes",
   ]));
   expect(output).toMatchObject({
-    relationship: "co_occurring_context_not_causation",
+    relationship: "related_evidence_for_assessment",
     included_chains: ["air_quality", "extreme_heat", "earth_volcanoes"],
   });
-  expect(JSON.stringify(output).length).toBeLessThanOrEqual(1_500);
+  expect(JSON.stringify(output).length).toBeLessThanOrEqual(2_400);
 
   const visibleInsight = page.locator('[data-testid="insight-navigation"]:visible');
   await expect(visibleInsight.getByTestId("related-air_quality-evidence-chain"))

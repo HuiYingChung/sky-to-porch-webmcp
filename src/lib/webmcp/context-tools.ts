@@ -1,13 +1,13 @@
 /// <reference types="webmcp-types" />
 
-import type { EvidenceObject } from "@/contracts/evidence";
+import type { EvidenceObject, Observation } from "@/contracts/evidence";
 import type { ActiveAnalysis } from "@/lib/analysis/types";
 import type { StormQueryResult } from "@/lib/storm/types";
 import { evidenceScopeForHazard } from "@/lib/webmcp/analyze-tool";
 
 export const INSPECT_EVIDENCE_TOOL_NAME = "inspect_current_environmental_evidence";
 export const PREPARE_STORM_CLAIM_TOOL_NAME = "prepare_storm_claim_discussion";
-export const MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS = 1_500;
+export const MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS = 2_400;
 
 function compactText(value: string, maxLength: number): string {
   const clean = value.replace(/\s+/gu, " ").trim();
@@ -19,6 +19,41 @@ function evidenceFrom(analysis: ActiveAnalysis): EvidenceObject | null {
   return result.evidence ?? null;
 }
 
+function compactObservation(item: Observation) {
+  return {
+    id: item.observationId,
+    name: compactText(item.variableName, 70),
+    value: item.value ?? compactText(item.textValue ?? "unavailable", 100),
+    unit: item.unit,
+    source: item.provenance.sourceId,
+    observed_at: item.provenance.observedAt,
+  };
+}
+
+function compactCitation(item: Observation, hazard: ActiveAnalysis["request"]["hazardId"]) {
+  const sourceUrl = item.provenance.sourceUrl;
+  return {
+    hazard,
+    source: item.provenance.sourceId,
+    product: compactText(item.provenance.product, 90),
+    observed_at: item.provenance.observedAt,
+    retrieved_at: item.provenance.retrievedAt,
+    url: typeof sourceUrl === "string" && sourceUrl.length <= 500 ? sourceUrl : null,
+  };
+}
+
+function citationsFor(analysis: ActiveAnalysis, maximum: number) {
+  const evidence = evidenceFrom(analysis);
+  return evidence?.observations
+    .filter((item, index, observations) =>
+      observations.findIndex((candidate) =>
+        candidate.provenance.sourceId === item.provenance.sourceId
+      ) === index
+    )
+    .slice(0, maximum)
+    .map((item) => compactCitation(item, analysis.request.hazardId)) ?? [];
+}
+
 export function createInspectEvidenceTool(
   analysis: ActiveAnalysis,
   relatedAnalyses: ActiveAnalysis[] = []
@@ -27,7 +62,7 @@ export function createInspectEvidenceTool(
     name: INSPECT_EVIDENCE_TOOL_NAME,
     title: "Inspect current environmental evidence",
     description:
-      "Read the validated primary result and any separate related-context chains currently shown in Sky to Porch. It does not run another query or merge cross-hazard causation.",
+      "Read the strongest validated observations, confidence, and structured citations from the primary result and related evidence currently shown in Sky to Porch. It does not re-query sources or control the interface. Explain the strongest relationship the returned evidence supports and label inference separately from direct observation.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -39,37 +74,67 @@ export function createInspectEvidenceTool(
         return { status: "invalid_input", message: "This tool takes no input." };
       }
       const evidence = evidenceFrom(analysis);
+      const allAnalyses = [analysis, ...relatedAnalyses];
+      const chainsWithObservations = allAnalyses.filter(
+        (item) => (evidenceFrom(item)?.observations.length ?? 0) > 0
+      ).length;
+      const sourceCount = new Set(allAnalyses.flatMap(
+        (item) => evidenceFrom(item)?.observations.map(
+          (observation) => observation.provenance.sourceId
+        ) ?? []
+      )).size;
+      const assessmentConfidence = chainsWithObservations === allAnalyses.length && sourceCount >= 4
+        ? "moderate" as const
+        : chainsWithObservations >= 2 && sourceCount >= 2
+          ? "low" as const
+          : "insufficient" as const;
+      const citations = [
+        ...citationsFor(analysis, 2),
+        ...relatedAnalyses.flatMap((related) => citationsFor(related, 1)),
+      ];
       const output = {
         status: evidence ? "ok" : "no_evidence",
         analysis_id: analysis.analysisId,
         hazard: analysis.request.hazardId,
         evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
+        support: {
+          level: chainsWithObservations === allAnalyses.length
+            ? "official_observations_in_every_chain"
+            : chainsWithObservations > 0
+              ? "partial_official_context"
+              : "no_observations_returned",
+          confidence: evidence?.confidence.level ?? "insufficient",
+          assessment_confidence: assessmentConfidence,
+          chains_with_observations: chainsWithObservations,
+          total_chains: allAnalyses.length,
+          source_count: sourceCount,
+        },
         ...(relatedAnalyses.length > 0
           ? {
-              relationship: "co_occurring_context_not_causation" as const,
+              relationship: "related_evidence_for_assessment" as const,
+              inference_guidance: "state_strongest_supported_inference_and_confidence" as const,
               related_chains: relatedAnalyses.map((related) => ({
                 hazard: related.request.hazardId,
                 status: (related.outcome.result as { kind: string }).kind,
                 evidence_scope: evidenceScopeForHazard(related.request.hazardId),
+                confidence: evidenceFrom(related)?.confidence.level ?? "insufficient",
+                observation_count: evidenceFrom(related)?.observations.length ?? 0,
+                strongest_observation: evidenceFrom(related)?.observations[0]
+                  ? compactObservation(evidenceFrom(related)!.observations[0])
+                  : null,
               })),
             }
           : {}),
         sources: evidence
           ? [...new Set(evidence.observations.map((item) => item.provenance.sourceId))]
           : [],
-        observations: evidence?.observations.slice(0, 3).map((item) => ({
-          id: item.observationId,
-          name: compactText(item.variableName, 70),
-          value: item.value ?? compactText(item.textValue ?? "unavailable", 100),
-          unit: item.unit,
-          source: item.provenance.sourceId,
-          observed_at: item.provenance.observedAt,
-        })) ?? [],
+        observations: evidence?.observations.slice(0, 3).map(compactObservation) ?? [],
+        citations,
         limitations: evidence?.limitations
           .filter((item) => item.required)
-          .slice(0, 3)
+          .slice(0, 2)
           .map((item) => compactText(item.description, 150)) ?? [],
-        no_data_is_not_no_danger: true,
+        ...(chainsWithObservations === 0 ? { no_data_is_not_no_danger: true as const } : {}),
       };
       if (JSON.stringify(output).length <= MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS) return output;
       return {
@@ -101,7 +166,7 @@ export function createStormClaimDiscussionTool(
     name: PREPARE_STORM_CLAIM_TOOL_NAME,
     title: "Prepare a storm claim discussion",
     description:
-      "Open a bounded checklist for discussing possible wind damage with an insurer. Available only after a Home + Wind & Storm result. It never decides causation, coverage, liability, repair scope, or claim outcome.",
+      "Open an evidence-backed kit for discussing possible wind contribution to roof or home damage with an insurer. Available after a Home + Wind & Storm result. It leads with supported regional findings and shows which property-specific records would strengthen the discussion; the insurer makes the coverage decision.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -117,11 +182,13 @@ export function createStormClaimDiscussionTool(
         status: "ready_for_discussion",
         ui_updated: true,
         analysis_id: analysis.analysisId,
-        evidence_scope: "wind_only_no_rain_flood_or_water_gages",
+        evidence_scope: "regional_wind_observations",
+        assessment: discussion.assessmentSummary,
+        confidence: discussion.assessmentConfidence,
         supported_by_evidence: discussion.supportedStatements
           .slice(0, 2)
           .map((item) => compactText(item, 150)),
-        not_established: discussion.notEstablished
+        property_specific_questions: discussion.notEstablished
           .slice(0, 3)
           .map((item) => compactText(item, 130)),
         documentation_checklist: discussion.documentationChecklist
@@ -134,7 +201,7 @@ export function createStormClaimDiscussionTool(
       return {
         ...output,
         supported_by_evidence: output.supported_by_evidence.slice(0, 1),
-        not_established: output.not_established.slice(0, 2),
+        property_specific_questions: output.property_specific_questions.slice(0, 2),
         documentation_checklist: output.documentation_checklist.slice(0, 2),
         official_guidance_urls: output.official_guidance_urls.slice(0, 1),
       };

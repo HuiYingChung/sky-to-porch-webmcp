@@ -70,11 +70,22 @@ function ClaimDiscussion({
       </button>
       {open && (
         <div data-testid="storm-claim-discussion-content" style={{ marginTop: "12px", fontSize: "14px" }}>
+          <div
+            style={{
+              marginBottom: "12px",
+              padding: "9px 10px",
+              borderLeft: "3px solid var(--hazard-wind-storm-border)",
+              background: "var(--surface-1)",
+            }}
+          >
+            <strong>Evidence-supported assessment · {discussion.assessmentConfidence} confidence</strong>
+            <p style={{ margin: "4px 0 0" }}>{discussion.assessmentSummary}</p>
+          </div>
           <h4 style={{ margin: "0 0 5px" }}>What official evidence supports</h4>
           <ul style={{ marginTop: 0, paddingLeft: "20px" }}>
             {discussion.supportedStatements.map((statement) => <li key={statement}>{statement}</li>)}
           </ul>
-          <h4 style={{ margin: "10px 0 5px" }}>What this does not establish</h4>
+          <h4 style={{ margin: "10px 0 5px" }}>Property-specific questions that can change the assessment</h4>
           <ul style={{ marginTop: 0, paddingLeft: "20px" }}>
             {discussion.notEstablished.map((statement) => <li key={statement}>{statement}</li>)}
           </ul>

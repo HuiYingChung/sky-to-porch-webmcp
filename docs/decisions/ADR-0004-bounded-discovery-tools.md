@@ -1,6 +1,6 @@
 # ADR-0004: Bounded discovery tools without a mandatory waterfall
 
-**Status:** Accepted
+**Status:** Superseded in part by ADR-0005
 **Date:** 2026-08-26
 
 ## Context

@@ -20,7 +20,7 @@ import type { PlaceSelection } from "@/lib/location/selection";
 export interface QueryDraft {
   /** Selected hazard, or null if not yet chosen. */
   hazardId: HazardId | null;
-  /** Selected concern, or null if not yet chosen. */
+  /** Selected explanation lens; neutral general is the initial value. */
   concern: ConcernType | null;
   /** Optional free-text question from the user. */
   optionalQuestion: string;
@@ -30,7 +30,7 @@ export interface QueryDraft {
 export function emptyDraft(): QueryDraft {
   return {
     hazardId: null,
-    concern: null,
+    concern: "general",
     optionalQuestion: "",
   };
 }
@@ -65,7 +65,7 @@ export function queryDraftReducer(state: QueryDraft, action: QueryDraftAction): 
 
 /**
  * Returns true when the draft has a validated place selection plus the
- * required hazard and concern fields. Does NOT validate coordinates,
+ * required hazard and explanation-lens fields. Does NOT validate coordinates,
  * timestamps, or identity — those are already validated in PlaceSelection.
  */
 export function isDraftSubmittable(draft: QueryDraft, placeSelection: PlaceSelection | null): boolean {
@@ -98,6 +98,7 @@ export const TIME_RANGE_LABELS: Record<string, string> = {
 
 /** Human-readable labels for concern types. */
 export const CONCERN_LABELS: Record<ConcernType, string> = {
+  general: "Just the evidence",
   home: "Home",
   health: "Health",
   pets: "Pets",

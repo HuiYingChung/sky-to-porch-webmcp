@@ -28,10 +28,12 @@ tools are registered only while the necessary validated page state exists.
 
 ### list_environmental_hazards
 
-Returns the governed hazard IDs, user-concern vocabulary, and non-recursive
-related-context defaults. It is read-only and intended only for capability
-questions or genuine hazard ambiguity. Its description tells the Agent not to
-insert it before a concrete analysis request.
+Returns the governed hazard IDs, optional user-concern vocabulary,
+non-recursive related-context defaults, and a compact index of three curated
+historical demos. Supplying `demo_id` returns that scenario's prompt and exact
+analysis input. It is read-only and intended only for capability questions,
+genuine hazard ambiguity, or explicit demo selection; it is not a mandatory
+preflight before a concrete analysis request.
 
 ### get_environmental_source_coverage
 
@@ -54,7 +56,7 @@ Inputs:
   for an explicitly narrow question);
 - optional additional related hazards named or implied by a broad question;
 - time window;
-- everyday concern;
+- optional everyday concern; omission resolves to neutral `general`;
 - optional question.
 
 Output:
@@ -62,7 +64,8 @@ Output:
 - evidence state;
 - normalized place and time;
 - a small set of observations;
-- source identifiers and verification links;
+- evidence-strength and confidence summary;
+- structured source, product, observed/retrieved time, and verification URL citations;
 - freshness and required limitations;
 - a stable analysis identifier.
 
@@ -73,18 +76,18 @@ place-and-hazard question rather than creating a discovery-tool waterfall.
 
 ### inspect_current_environmental_evidence
 
-Registered only while a completed result is active. It reads the compact
-primary evidence, source identifiers, limitations, the hazard-specific scope,
-and any separately retained related-chain statuses. It does not run another
-query and is not required before or after the primary tool.
+Registered only while a completed result is active. It reads the strongest
+primary and related observations, confidence, structured citations, and the
+hazard-specific scope. It does not run another query and is not required
+before or after the primary tool.
 
 ### prepare_storm_claim_discussion
 
 Registered only while the current result is Home + Wind & Storm and a bounded
 claim-discussion guide exists. It opens that guide in the visible page and
-returns a compact documentation checklist. It does not contact an insurer,
-submit a claim, or decide damage, causation, coverage, liability, repair scope,
-or outcome.
+returns a confidence-labelled assessment, supporting official observations,
+property-specific questions, and a documentation checklist. It does not
+contact an insurer or submit a claim.
 
 Related context is the Agent default. Deterministic code expands the selected
 primary hazard through a bounded, non-recursive relationship table: Wind with
@@ -96,7 +99,9 @@ when the person explicitly restricts the request to one hazard.
 Every result exposes a hazard-specific `evidence_scope`. The tool resolves the
 place once, runs independent domain analyses in parallel under one cancellation
 and stale-generation guard, and returns one compact bundle labelled
-`co_occurring_context_not_causation`. The shared UI commits the finished bundle
+`related_evidence_for_assessment`. The bundle counts chains with official
+observations and instructs the Agent to state the strongest supported inference
+and confidence while labelling direct observation separately. The shared UI commits the finished bundle
 as one transaction, renders the primary evidence first, and keeps related
 chains in separate sections. No companion observation repairs another chain's
 no-data or source-failure state.
@@ -113,9 +118,10 @@ completed result was visible before the Agent update, one previous snapshot is
 retained so the person can restore the entire shared view without maintaining
 an unbounded history.
 
-Meaning begins with a deterministic trust strip derived from the active result:
-evidence state, unique observed-source count, limitation count, and a no-danger
-reminder for missing, incomplete, quiet, stale, or failed evidence.
+Meaning leads with the strongest deterministic finding and confidence derived
+from the active result. Evidence state, unique observed-source count, citations,
+and concise scope notes remain available; a missing-data reminder appears only
+when retrieval returns no usable observation.
 
 ## Registration lifecycle
 

@@ -107,7 +107,8 @@ describe("ADR-0045 Start over", () => {
     click(byTestId("t-gq-start-over"));
     expect(probe.getAttribute("data-demo-place-id")).toBe("");
     expect(probe.getAttribute("data-hazard")).toBe("");
-    expect(probe.getAttribute("data-concern")).toBe("");
+    expect(probe.getAttribute("data-concern")).toBe("general");
+    expect((byTestId("concern-select") as HTMLSelectElement).value).toBe("general");
     expect((byTestId("hazard-select") as HTMLSelectElement).value).toBe("");
     expect((byTestId("t-gq-place-search") as HTMLInputElement).value).toBe("");
     expect((byTestId("t-gq-radius-input") as HTMLInputElement).value).toBe("25");

@@ -13,7 +13,7 @@
  * UTC day" for weekly/rolling products such as the U.S. Drought Monitor.
  */
 
-import type { HazardId } from "@/contracts/common";
+import type { ConcernType, HazardId } from "@/contracts/common";
 import { getDemoPlaceById, type DemoPlace } from "@/data/places/wp04-demo-places";
 import { latestCompletedUtcDate } from "@/lib/ui/date-input";
 
@@ -40,6 +40,69 @@ export interface DemoStory {
   /** 1–2 hazard lenses; the first is the card's primary action. */
   hazards: readonly DemoStoryHazard[];
 }
+
+export interface WebMcpDemoScenario {
+  id: "houston-beryl-roof" | "los-angeles-smoke-health" | "tucson-heat-pets";
+  title: string;
+  prompt: string;
+  analysisInput: {
+    place: string;
+    hazard: HazardId;
+    concern: ConcernType;
+    radius_km: number;
+    start_date: string;
+    end_date: string;
+  };
+}
+
+/**
+ * Curated historical Agent journeys. The concerns make the demonstration
+ * concrete, but concern remains optional in the WebMCP analysis contract.
+ */
+export const WEBMCP_DEMO_SCENARIOS: readonly WebMcpDemoScenario[] = [
+  {
+    id: "houston-beryl-roof",
+    title: "Houston roof concern after Hurricane Beryl",
+    prompt:
+      "After Hurricane Beryl, I noticed missing shingles and a new roof leak at my Houston home. How strongly do official wind and related flood or heavy-rain records support the concern that the storm contributed to the roof damage on July 8, 2024? Lead with the strongest observations, cite their times and official sources, distinguish direct observations from inference, and give the strongest evidence-supported assessment with a confidence level. Explain what property-specific evidence would most strengthen or weaken that assessment for an insurer discussion.",
+    analysisInput: {
+      place: "Houston, Texas",
+      hazard: "wind_storm",
+      concern: "home",
+      radius_km: 25,
+      start_date: "2024-07-08",
+      end_date: "2024-07-08",
+    },
+  },
+  {
+    id: "los-angeles-smoke-health",
+    title: "Los Angeles symptoms during the January 2025 fires",
+    prompt:
+      "On January 9, 2025, my family experienced coughing and eye irritation in Los Angeles. How strongly do official fire-and-smoke observations and related air-quality records support smoke or poor outdoor air as a plausible contributor? Lead with the strongest findings, cite their times and official sources, distinguish direct observations from inference, and give the strongest evidence-supported assessment with a confidence level. Explain what personal, indoor, or clinical evidence would most strengthen or weaken that assessment.",
+    analysisInput: {
+      place: "Los Angeles, California",
+      hazard: "fire_smoke",
+      concern: "health",
+      radius_km: 60,
+      start_date: "2025-01-09",
+      end_date: "2025-01-09",
+    },
+  },
+  {
+    id: "tucson-heat-pets",
+    title: "Tucson dog concern after outdoor heat",
+    prompt:
+      "After spending time outdoors in Tucson on July 10, 2025, my dog was unusually lethargic. How strongly do official extreme-heat observations and related drought records support heat exposure as a plausible contributor? Lead with the strongest readings, cite their observation or reporting dates and official sources, distinguish direct observations from inference, and give the strongest evidence-supported assessment with a confidence level. Explain whether the drought record materially reinforces the heat concern and what pet-specific evidence would strengthen or weaken the assessment.",
+    analysisInput: {
+      place: "Tucson, Arizona",
+      hazard: "extreme_heat",
+      concern: "pets",
+      radius_km: 25,
+      start_date: "2025-07-10",
+      end_date: "2025-07-10",
+    },
+  },
+] as const;
 
 export const DEMO_STORIES: readonly DemoStory[] = [
   {

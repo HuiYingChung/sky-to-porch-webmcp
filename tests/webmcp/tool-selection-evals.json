@@ -32,6 +32,21 @@
     ]
   },
   {
+    "id": "demo-discovery",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What curated historical demo scenarios can Sky to Porch show me?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "list_environmental_hazards",
+        "arguments": {}
+      }
+    ]
+  },
+  {
     "id": "direct-fire-place",
     "messages": [
       {
@@ -142,7 +157,7 @@
     "messages": [
       {
         "role": "user",
-        "content": "Could Hurricane Beryl have damaged my Houston home or roof on July 8, 2024, and what evidence can help me discuss a claim with my insurer?"
+        "content": "After Hurricane Beryl, I noticed missing shingles and a new roof leak at my Houston home. How strongly do official wind and related flood or heavy-rain records support the concern that the storm contributed to the roof damage on July 8, 2024? Lead with the strongest observations, cite their times and official sources, distinguish direct observations from inference, and give the strongest evidence-supported assessment with a confidence level."
       }
     ],
     "expectedCall": [
@@ -154,10 +169,113 @@
           "concern": "home",
           "start_date": "2024-07-08",
           "end_date": "2024-07-08",
-          "question": "Could Hurricane Beryl have damaged my home or roof, and what evidence can help me discuss a claim with my insurer?"
+          "question": "How strongly do official wind and related flood or heavy-rain records support that Beryl contributed to my observed roof damage? Give the strongest evidence-supported assessment and confidence."
         }
       }
     ]
+  },
+  {
+    "id": "los-angeles-health-demo",
+    "messages": [
+      {
+        "role": "user",
+        "content": "On January 9, 2025, my family experienced coughing and eye irritation in Los Angeles. How strongly do official fire-and-smoke observations and related air-quality records support smoke or poor outdoor air as a plausible contributor? Lead with the strongest findings, citations, and confidence."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Los Angeles",
+          "hazard": "fire_smoke",
+          "concern": "health",
+          "start_date": "2025-01-09",
+          "end_date": "2025-01-09",
+          "question": "How strongly do official fire-and-smoke and related air-quality records support smoke or poor outdoor air as a plausible contributor to our symptoms?"
+        }
+      }
+    ]
+  },
+  {
+    "id": "tucson-pets-demo",
+    "messages": [
+      {
+        "role": "user",
+        "content": "After spending time outdoors in Tucson on July 10, 2025, my dog was unusually lethargic. How strongly do official extreme-heat observations and related drought records support heat exposure as a plausible contributor? Lead with the strongest readings, citations, and confidence."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Tucson",
+          "hazard": "extreme_heat",
+          "concern": "pets",
+          "start_date": "2025-07-10",
+          "end_date": "2025-07-10",
+          "question": "How strongly do official heat and drought records support heat exposure as a plausible contributor to my dog's lethargy?"
+        }
+      }
+    ]
+  },
+  {
+    "id": "historical-wind-no-concern",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What official wind observations were recorded around Houston on July 8, 2024?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Houston",
+          "hazard": "wind_storm",
+          "analysis_scope": "single_hazard_only",
+          "start_date": "2024-07-08",
+          "end_date": "2024-07-08"
+        }
+      }
+    ]
+  },
+  {
+    "id": "selected-tucson-demo",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Run the Tucson dog-and-heat historical demo."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "list_environmental_hazards",
+        "arguments": {
+          "demo_id": "tucson-heat-pets"
+        }
+      },
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Tucson, Arizona",
+          "hazard": "extreme_heat",
+          "concern": "pets",
+          "radius_km": 25,
+          "start_date": "2025-07-10",
+          "end_date": "2025-07-10"
+        }
+      }
+    ]
+  },
+  {
+    "id": "broad-goal-ask-clarification",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Help me understand what last summer's environmental conditions around Denver mean for me."
+      }
+    ],
+    "expectedCall": []
   },
   {
     "id": "broad-heat-drought-context",

@@ -16,15 +16,16 @@ import {
 
 export const ANALYZE_HAZARD_TOOL_NAME = "analyze_environmental_hazard";
 const DEFAULT_RADIUS_KM = 25;
-const MAX_OUTPUT_CHARACTERS = 1_500;
+const MAX_OUTPUT_CHARACTERS = 2_400;
 const ANALYSIS_SCOPES = ["related_context", "single_hazard_only"] as const;
 type AnalysisScope = (typeof ANALYSIS_SCOPES)[number];
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/;
 
 /**
- * Product-owned default relationships. These are retrieval companions, not
- * causal claims, and they do not recurse beyond the chosen primary hazard.
+ * Product-owned default relationships. These are retrieval companions. Any
+ * causal assessment must be made explicitly from supported evidence; the
+ * companion list itself is not a causal verdict and does not recurse.
  */
 export const DEFAULT_RELATED_HAZARDS: Readonly<Record<HazardId, readonly HazardId[]>> = {
   fire_smoke: ["air_quality"],
@@ -115,18 +116,26 @@ interface CompactObservation {
   observed_at: string;
 }
 
+interface CompactCitation {
+  source: string;
+  product: string;
+  observed_at: string;
+  retrieved_at: string;
+  url: string | null;
+}
+
 interface ToolSuccess {
   status: string;
   analysis_id: string;
   ui_updated: true;
   evidence_scope:
-    | "wind_only_no_rain_flood_or_water_gages"
-    | "water_only_no_wind_damage_causation"
-    | "heat_conditions_no_drought_or_volcano_causation"
-    | "drought_land_context_no_heat_or_fire_causation"
-    | "fire_smoke_indicators_no_air_quality_inference"
-    | "air_quality_conditions_no_source_attribution"
-    | "earth_volcano_observations_no_air_or_heat_causation";
+    | "regional_wind_observations"
+    | "regional_water_and_rain_observations"
+    | "regional_heat_observations"
+    | "regional_drought_and_land_observations"
+    | "regional_fire_and_smoke_observations"
+    | "regional_air_quality_observations"
+    | "regional_earth_and_volcano_observations";
   request: {
     place: string;
     hazard: HazardId;
@@ -141,9 +150,15 @@ interface ToolSuccess {
     freshness: EvidenceObject["freshness"]["status"];
     observations: CompactObservation[];
   };
+  support: {
+    level: "official_observations_returned" | "partial_official_evidence" | "no_observations_returned";
+    confidence: EvidenceObject["confidence"]["level"] | "insufficient";
+    observation_count: number;
+    source_count: number;
+  };
+  citations: CompactCitation[];
   limitations: string[];
-  verify_urls: string[];
-  no_data_is_not_no_danger: true;
+  no_data_is_not_no_danger?: true;
 }
 
 type EvidenceScope = ToolSuccess["evidence_scope"];
@@ -153,8 +168,9 @@ interface CompactEvidenceChain {
   evidence_scope: EvidenceScope;
   status: string;
   observation: CompactObservation | null;
+  citation: CompactCitation | null;
+  confidence: EvidenceObject["confidence"]["level"] | "insufficient";
   limitation: string | null;
-  verify_url: string | null;
 }
 
 interface ToolEvidenceBundle {
@@ -162,7 +178,20 @@ interface ToolEvidenceBundle {
   analysis_id: string;
   ui_updated: true;
   evidence_scope: "separate_related_hazard_chains";
-  relationship: "co_occurring_context_not_causation";
+  relationship: "related_evidence_for_assessment";
+  support: {
+    level: "multi_chain_official_context" | "partial_official_context" | "no_observations_returned";
+    assessment_confidence: "moderate" | "low" | "insufficient";
+    basis:
+      | "independent_official_sources_across_every_chain"
+      | "official_observations_in_multiple_chains"
+      | "incomplete_related_context";
+    chains_with_observations: number;
+    total_chains: number;
+    source_count: number;
+  };
+  inference_guidance: "state_strongest_supported_inference_and_confidence";
+  use_decision: "person_decides_how_to_use_related_evidence";
   request: {
     place: string;
     hazard: HazardId;
@@ -175,7 +204,7 @@ interface ToolEvidenceBundle {
   chains: CompactEvidenceChain[];
   claim_discussion_available: boolean;
   related_evidence_visible_in_shared_view: true;
-  no_data_is_not_no_danger: true;
+  no_data_is_not_no_danger?: true;
 }
 
 export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess | ToolEvidenceBundle;
@@ -212,8 +241,7 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     concern: {
       type: "string",
       enum: CONCERN_TYPES,
-      default: "home",
-      description: "User context; defaults to home.",
+      description: "Optional explanation lens. Infer when explicit; ask only if a broad goal needs it. Narrow evidence questions may omit it and use general.",
     },
     latitude: {
       type: "number",
@@ -351,7 +379,7 @@ function parseInput(
   if (plannedRelatedCount > 3) {
     return failure("invalid_input", "A related-context request can include at most three context hazards.");
   }
-  const concern = raw.concern ?? "home";
+  const concern = raw.concern ?? "general";
   if (
     typeof concern !== "string" ||
     !(CONCERN_TYPES as readonly string[]).includes(concern)
@@ -580,22 +608,33 @@ function compactObservation(observation: Observation): CompactObservation {
   };
 }
 
+function compactCitation(observation: Observation): CompactCitation {
+  const sourceUrl = observation.provenance.sourceUrl;
+  return {
+    source: observation.provenance.sourceId,
+    product: truncate(observation.provenance.product, 90),
+    observed_at: observation.provenance.observedAt,
+    retrieved_at: observation.provenance.retrievedAt,
+    url: typeof sourceUrl === "string" && sourceUrl.length <= 500 ? sourceUrl : null,
+  };
+}
+
 export function evidenceScopeForHazard(hazard: HazardId): EvidenceScope {
   switch (hazard) {
     case "wind_storm":
-      return "wind_only_no_rain_flood_or_water_gages";
+      return "regional_wind_observations";
     case "flood_storm":
-      return "water_only_no_wind_damage_causation";
+      return "regional_water_and_rain_observations";
     case "extreme_heat":
-      return "heat_conditions_no_drought_or_volcano_causation";
+      return "regional_heat_observations";
     case "drought_land":
-      return "drought_land_context_no_heat_or_fire_causation";
+      return "regional_drought_and_land_observations";
     case "fire_smoke":
-      return "fire_smoke_indicators_no_air_quality_inference";
+      return "regional_fire_and_smoke_observations";
     case "air_quality":
-      return "air_quality_conditions_no_source_attribution";
+      return "regional_air_quality_observations";
     case "earth_volcanoes":
-      return "earth_volcano_observations_no_air_or_heat_causation";
+      return "regional_earth_and_volcano_observations";
   }
 }
 
@@ -632,16 +671,25 @@ function compactSuccess(
     ...(details.rejectionReason ? [details.rejectionReason] : []),
     ...details.limitations,
   ];
-  const verifyUrls = evidence
-    ? [...new Set(
-        evidence.observations
-          .map((observation) => observation.provenance.sourceUrl)
-          .filter(
-            (url): url is string =>
-              typeof url === "string" && url.length <= 300
-          )
-      )]
+  const citations = evidence
+    ? evidence.observations
+        .filter((observation, index, observations) =>
+          observations.findIndex((candidate) =>
+            candidate.provenance.sourceId === observation.provenance.sourceId
+          ) === index
+        )
+        .slice(0, 2)
+        .map(compactCitation)
     : [];
+  const observationCount = evidence?.observations.length ?? 0;
+  const sourceCount = new Set(
+    evidence?.observations.map((observation) => observation.provenance.sourceId) ?? []
+  ).size;
+  const supportLevel = observationCount === 0
+    ? "no_observations_returned" as const
+    : evidence?.evidenceState === "observations_returned"
+      ? "official_observations_returned" as const
+      : "partial_official_evidence" as const;
 
   const base: ToolSuccess = {
     status: details.kind,
@@ -664,9 +712,15 @@ function compactSuccess(
           observations: evidence.observations.slice(0, 3).map(compactObservation),
         }
       : null,
-    limitations: limitations.slice(0, 3).map((item) => truncate(item, 180)),
-    verify_urls: verifyUrls.slice(0, 2),
-    no_data_is_not_no_danger: true,
+    support: {
+      level: supportLevel,
+      confidence: evidence?.confidence.level ?? "insufficient",
+      observation_count: observationCount,
+      source_count: sourceCount,
+    },
+    citations,
+    limitations: limitations.slice(0, 2).map((item) => truncate(item, 180)),
+    ...(observationCount === 0 ? { no_data_is_not_no_danger: true as const } : {}),
   };
 
   if (JSON.stringify(base).length <= MAX_OUTPUT_CHARACTERS) return base;
@@ -676,7 +730,7 @@ function compactSuccess(
       ? { ...base.evidence, observations: base.evidence.observations.slice(0, 1) }
       : null,
     limitations: base.limitations.slice(0, 1).map((item) => truncate(item, 120)),
-    verify_urls: base.verify_urls.slice(0, 1),
+    citations: base.citations.slice(0, 1),
   };
   return reduced;
 }
@@ -686,16 +740,14 @@ function compactEvidenceChain(analysis: ActiveAnalysis): CompactEvidenceChain {
   const evidence = details.evidence;
   const observation = evidence?.observations[0];
   const limitation = details.rejectionReason ?? details.limitations[0] ?? null;
-  const verifyUrl = evidence?.observations
-    .map((item) => item.provenance.sourceUrl)
-    .find((url): url is string => typeof url === "string" && url.length <= 300) ?? null;
   return {
     hazard: analysis.request.hazardId,
     evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
     status: details.kind,
     observation: observation ? compactObservation(observation) : null,
+    citation: observation ? compactCitation(observation) : null,
+    confidence: evidence?.confidence.level ?? "insufficient",
     limitation: limitation ? truncate(limitation, 130) : null,
-    verify_url: verifyUrl,
   };
 }
 
@@ -705,12 +757,44 @@ function compactEvidenceBundle(
   timeDisplay: string
 ): ToolEvidenceBundle {
   const includedChains = analyses.map((analysis) => analysis.request.hazardId);
+  const chainEvidence = analyses.map(resultDetails).map((details) => details.evidence);
+  const chainsWithObservations = chainEvidence.filter(
+    (evidence) => (evidence?.observations.length ?? 0) > 0
+  ).length;
+  const sourceCount = new Set(chainEvidence.flatMap(
+    (evidence) => evidence?.observations.map((observation) => observation.provenance.sourceId) ?? []
+  )).size;
+  const supportLevel = chainsWithObservations === 0
+    ? "no_observations_returned" as const
+    : chainsWithObservations === analyses.length
+      ? "multi_chain_official_context" as const
+      : "partial_official_context" as const;
+  const assessmentConfidence = chainsWithObservations === analyses.length && sourceCount >= 4
+    ? "moderate" as const
+    : chainsWithObservations >= 2 && sourceCount >= 2
+      ? "low" as const
+      : "insufficient" as const;
+  const supportBasis = assessmentConfidence === "moderate"
+    ? "independent_official_sources_across_every_chain" as const
+    : assessmentConfidence === "low"
+      ? "official_observations_in_multiple_chains" as const
+      : "incomplete_related_context" as const;
   const bundle: ToolEvidenceBundle = {
     status: "related_environmental_evidence_bundle",
     analysis_id: `related-bundle:${analyses.map((analysis) => analysis.analysisId).join(":")}`,
     ui_updated: true,
     evidence_scope: "separate_related_hazard_chains",
-    relationship: "co_occurring_context_not_causation",
+    relationship: "related_evidence_for_assessment",
+    support: {
+      level: supportLevel,
+      assessment_confidence: assessmentConfidence,
+      basis: supportBasis,
+      chains_with_observations: chainsWithObservations,
+      total_chains: analyses.length,
+      source_count: sourceCount,
+    },
+    inference_guidance: "state_strongest_supported_inference_and_confidence",
+    use_decision: "person_decides_how_to_use_related_evidence",
     request: {
       place: truncate(primary.request.placeSelection.label, 100),
       hazard: primary.request.hazardId,
@@ -724,7 +808,7 @@ function compactEvidenceBundle(
     claim_discussion_available:
       primary.outcome.hazardId === "wind_storm" && Boolean(primary.outcome.result.claimDiscussion),
     related_evidence_visible_in_shared_view: true,
-    no_data_is_not_no_danger: true,
+    ...(chainsWithObservations === 0 ? { no_data_is_not_no_danger: true as const } : {}),
   };
   if (JSON.stringify(bundle).length <= MAX_OUTPUT_CHARACTERS) return bundle;
   return {
@@ -732,7 +816,6 @@ function compactEvidenceBundle(
     chains: bundle.chains.map((chain) => ({
       ...chain,
       observation: null,
-      verify_url: null,
     })),
   };
 }
@@ -867,7 +950,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Directly answer a concrete place-and-hazard question: resolve the place, retrieve bounded source evidence, and synchronize Sky to Porch. Do not call discovery tools first. Related context runs separate associated-hazard chains by default; use single_hazard_only only for an explicit restriction. Return only validated observations and limitations—never invent values, merge causation, or treat missing data as no danger.",
+      "Directly answer a concrete place-and-hazard question: resolve the place, query every applicable integrated official-source path, and synchronize Sky to Porch. Do not call discovery first. Related context runs associated evidence chains by default; use single_hazard_only only for an explicit restriction. Concern is optional: infer it when clear, ask one short follow-up only when a broad goal needs it, otherwise proceed with general. Lead with the strongest validated evidence and citations, then distinguish direct observations from evidence-supported inference and state confidence.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

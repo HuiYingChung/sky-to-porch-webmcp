@@ -1,7 +1,8 @@
 # Sky to Porch WebMCP
 
-Sky to Porch helps ordinary people examine environmental evidence for a place
-without pretending that regional observations are household-level certainty.
+Sky to Porch helps ordinary people find official environmental evidence for a
+place, compare how strongly it supports a real concern, and see what additional
+property- or person-specific evidence could change that assessment.
 This repository extends the existing application with WebMCP so a person and
 an AI agent can work from the same map, evidence, provenance, and limitations.
 
@@ -73,13 +74,15 @@ threshold. Missing or failed GeoMet evidence remains visible and never becomes
 a claim of no flooding, safe travel, or no property impact. Other GeoMet
 weather and AQHI collections are not part of this integration.
 
-## Related environmental context, without merged causation
+## Related environmental context with evidence-supported assessment
 
 `Wind & Storm` uses selected-area NOAA GHCNh wind speed and gust observations.
 For Hurricane Beryl on 2024-07-08, a pinned NWS Houston/Galveston report may
 also contribute regional post-event wind context when the selected geometry is
-inside its governed Southeast Texas scope. These records do not establish wind
-at a roof, property damage, causation, policy coverage, or a claim outcome.
+inside its governed Southeast Texas scope. Together, these records can support
+a confidence-labelled regional assessment of whether wind contribution is a
+credible explanation for a roof concern. Property inspection records determine
+how strongly that assessment applies to one roof.
 
 `Flood & Heavy Rain` is the existing `flood_storm` path. It uses rainfall,
 flood extent, inundation, and water-gage evidence; it does not establish wind
@@ -93,9 +96,10 @@ Land, Fire & Smoke with Air Quality, and Earth & Volcanoes with both Air
 Quality and Extreme Heat. Related context is the Agent default. Only a question
 that explicitly limits itself to one hazard uses `single_hazard_only`. Each
 chain preserves its own source coverage, observation time, evidence state,
-freshness, confidence, provenance, and limitations. The bundle label
-`co_occurring_context_not_causation` prevents the Agent from presenting a
-co-occurrence as proof that one hazard caused another.
+freshness, confidence, provenance, and limitations. The bundle reports
+`related_evidence_for_assessment`, counts the chains with official observations,
+and instructs the Agent to state the strongest supported inference and its
+confidence while distinguishing inference from direct observation.
 
 The Houston Beryl roof-and-insurer journey is one practical Home use case, not
 the definition of the site. Sky to Porch also supports Travel, Pets, Health,
@@ -127,7 +131,9 @@ rate limits.
 - Registers `analyze_environmental_hazard`, `list_environmental_hazards`, and
   `get_environmental_source_coverage` as the baseline surface. Concrete
   environmental questions go directly to analysis; discovery is reserved for
-  capability or source-eligibility questions.
+  capability, source-eligibility, or explicit curated-demo selection. The
+  existing list tool returns a compact demo index or one chosen prompt by
+  `demo_id`; no additional demo tool is registered.
 - Reads coverage from the same deterministic catalog as the human About UI,
   performs no live request, and labels it pipeline eligibility rather than an
   observation for a place or date.
@@ -140,9 +146,9 @@ rate limits.
   keeps every other input unchanged and never silently chooses one.
 - Shows an Agent action receipt after a shared-view update, keeps Evidence one
   click away, and offers a one-step restore when another result was visible.
-- Opens Meaning with a compact evidence-state, source-count, and limitation-count
-  trust strip; incomplete or quiet evidence repeats that it does not mean no
-  danger.
+- Opens Meaning with the strongest deterministic finding, confidence, and
+  source count. Missing-data reminders appear only when no usable observation
+  was returned.
 - Marks source-derived output as untrusted content and does not claim the tool
   is read-only because it intentionally changes the visible page state.
 - Defaults Agent requests to `related_context`, using a bounded product-owned
@@ -150,17 +156,18 @@ rate limits.
   narrow question. One tool execution can therefore gather two or three
   separately labelled chains without asking the person to know the hazard or
   source taxonomy.
-- Labels every bundle `co_occurring_context_not_causation`. Wind and water,
-  heat and drought, smoke and ambient air quality, and volcano, air, and heat
-  never substitute for one another or silently become a causal conclusion.
+- Labels every bundle `related_evidence_for_assessment`, reports observation
+  coverage across chains, and asks the Agent for the strongest supported
+  inference with a confidence level. Direct observations remain identifiable.
 - Registers `inspect_current_environmental_evidence` only while a completed
-  analysis is active. It reads the bounded primary result and related-chain
-  statuses without starting another hazard query.
+  analysis is active. It reads the strongest primary and related observations,
+  confidence, and structured source/product/time/URL citations without
+  starting another hazard query.
 - Registers `prepare_storm_claim_discussion` only after a Home + Wind result.
   It opens a documentation checklist in the current page and never submits a
   claim or decides causation, coverage, liability, repair scope, or outcome.
-- Keeps the compact tool result within the current approximately 1.5K-character
-  guidance while leaving complete evidence in the UI.
+- Keeps analysis and inspection results within a 2.4K-character bound so
+  evidence strength and structured citations are not discarded for brevity.
 
 See [the target architecture](docs/architecture/webmcp-target.md) and
 [the evaluation boundary](docs/testing/webmcp-evals.md). The dated
