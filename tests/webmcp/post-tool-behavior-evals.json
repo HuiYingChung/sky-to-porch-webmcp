@@ -27,18 +27,37 @@
           "required_next_action": "ask_user_to_choose_place_and_wait",
           "must_not_select_place": true,
           "must_not_retry_before_user_reply": true,
+          "after_user_choice": {
+            "required_next_action": "retry_analysis_with_selected_place",
+            "continue_task": true,
+            "set_place_to_selected_label": true,
+            "include_selected_retry_with": true,
+            "preserve_other_arguments": true
+          },
           "choices": [
             {
               "choice_id": "place-1",
-              "label": "Springfield, Massachusetts"
+              "label": "Springfield, Massachusetts",
+              "retry_with": {
+                "latitude": 42.1015,
+                "longitude": -72.5898
+              }
             },
             {
               "choice_id": "place-2",
-              "label": "Springfield, Illinois"
+              "label": "Springfield, Illinois",
+              "retry_with": {
+                "latitude": 39.7817,
+                "longitude": -89.6501
+              }
             },
             {
               "choice_id": "place-3",
-              "label": "Springfield, Missouri"
+              "label": "Springfield, Missouri",
+              "retry_with": {
+                "latitude": 37.209,
+                "longitude": -93.2923
+              }
             }
           ]
         }
@@ -49,6 +68,94 @@
       "assistantMustAskUserToChoose": true,
       "assistantMustNotChooseCandidate": true,
       "assistantMustWaitForNextUserMessage": true
+    }
+  },
+  {
+    "id": "ambiguous-place-resumes-after-person-choice",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Check wildfire evidence for Springfield."
+      },
+      {
+        "role": "assistant",
+        "functionCall": {
+          "functionName": "analyze_environmental_hazard",
+          "arguments": {
+            "place": "Springfield",
+            "hazard": "fire_smoke",
+            "analysis_scope": "single_hazard_only"
+          }
+        }
+      },
+      {
+        "role": "tool",
+        "functionName": "analyze_environmental_hazard",
+        "content": {
+          "status": "needs_place_choice",
+          "ui_updated": false,
+          "requires_user_input": true,
+          "required_next_action": "ask_user_to_choose_place_and_wait",
+          "must_not_select_place": true,
+          "must_not_retry_before_user_reply": true,
+          "after_user_choice": {
+            "required_next_action": "retry_analysis_with_selected_place",
+            "continue_task": true,
+            "set_place_to_selected_label": true,
+            "include_selected_retry_with": true,
+            "preserve_other_arguments": true
+          },
+          "choices": [
+            {
+              "choice_id": "place-1",
+              "label": "Springfield, Massachusetts",
+              "retry_with": {
+                "latitude": 42.1015,
+                "longitude": -72.5898
+              }
+            },
+            {
+              "choice_id": "place-2",
+              "label": "Springfield, Illinois",
+              "retry_with": {
+                "latitude": 39.7817,
+                "longitude": -89.6501
+              }
+            },
+            {
+              "choice_id": "place-3",
+              "label": "Springfield, Missouri",
+              "retry_with": {
+                "latitude": 37.209,
+                "longitude": -93.2923
+              }
+            }
+          ]
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "I found multiple places named Springfield. Which one do you mean: Massachusetts, Illinois, or Missouri?"
+      },
+      {
+        "role": "user",
+        "content": "Springfield, Illinois."
+      }
+    ],
+    "expected": {
+      "toolCallsAfterUserReply": [
+        {
+          "functionName": "analyze_environmental_hazard",
+          "arguments": {
+            "place": "Springfield, Illinois",
+            "hazard": "fire_smoke",
+            "analysis_scope": "single_hazard_only",
+            "latitude": 39.7817,
+            "longitude": -89.6501
+          }
+        }
+      ],
+      "assistantMustContinueTask": true
     }
   }
 ]

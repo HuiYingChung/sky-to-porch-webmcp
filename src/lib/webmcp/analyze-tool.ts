@@ -116,6 +116,13 @@ interface ToolFailure {
   required_next_action?: "ask_user_to_choose_place_and_wait";
   must_not_select_place?: true;
   must_not_retry_before_user_reply?: true;
+  after_user_choice?: {
+    required_next_action: "retry_analysis_with_selected_place";
+    continue_task: true;
+    set_place_to_selected_label: true;
+    include_selected_retry_with: true;
+    preserve_other_arguments: true;
+  };
 }
 
 interface CompactObservation {
@@ -312,13 +319,20 @@ function placeChoiceFailure(
 ): ToolFailure {
   return {
     status: "needs_place_choice",
-    message: `STOP: I found ${choices.length} possible places for “${query}”. Do not select a place or retry yet. Ask the person to choose one label below, then wait for a new user message. Only after the person replies, keep every other input unchanged and retry with that choice's coordinates.`,
+    message: `PAUSE FOR USER: I found ${choices.length} possible places for “${query}”. Do not select a place or retry yet. Ask the person to choose one label below, then wait for a new user message. After the person replies, continue the unfinished task: call this tool again, set place to the selected label, include that choice's retry_with coordinates, and keep every other input unchanged.`,
     ui_updated: false,
     no_data_is_not_no_danger: true,
     requires_user_input: true,
     required_next_action: "ask_user_to_choose_place_and_wait",
     must_not_select_place: true,
     must_not_retry_before_user_reply: true,
+    after_user_choice: {
+      required_next_action: "retry_analysis_with_selected_place",
+      continue_task: true,
+      set_place_to_selected_label: true,
+      include_selected_retry_with: true,
+      preserve_other_arguments: true,
+    },
     choices,
   };
 }
@@ -1033,7 +1047,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Analyze a concrete place and hazard through applicable official sources and update the shared UI. Call directly; skip discovery. Never infer coordinates for a named place; use them only if the person supplied them or selected a returned candidate in a later message. On needs_place_choice, STOP: do not call any tool again, choose, or retry. Ask the person to choose and wait for their reply. Default to related_context; use single_hazard_only only for an explicit restriction. Infer concern when clear; ask once only for a broad goal, otherwise use general. Lead with strongest evidence and citations, supported inference, confidence, and separate evidence chains.",
+      "Analyze a concrete place/hazard and update shared UI; skip discovery. Never infer coordinates for a named place; use only user-given coordinates or a candidate the user later selects. On needs_place_choice, do not choose or retry before a new user reply: ask and wait. After their choice, this task is still unfinished: immediately call this tool again with the selected label and retry_with coordinates, keep all other arguments, and finish the evidence result. Default related_context; use single_hazard_only only if explicit. Infer concern when clear; ask once only for a broad goal, else general. Answer with strongest evidence, citations, supported inference, confidence, and separate chains.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

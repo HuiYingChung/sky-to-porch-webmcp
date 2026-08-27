@@ -35,10 +35,12 @@ interface PostToolBehaviorCase {
   id: string;
   messages: Array<Record<string, unknown>>;
   expected: {
-    toolCallsBeforeNextUserMessage: EvalCall[];
-    assistantMustAskUserToChoose: boolean;
-    assistantMustNotChooseCandidate: boolean;
-    assistantMustWaitForNextUserMessage: boolean;
+    toolCallsBeforeNextUserMessage?: EvalCall[];
+    assistantMustAskUserToChoose?: boolean;
+    assistantMustNotChooseCandidate?: boolean;
+    assistantMustWaitForNextUserMessage?: boolean;
+    toolCallsAfterUserReply?: EvalCall[];
+    assistantMustContinueTask?: boolean;
   };
 }
 
@@ -60,8 +62,12 @@ describe("WebMCP tool-selection eval dataset", () => {
   });
 
   it("locks the ambiguous-place stop-and-wait behavior for model-backed runs", () => {
-    expect(postToolDataset).toHaveLength(1);
-    const item = postToolDataset[0];
+    expect(postToolDataset).toHaveLength(2);
+    const item = postToolDataset.find(
+      (candidate) => candidate.id === "ambiguous-place-must-wait-for-person"
+    );
+    expect(item).toBeDefined();
+    if (!item) throw new Error("Missing ambiguous wait eval case");
     expect(item.id).toBe("ambiguous-place-must-wait-for-person");
     expect(item.messages.map((message) => message.role)).toEqual([
       "user",
@@ -76,6 +82,10 @@ describe("WebMCP tool-selection eval dataset", () => {
         required_next_action: "ask_user_to_choose_place_and_wait",
         must_not_select_place: true,
         must_not_retry_before_user_reply: true,
+        after_user_choice: {
+          required_next_action: "retry_analysis_with_selected_place",
+          continue_task: true,
+        },
       },
     });
     expect(item.expected).toEqual({
@@ -83,6 +93,39 @@ describe("WebMCP tool-selection eval dataset", () => {
       assistantMustAskUserToChoose: true,
       assistantMustNotChooseCandidate: true,
       assistantMustWaitForNextUserMessage: true,
+    });
+  });
+
+  it("locks the post-choice continuation through the analysis tool", () => {
+    const item = postToolDataset.find(
+      (candidate) => candidate.id === "ambiguous-place-resumes-after-person-choice"
+    );
+    expect(item).toBeDefined();
+    if (!item) throw new Error("Missing ambiguous continuation eval case");
+
+    expect(item.messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "tool",
+      "assistant",
+      "user",
+    ]);
+    expect(item.messages.at(-1)).toEqual({
+      role: "user",
+      content: "Springfield, Illinois.",
+    });
+    expect(item.expected).toEqual({
+      toolCallsAfterUserReply: [{
+        functionName: ANALYZE_HAZARD_TOOL_NAME,
+        arguments: {
+          place: "Springfield, Illinois",
+          hazard: "fire_smoke",
+          analysis_scope: "single_hazard_only",
+          latitude: 39.7817,
+          longitude: -89.6501,
+        },
+      }],
+      assistantMustContinueTask: true,
     });
   });
 

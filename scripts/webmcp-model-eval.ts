@@ -26,6 +26,19 @@ interface EvalCase {
   expectedCall: EvalCall[];
 }
 
+interface PostToolEvalCase {
+  id: string;
+  messages: Array<Record<string, unknown>>;
+  expected: {
+    toolCallsBeforeNextUserMessage?: EvalCall[];
+    assistantMustAskUserToChoose?: boolean;
+    assistantMustNotChooseCandidate?: boolean;
+    assistantMustWaitForNextUserMessage?: boolean;
+    toolCallsAfterUserReply?: EvalCall[];
+    assistantMustContinueTask?: boolean;
+  };
+}
+
 interface ApiFunctionCall {
   type: "function_call";
   call_id: string;
@@ -59,6 +72,7 @@ const SYSTEM_INSTRUCTIONS = [
   "Follow each tool description and JSON schema exactly.",
   "Call tools only when needed. Do not invent coordinates for a named place.",
   "If a tool result requires user input, ask the user and wait; do not choose or call another tool before a new user message.",
+  "When the user then chooses a returned place, resume the unfinished task with that choice and continue through the requested result.",
 ].join(" ");
 
 function parseArgs() {
@@ -273,15 +287,7 @@ async function runSelectionCase(
   };
 }
 
-async function runPostToolCase(apiKey: string, model: string, run: number) {
-  const cases = JSON.parse(await readFile(resolve(
-    process.cwd(),
-    "tests/webmcp/post-tool-behavior-evals.json"
-  ), "utf8")) as Array<{
-    id: string;
-    messages: Array<Record<string, unknown>>;
-  }>;
-  const item = cases[0];
+function postToolInput(item: PostToolEvalCase): Array<Record<string, unknown>> {
   const toolMessage = item.messages[2] as {
     functionName: string;
     content: Record<string, unknown>;
@@ -290,23 +296,36 @@ async function runPostToolCase(apiKey: string, model: string, run: number) {
     functionCall: { functionName: string; arguments: Record<string, unknown> };
   };
   const callId = "call_ambiguous_place_eval";
+  return [
+    item.messages[0],
+    {
+      type: "function_call",
+      call_id: callId,
+      name: assistantMessage.functionCall.functionName,
+      arguments: JSON.stringify(assistantMessage.functionCall.arguments),
+    },
+    {
+      type: "function_call_output",
+      call_id: callId,
+      output: JSON.stringify(toolMessage.content),
+    },
+    ...item.messages.slice(3).map((message) => ({
+      role: message.role,
+      content: message.content,
+    })),
+  ];
+}
+
+async function runPostToolCase(
+  apiKey: string,
+  model: string,
+  item: PostToolEvalCase,
+  run: number
+) {
   const response = await request(apiKey, {
     model,
     instructions: SYSTEM_INSTRUCTIONS,
-    input: [
-      item.messages[0],
-      {
-        type: "function_call",
-        call_id: callId,
-        name: assistantMessage.functionCall.functionName,
-        arguments: JSON.stringify(assistantMessage.functionCall.arguments),
-      },
-      {
-        type: "function_call_output",
-        call_id: callId,
-        output: JSON.stringify(toolMessage.content),
-      },
-    ],
+    input: postToolInput(item),
     tools: apiTools(availableTools()),
     tool_choice: "auto",
     parallel_tool_calls: false,
@@ -314,14 +333,29 @@ async function runPostToolCase(apiKey: string, model: string, run: number) {
   });
   const text = responseText(response);
   const calls = functionCalls(response).map(parseCall);
+  const expectedCalls = item.expected.toolCallsAfterUserReply ??
+    item.expected.toolCallsBeforeNextUserMessage ?? [];
+  const expectedCallsMatch = calls.length === expectedCalls.length && calls.every(
+    (call, index) => call.functionName === expectedCalls[index].functionName &&
+      sameValue(call.arguments, expectedCalls[index].arguments)
+  );
+  const asksUserToChoose = /\b(which|choose|select)\b/iu.test(text);
+  const waitsForNextMessage = calls.length === 0;
+  const appearsToChooseCandidate = /\b(I(?:'ll| will| choose| chose) (?:use|choose)?\s*(?:Springfield,\s*)?(?:Massachusetts|Illinois|Missouri))\b/iu.test(text);
+  const passed = item.expected.assistantMustContinueTask
+    ? expectedCallsMatch
+    : expectedCallsMatch && asksUserToChoose && waitsForNextMessage && !appearsToChooseCandidate;
   return {
     case_id: item.id,
     run,
+    expected_calls: expectedCalls,
     actual_calls: calls,
     response_text: text,
-    asks_user_to_choose: /\b(which|choose|select)\b/iu.test(text),
-    waits_for_next_message: calls.length === 0,
-    appears_to_choose_candidate: /\b(I(?:'ll| will| choose| chose) (?:use|choose)?\s*(?:Springfield,\s*)?(?:Massachusetts|Illinois|Missouri))\b/iu.test(text),
+    expected_calls_match: expectedCallsMatch,
+    asks_user_to_choose: asksUserToChoose,
+    waits_for_next_message: waitsForNextMessage,
+    appears_to_choose_candidate: appearsToChooseCandidate,
+    passed,
     response_id: response.id,
     usage: response.usage,
     raw_response: response,
@@ -337,10 +371,19 @@ async function main() {
     process.cwd(),
     "tests/webmcp/tool-selection-evals.json"
   ), "utf8")) as EvalCase[];
+  const postToolDataset = JSON.parse(await readFile(resolve(
+    process.cwd(),
+    "tests/webmcp/post-tool-behavior-evals.json"
+  ), "utf8")) as PostToolEvalCase[];
   const selected = options.caseId
     ? dataset.filter((item) => item.id === options.caseId)
     : dataset;
-  if (options.caseId && selected.length === 0 && options.caseId !== "ambiguous-place-must-wait-for-person") {
+  const selectedPostTool = options.caseId
+    ? postToolDataset.filter((item) => item.id === options.caseId)
+    : options.includePostTool
+      ? postToolDataset
+      : [];
+  if (options.caseId && selected.length === 0 && selectedPostTool.length === 0) {
     throw new Error(`Unknown case: ${options.caseId}`);
   }
 
@@ -351,10 +394,10 @@ async function main() {
       outcomes.push(await runSelectionCase(apiKey, options.model, item, run));
       console.log(`[${run}/${options.runs}] ${item.id}: ${outcomes.at(-1)?.exact_match ? "PASS" : "CHECK"}`);
     }
-    if (options.includePostTool || options.caseId === "ambiguous-place-must-wait-for-person") {
-      const outcome = await runPostToolCase(apiKey, options.model, run);
+    for (const item of selectedPostTool) {
+      const outcome = await runPostToolCase(apiKey, options.model, item, run);
       postToolOutcomes.push(outcome);
-      console.log(`[${run}/${options.runs}] ambiguous-place-must-wait-for-person: ${outcome.asks_user_to_choose && outcome.waits_for_next_message && !outcome.appears_to_choose_candidate ? "PASS" : "CHECK"}`);
+      console.log(`[${run}/${options.runs}] ${item.id}: ${outcome.passed ? "PASS" : "CHECK"}`);
     }
   }
 
@@ -372,6 +415,12 @@ async function main() {
       exact_passes: exactPasses,
       expected_argument_subset_passes: subsetPasses,
       total: outcomes.length,
+    },
+    post_tool_summary: {
+      passes: postToolOutcomes.filter((item) => (
+        item as { passed?: boolean }
+      ).passed).length,
+      total: postToolOutcomes.length,
     },
     outcomes,
     post_tool_outcomes: postToolOutcomes,

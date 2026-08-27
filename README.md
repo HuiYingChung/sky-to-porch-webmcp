@@ -21,7 +21,10 @@ in browsers without WebMCP; only the Agent tools require a compatible browser.
 3. To check the location-safety boundary, ask: **“Check wildfire evidence for
    Springfield.”** The tool should return the matching places, and the Agent
    must ask which Springfield you mean and wait for your reply. It must not
-   choose a candidate on its own.
+   choose a candidate on its own. Reply **“Springfield, Illinois.”** The Agent
+   should then resume the unfinished task, call the analysis tool with that
+   selected candidate, and continue through the evidence result and shared UI
+   update.
 
 The Agent is supplied by the judge's compatible browser. Sky to Porch does not
 send judge prompts to an internal model provider and the Vercel deployment does

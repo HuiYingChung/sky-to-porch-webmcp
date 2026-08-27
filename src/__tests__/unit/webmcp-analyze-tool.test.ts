@@ -171,6 +171,13 @@ describe("WebMCP environmental hazard tool", () => {
       required_next_action: "ask_user_to_choose_place_and_wait",
       must_not_select_place: true,
       must_not_retry_before_user_reply: true,
+      after_user_choice: {
+        required_next_action: "retry_analysis_with_selected_place",
+        continue_task: true,
+        set_place_to_selected_label: true,
+        include_selected_retry_with: true,
+        preserve_other_arguments: true,
+      },
     });
     expect("choices" in output ? output.choices : undefined).toEqual([
       {
@@ -185,22 +192,84 @@ describe("WebMCP environmental hazard tool", () => {
       },
     ]);
     const message = "message" in output ? output.message : "";
-    expect(message).toContain("STOP:");
+    expect(message).toContain("PAUSE FOR USER:");
     expect(message).toContain("wait for a new user message");
+    expect(message).toContain("continue the unfinished task");
     expect(message).toContain("keep every other input unchanged");
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
     expect(runAnalysis).not.toHaveBeenCalled();
   });
 
-  it("tells the agent not to infer coordinates or continue after ambiguity", () => {
+  it("tells the agent to wait for the person, then resume the unfinished task", () => {
     const tool = createAnalyzeHazardTool({ runAnalysis: vi.fn() });
 
     expect(tool.description).toContain("Never infer coordinates for a named place");
-    expect(tool.description).toContain("do not call any tool again");
+    expect(tool.description).toContain("before a new user reply");
+    expect(tool.description).toContain("this task is still unfinished");
+    expect(tool.description).toContain("immediately call this tool again");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.latitude.description)
       .toContain("Never infer it to bypass ambiguity");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.longitude.description)
       .toContain("Never infer it to bypass ambiguity");
+  });
+
+  it("continues the analysis after the person selects a returned place", async () => {
+    const runAnalysis = vi.fn(async (
+      request: AnalysisRequest,
+      _origin?: "agent",
+      _signal?: AbortSignal
+    ) => {
+      void _origin;
+      void _signal;
+      return successfulFireAnalysis(request);
+    });
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          results: [
+            { label: "Springfield, Illinois", lon: -89.65, lat: 39.78 },
+            { label: "Springfield, Missouri", lon: -93.29, lat: 37.21 },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+
+    const ambiguous = await executeAnalyzeHazardTool(
+      {
+        place: "Springfield",
+        hazard: "fire_smoke",
+        analysis_scope: "single_hazard_only",
+      },
+      toolOptions(),
+      { runAnalysis, fetchImpl, now: () => NOW }
+    );
+    expect(ambiguous.status).toBe("needs_place_choice");
+    expect(runAnalysis).not.toHaveBeenCalled();
+
+    const completed = await executeAnalyzeHazardTool(
+      {
+        place: "Springfield, Illinois",
+        hazard: "fire_smoke",
+        analysis_scope: "single_hazard_only",
+        latitude: 39.78,
+        longitude: -89.65,
+      },
+      toolOptions(),
+      { runAnalysis, fetchImpl, now: () => NOW }
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(runAnalysis).toHaveBeenCalledTimes(1);
+    expect(runAnalysis.mock.calls[0][0]).toMatchObject({
+      hazardId: "fire_smoke",
+      placeSelection: {
+        label: "Springfield, Illinois (agent coordinates)",
+        selectionMethod: "agent_coordinate",
+      },
+    });
+    expect(completed.ui_updated).toBe(true);
   });
 
   it("uses supplied coordinates, defaults to general/latest, returns citations, and caps output", async () => {
