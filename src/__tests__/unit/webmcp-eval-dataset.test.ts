@@ -9,8 +9,8 @@ import {
 import {
   GET_COVERAGE_INPUT_SCHEMA,
   GET_COVERAGE_TOOL_NAME,
-  LIST_HAZARDS_INPUT_SCHEMA,
-  LIST_HAZARDS_TOOL_NAME,
+  CAPABILITIES_INPUT_SCHEMA,
+  CAPABILITIES_TOOL_NAME,
 } from "@/lib/webmcp/discovery-tools";
 import {
   INSPECT_EVIDENCE_INPUT_SCHEMA,
@@ -29,6 +29,26 @@ interface EvalCase {
   availableAfter?: "completed_environmental_analysis" | "completed_home_wind_analysis";
   messages: Array<{ role: "user"; content: string }>;
   expectedCall: EvalCall[];
+  expectedAssistant?: {
+    mustAskUserToChooseHazard?: boolean;
+    mustWaitForUserReply?: boolean;
+    mayListHazardsBeforeQuestion?: boolean;
+  };
+}
+
+interface PostToolBehaviorCase {
+  id: string;
+  messages: Array<Record<string, unknown>>;
+  expected: {
+    toolCallsBeforeNextUserMessage?: EvalCall[];
+    assistantMustAskUserToChoose?: boolean;
+    assistantMustNotChooseCandidate?: boolean;
+    assistantMustWaitForNextUserMessage?: boolean;
+    toolCallsAfterUserReply?: EvalCall[];
+    assistantMustContinueTask?: boolean;
+    assistantMustFinishAfterToolResult?: boolean;
+    assistantMustPreserveNoObservationBoundary?: boolean;
+  };
 }
 
 describe("WebMCP tool-selection eval dataset", () => {
@@ -36,6 +56,10 @@ describe("WebMCP tool-selection eval dataset", () => {
     process.cwd(),
     "tests/webmcp/tool-selection-evals.json"
   ), "utf8")) as EvalCase[];
+  const postToolDataset = JSON.parse(readFileSync(resolve(
+    process.cwd(),
+    "tests/webmcp/post-tool-behavior-evals.json"
+  ), "utf8")) as PostToolBehaviorCase[];
 
   it("has unique bounded cases including an out-of-scope no-call", () => {
     expect(dataset.length).toBeGreaterThanOrEqual(6);
@@ -44,10 +68,93 @@ describe("WebMCP tool-selection eval dataset", () => {
     expect(dataset.some((item) => item.id.includes("ambiguous"))).toBe(true);
   });
 
+  it("locks the ambiguous-place stop-and-wait behavior for model-backed runs", () => {
+    expect(postToolDataset).toHaveLength(2);
+    const item = postToolDataset.find(
+      (candidate) => candidate.id === "ambiguous-place-must-wait-for-person"
+    );
+    expect(item).toBeDefined();
+    if (!item) throw new Error("Missing ambiguous wait eval case");
+    expect(item.id).toBe("ambiguous-place-must-wait-for-person");
+    expect(item.messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "tool",
+    ]);
+    expect(item.messages[2]).toMatchObject({
+      functionName: ANALYZE_HAZARD_TOOL_NAME,
+      content: {
+        status: "needs_place_choice",
+        requires_user_input: true,
+        required_next_action: "ask_user_to_choose_place_and_wait",
+        must_not_select_place: true,
+        must_not_retry_before_user_reply: true,
+        after_user_choice: {
+          required_next_action: "retry_analysis_with_selected_place",
+          continue_task: true,
+        },
+      },
+    });
+    expect(item.expected).toEqual({
+      toolCallsBeforeNextUserMessage: [],
+      assistantMustAskUserToChoose: true,
+      assistantMustNotChooseCandidate: true,
+      assistantMustWaitForNextUserMessage: true,
+    });
+  });
+
+  it("locks the post-choice continuation through the analysis tool", () => {
+    const item = postToolDataset.find(
+      (candidate) => candidate.id === "ambiguous-place-resumes-after-person-choice"
+    );
+    expect(item).toBeDefined();
+    if (!item) throw new Error("Missing ambiguous continuation eval case");
+
+    expect(item.messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "tool",
+      "assistant",
+      "user",
+    ]);
+    expect(item.messages.at(-1)).toEqual({
+      role: "user",
+      content: "Springfield, Illinois.",
+    });
+    expect(item.expected).toEqual({
+      toolCallsAfterUserReply: [{
+        functionName: ANALYZE_HAZARD_TOOL_NAME,
+        arguments: {
+          place: "Springfield, Illinois",
+          hazard: "fire_smoke",
+          time: "latest_completed",
+          analysis_scope: "single_hazard_only",
+        },
+      }],
+      assistantMustContinueTask: true,
+      assistantMustFinishAfterToolResult: true,
+      assistantMustPreserveNoObservationBoundary: true,
+    });
+  });
+
+  it("asks and waits instead of guessing a broad missing hazard", () => {
+    const selection = dataset.find(
+      (item) => item.id === "broad-goal-ask-clarification"
+    );
+    expect(selection).toMatchObject({
+      expectedCall: [],
+      expectedAssistant: {
+        mustAskUserToChooseHazard: true,
+        mustWaitForUserReply: true,
+        mayListHazardsBeforeQuestion: true,
+      },
+    });
+  });
+
   it("keeps expected calls aligned with the registered tool contract", () => {
     const schemas = {
       [ANALYZE_HAZARD_TOOL_NAME]: ANALYZE_HAZARD_INPUT_SCHEMA.properties,
-      [LIST_HAZARDS_TOOL_NAME]: LIST_HAZARDS_INPUT_SCHEMA.properties,
+      [CAPABILITIES_TOOL_NAME]: CAPABILITIES_INPUT_SCHEMA.properties,
       [GET_COVERAGE_TOOL_NAME]: GET_COVERAGE_INPUT_SCHEMA.properties,
       [INSPECT_EVIDENCE_TOOL_NAME]: INSPECT_EVIDENCE_INPUT_SCHEMA.properties,
       [PREPARE_STORM_CLAIM_TOOL_NAME]: PREPARE_STORM_CLAIM_INPUT_SCHEMA.properties,
@@ -64,6 +171,7 @@ describe("WebMCP tool-selection eval dataset", () => {
         if (call.functionName === ANALYZE_HAZARD_TOOL_NAME) {
           expect(call.arguments).toHaveProperty("place");
           expect(call.arguments).toHaveProperty("hazard");
+          expect(call.arguments).toHaveProperty("time");
         }
         if (call.functionName === GET_COVERAGE_TOOL_NAME) {
           expect(call.arguments).toHaveProperty("hazard");
@@ -78,7 +186,7 @@ describe("WebMCP tool-selection eval dataset", () => {
     ));
     expect(calledTools).toEqual(new Set([
       ANALYZE_HAZARD_TOOL_NAME,
-      LIST_HAZARDS_TOOL_NAME,
+      CAPABILITIES_TOOL_NAME,
       GET_COVERAGE_TOOL_NAME,
       INSPECT_EVIDENCE_TOOL_NAME,
       PREPARE_STORM_CLAIM_TOOL_NAME,
@@ -100,7 +208,7 @@ describe("WebMCP tool-selection eval dataset", () => {
 
   it("uses discovery only for capability questions and keeps concrete asks direct", () => {
     expect(dataset.find((item) => item.id === "capability-discovery")?.expectedCall[0])
-      .toMatchObject({ functionName: LIST_HAZARDS_TOOL_NAME, arguments: {} });
+      .toMatchObject({ functionName: CAPABILITIES_TOOL_NAME, arguments: {} });
     expect(dataset.find((item) => item.id === "coverage-discovery-air-quality")?.expectedCall[0])
       .toMatchObject({
         functionName: GET_COVERAGE_TOOL_NAME,
@@ -128,15 +236,20 @@ describe("WebMCP tool-selection eval dataset", () => {
     });
     expect(narrow?.expectedCall[0].arguments).not.toHaveProperty("concern");
     expect(broad?.expectedCall).toEqual([]);
+    expect(broad?.expectedAssistant).toEqual({
+      mustAskUserToChooseHazard: true,
+      mustWaitForUserReply: true,
+      mayListHazardsBeforeQuestion: true,
+    });
   });
 
   it("selects a curated demo through the existing discovery tool before analysis", () => {
     const selected = dataset.find((item) => item.id === "selected-tucson-demo");
     expect(selected?.expectedCall.map((call) => call.functionName)).toEqual([
-      LIST_HAZARDS_TOOL_NAME,
+      CAPABILITIES_TOOL_NAME,
       ANALYZE_HAZARD_TOOL_NAME,
     ]);
-    expect(selected?.expectedCall[0].arguments).toEqual({ demo_id: "tucson-heat-pets" });
+    expect(selected?.expectedCall[0].arguments).toEqual({});
   });
 
   it("uses single scope only for explicit asks and defaults broad questions to related context", () => {

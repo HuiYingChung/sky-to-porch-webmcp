@@ -128,3 +128,87 @@ Therefore production proves the corrected one-argument callback and the full
 native journeys at `5cc1098`, while the 2,400-character inspection contract is
 only locally corrected until a separately authorized publication and
 production re-verification occur.
+
+## Post-push exact-candidate verification
+
+The owner subsequently pushed the prepared private candidate. Vercel's Git
+integration deployed it automatically; Codex did not run a manual deploy or
+change repository visibility.
+
+- Git head: `c6f3c8ceeac582949f8a9dccdfa3058e73b72673`
+- Remote `main`: exact match to that head
+- GitHub Actions run: `33105415851`, all four jobs passed, including Chromium
+  E2E smoke
+- Vercel deployment: `dpl_26ghpL9bcDWUeS8TEZ2ktJdv6bgo`, `READY` and
+  `PROMOTED`
+- Immutable deployment URL:
+  `https://sky-to-porch-webmcp-k8jo0s24r-huiyingchungs-projects.vercel.app`
+- Production alias: `https://sky-to-porch-webmcp.vercel.app/`
+- Vercel `gitSource.sha`: exact match to `c6f3c8c`
+- `/` and `/api/health`: HTTP 200
+- Repository visibility: still private
+
+The supported in-app browser exposed the same three baseline tools. A native
+Beryl related-context call again synchronized Houston, Wind & Storm, Flood &
+Heavy Rain, and the claim discussion with no browser warning or error.
+
+The contextual correction is production-conformant:
+
+- `inspect_current_environmental_evidence`: 2,219 serialized characters,
+  retaining the 39.6 m/s wind gust, separate Flood chain, and NOAA/NASA
+  citations;
+- `prepare_storm_claim_discussion`: 1,499 characters and `ui_updated: true`.
+
+The same exact production rerun exposed a second bounded-output defect. The
+primary `related_environmental_evidence_bundle` serialized to 2,524 characters,
+above `MAX_OUTPUT_CHARACTERS = 2400`. Its evidence and UI synchronization were
+correct, but that primary call is not conformant to the declared output cap.
+
+## Local corrections after the exact-candidate rerun
+
+The current private worktree adds staged primary-result compaction. It removes
+observations first, then progressively bounds product, limitation, identifier,
+place, and URL fields while retaining structured chain status and provenance.
+A production-shaped Beryl regression requires both Wind and Flood citations
+and a serialized result no longer than 2,400 characters.
+
+The owner also reported that the challenge Agent continued after an ambiguous
+place result and selected a candidate instead of asking. Direct tool execution
+still returned `needs_place_choice`, `ui_updated: false`, and ran no analysis;
+the failure was in Agent continuation behavior. The local contract now:
+
+- tells the Agent never to infer coordinates for a named place;
+- returns machine-readable `requires_user_input`,
+  `required_next_action: ask_user_to_choose_place_and_wait`,
+  `must_not_select_place`, and `must_not_retry_before_user_reply` fields;
+- starts the human-readable result with `STOP`, requires a question, and
+  requires waiting for a new user message;
+- repeats the stop rule in the tool description and coordinate schemas.
+
+The current [WebMCP proposal](https://github.com/webmachinelearning/webmcp)
+lists user prompting and elicitation as an area still being explored rather
+than a standardized page-owned mechanism that can force the Agent to pause.
+This local correction therefore strengthens the model-facing contract and
+deterministic no-query boundary, but challenge-Agent compliance still requires
+a model-backed or native rerun. A fully enforceable UI-mediated confirmation
+gate would change the human workflow and remains a separate product decision.
+
+The current local correction evidence is:
+
+- code and regression commit: `f42cc37`;
+- TypeScript typecheck and ESLint pass;
+- 70 unit files with 1,292 tests pass, including the production-shaped primary
+  bundle and retained post-tool ambiguity scenario;
+- 10 integration files with 132 tests pass;
+- the production build generates 14 of 14 pages;
+- 228 desktop/mobile Playwright journeys pass;
+- secret check passes.
+
+One first full-gate attempt had a single failure in the keyboard layer-card
+collapse journey; that exact test passed immediately in isolation and the next
+complete 228-journey run passed. The failed attempt is retained as an observed
+test-run outcome rather than silently treated as a product pass.
+
+The code and tests are committed locally. The evidence-record commit,
+clean-candidate preflight, publication, exact remote CI, automatic deployment,
+and native/model re-verification remain separate pending evidence.

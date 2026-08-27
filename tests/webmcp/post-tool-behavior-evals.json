@@ -1,0 +1,138 @@
+[
+  {
+    "id": "ambiguous-place-must-wait-for-person",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Check wildfire evidence for Springfield."
+      },
+      {
+        "role": "assistant",
+        "functionCall": {
+          "functionName": "analyze_environmental_hazard",
+          "arguments": {
+            "place": "Springfield",
+            "hazard": "fire_smoke",
+            "time": "latest_completed",
+            "analysis_scope": "single_hazard_only"
+          }
+        }
+      },
+      {
+        "role": "tool",
+        "functionName": "analyze_environmental_hazard",
+        "content": {
+          "status": "needs_place_choice",
+          "ui_updated": false,
+          "requires_user_input": true,
+          "required_next_action": "ask_user_to_choose_place_and_wait",
+          "must_not_select_place": true,
+          "must_not_retry_before_user_reply": true,
+          "after_user_choice": {
+            "required_next_action": "retry_analysis_with_selected_place",
+            "continue_task": true,
+            "set_place_to_selected_label": true,
+            "preserve_other_arguments": true
+          },
+          "choices": [
+            {
+              "choice_id": "place-1",
+              "label": "Springfield, Massachusetts"
+            },
+            {
+              "choice_id": "place-2",
+              "label": "Springfield, Illinois"
+            },
+            {
+              "choice_id": "place-3",
+              "label": "Springfield, Missouri"
+            }
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "toolCallsBeforeNextUserMessage": [],
+      "assistantMustAskUserToChoose": true,
+      "assistantMustNotChooseCandidate": true,
+      "assistantMustWaitForNextUserMessage": true
+    }
+  },
+  {
+    "id": "ambiguous-place-resumes-after-person-choice",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Check wildfire evidence for Springfield."
+      },
+      {
+        "role": "assistant",
+        "functionCall": {
+          "functionName": "analyze_environmental_hazard",
+          "arguments": {
+            "place": "Springfield",
+            "hazard": "fire_smoke",
+            "time": "latest_completed",
+            "analysis_scope": "single_hazard_only"
+          }
+        }
+      },
+      {
+        "role": "tool",
+        "functionName": "analyze_environmental_hazard",
+        "content": {
+          "status": "needs_place_choice",
+          "ui_updated": false,
+          "requires_user_input": true,
+          "required_next_action": "ask_user_to_choose_place_and_wait",
+          "must_not_select_place": true,
+          "must_not_retry_before_user_reply": true,
+          "after_user_choice": {
+            "required_next_action": "retry_analysis_with_selected_place",
+            "continue_task": true,
+            "set_place_to_selected_label": true,
+            "preserve_other_arguments": true
+          },
+          "choices": [
+            {
+              "choice_id": "place-1",
+              "label": "Springfield, Massachusetts"
+            },
+            {
+              "choice_id": "place-2",
+              "label": "Springfield, Illinois"
+            },
+            {
+              "choice_id": "place-3",
+              "label": "Springfield, Missouri"
+            }
+          ]
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "I found multiple places named Springfield. Which one do you mean: Massachusetts, Illinois, or Missouri?"
+      },
+      {
+        "role": "user",
+        "content": "Springfield, Illinois."
+      }
+    ],
+    "expected": {
+      "toolCallsAfterUserReply": [
+        {
+          "functionName": "analyze_environmental_hazard",
+          "arguments": {
+            "place": "Springfield, Illinois",
+            "hazard": "fire_smoke",
+            "time": "latest_completed",
+            "analysis_scope": "single_hazard_only"
+          }
+        }
+      ],
+      "assistantMustContinueTask": true,
+      "assistantMustFinishAfterToolResult": true,
+      "assistantMustPreserveNoObservationBoundary": true
+    }
+  }
+]

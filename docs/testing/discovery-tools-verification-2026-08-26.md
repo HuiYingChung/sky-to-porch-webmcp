@@ -75,3 +75,13 @@ coverage-only prompts plus direct-analysis prompts, but it remains a
 deterministic dataset contract until model-backed runs are retained. No live
 request, provider key, paid API, push, deployment, or public action occurred in
 this work package.
+
+## Later contract revision — 2026-08-27
+
+This remains an exact historical record for `43ca725`; its selector and
+1,500-character statements are not the current tool surface. ADR-0006 later
+removed `demo_id` and `source_id`. The current hazard list takes no input and
+returns all three compact demo inputs, while source coverage takes only
+`hazard` and returns every compact matching profile. Both now use the shared
+2,400-character discovery limit and retain the same read-only,
+coverage-is-not-observation boundary.

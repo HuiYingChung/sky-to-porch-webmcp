@@ -23,10 +23,11 @@ export const ANSWER_ORDER = [
   "direct_observation_then_labelled_inference",
   "confidence_and_evidence_that_would_change_it",
 ] as const;
-const ANALYSIS_SCOPES = ["related_context", "single_hazard_only"] as const;
+const ANALYSIS_SCOPES = ["single_hazard_only", "related_context"] as const;
 type AnalysisScope = (typeof ANALYSIS_SCOPES)[number];
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/;
+const COORDINATE_PLACE_RE = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/;
 
 /**
  * Product-owned default relationships. These are retrieval companions. Any
@@ -47,14 +48,10 @@ const INPUT_KEYS = new Set([
   "place",
   "hazard",
   "concern",
-  "latitude",
-  "longitude",
   "radius_km",
-  "start_date",
-  "end_date",
+  "time",
   "question",
   "analysis_scope",
-  "related_hazards",
 ]);
 
 export interface AnalyzeHazardToolDependencies {
@@ -76,7 +73,6 @@ interface ParsedInput {
   place: string;
   hazard: HazardId;
   analysisScope: AnalysisScope;
-  relatedHazards: HazardId[];
   concern: ConcernType;
   latitude?: number;
   longitude?: number;
@@ -95,10 +91,6 @@ interface GeocodeCandidate {
 export interface AgentPlaceChoice {
   choice_id: string;
   label: string;
-  retry_with: {
-    latitude: number;
-    longitude: number;
-  };
 }
 
 interface ToolFailure {
@@ -112,6 +104,16 @@ interface ToolFailure {
   ui_updated: false;
   no_data_is_not_no_danger: true;
   choices?: AgentPlaceChoice[];
+  requires_user_input?: true;
+  required_next_action?: "ask_user_to_choose_place_and_wait";
+  must_not_select_place?: true;
+  must_not_retry_before_user_reply?: true;
+  after_user_choice?: {
+    required_next_action: "retry_analysis_with_selected_place";
+    continue_task: true;
+    set_place_to_selected_label: true;
+    preserve_other_arguments: true;
+  };
 }
 
 interface CompactObservation {
@@ -166,6 +168,7 @@ interface ToolSuccess {
   citations: CompactCitation[];
   limitations: string[];
   no_data_is_not_no_danger?: true;
+  required_answer_boundary?: "no_observations_do_not_prove_safety";
 }
 
 type EvidenceScope = ToolSuccess["evidence_scope"];
@@ -213,6 +216,7 @@ interface ToolEvidenceBundle {
   claim_discussion_available: boolean;
   related_evidence_visible_in_shared_view: true;
   no_data_is_not_no_danger?: true;
+  required_answer_boundary?: "no_observations_do_not_prove_safety";
 }
 
 export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess | ToolEvidenceBundle;
@@ -220,48 +224,28 @@ export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess | ToolEvidenceBu
 export const ANALYZE_HAZARD_INPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["place", "hazard"],
+  required: ["place", "hazard", "time"],
   properties: {
     place: {
       type: "string",
       minLength: 2,
       maxLength: 200,
-      description: "Place name to search, or a label for supplied coordinates.",
+      description: "Geographic name only, or exact coordinates the person stated. Strip context/possessives: 'near my Houston home' becomes 'Houston'. Keep ambiguous names and wait if choices return.",
     },
     hazard: {
       type: "string",
       enum: HAZARD_IDS,
-      description: "Main hazard named or most central to the person's question.",
+      description: "Choose a named/implied hazard; never infer from season/place/concern/generic conditions. Smoke + air uses fire_smoke/related_context. Volcano + air/heat uses earth_volcanoes/related_context. If none, ask and wait.",
     },
     analysis_scope: {
       type: "string",
       enum: ANALYSIS_SCOPES,
-      default: "related_context",
-      description: "Default to related_context. Use single_hazard_only only when the person explicitly restricts the question to one hazard.",
-    },
-    related_hazards: {
-      type: "array",
-      items: { type: "string", enum: HAZARD_IDS },
-      uniqueItems: true,
-      maxItems: 3,
-      description: "Extra plausible context hazards named or implied by a broad question, beyond the product defaults. Maximum three.",
+      description: "single_hazard_only when all terms map to one enum; flood_storm includes rain, flood, inundation, and gages. A concern never broadens scope. related_context only for 2+ hazard enums or related/all/together evidence.",
     },
     concern: {
       type: "string",
       enum: CONCERN_TYPES,
-      description: "Optional explanation lens. Infer when explicit; ask only if a broad goal needs it. Narrow evidence questions may omit it and use general.",
-    },
-    latitude: {
-      type: "number",
-      minimum: -90,
-      maximum: 90,
-      description: "Latitude for an already chosen place candidate; requires longitude.",
-    },
-    longitude: {
-      type: "number",
-      minimum: -180,
-      maximum: 180,
-      description: "Longitude for an already chosen place candidate; requires latitude.",
+      description: "Use pets for dog/cat/animal; health for person/family; home whenever home/roof/property/insurer appears; travel for travel. Never map pet symptoms to health. Otherwise general.",
     },
     radius_km: {
       type: "number",
@@ -270,20 +254,15 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
       default: DEFAULT_RADIUS_KM,
       description: "Analysis radius in kilometres; defaults to 25.",
     },
-    start_date: {
+    time: {
       type: "string",
-      pattern: "^\\d{4}-\\d{2}-\\d{2}$",
-      description: "Completed UTC start date. Supply with end_date.",
-    },
-    end_date: {
-      type: "string",
-      pattern: "^\\d{4}-\\d{2}-\\d{2}$",
-      description: "Completed UTC end date. Supply with start_date.",
+      pattern: "^(latest_completed|\\d{4}-\\d{2}-\\d{2}(?:/\\d{4}-\\d{2}-\\d{2})?)$",
+      description: "Use latest_completed unless the person stated dates; otherwise copy YYYY-MM-DD or YYYY-MM-DD/YYYY-MM-DD exactly. Never use today.",
     },
     question: {
       type: "string",
       maxLength: 500,
-      description: "Optional user question to acknowledge without inventing evidence.",
+      description: "Optional. Preserve the person's wording when possible; shorten only to 500 characters. Never invent evidence.",
     },
   },
 } as const;
@@ -302,14 +281,33 @@ function failure(
   };
 }
 
+function placeChoiceFailure(
+  query: string,
+  choices: AgentPlaceChoice[]
+): ToolFailure {
+  return {
+    status: "needs_place_choice",
+    message: `PAUSE FOR USER: I found ${choices.length} possible places for “${query}”. Do not select a place or retry yet. Ask the person to choose one label below, then wait for a new user message. After the person replies, continue the unfinished task: call this tool again, set place to the selected label, and keep every other input unchanged.`,
+    ui_updated: false,
+    no_data_is_not_no_danger: true,
+    requires_user_input: true,
+    required_next_action: "ask_user_to_choose_place_and_wait",
+    must_not_select_place: true,
+    must_not_retry_before_user_reply: true,
+    after_user_choice: {
+      required_next_action: "retry_analysis_with_selected_place",
+      continue_task: true,
+      set_place_to_selected_label: true,
+      preserve_other_arguments: true,
+    },
+    choices,
+  };
+}
+
 function placeChoices(candidates: GeocodeCandidate[]): AgentPlaceChoice[] {
   return candidates.map((candidate, index) => ({
     choice_id: `place-${index + 1}`,
-    label: candidate.label,
-    retry_with: {
-      latitude: candidate.lat,
-      longitude: candidate.lon,
-    },
+    label: truncate(candidate.label, 120),
   }));
 }
 
@@ -330,6 +328,17 @@ function latestCompletedUtcDate(now: Date): string {
     now.getUTCDate() - 1
   ));
   return date.toISOString().slice(0, 10);
+}
+
+function explicitCoordinate(place: string): GeocodeCandidate | ToolFailure | null {
+  const match = COORDINATE_PLACE_RE.exec(place);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lon = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return failure("invalid_input", "The explicit latitude, longitude place is outside the valid WGS-84 range.");
+  }
+  return { label: place, lat, lon };
 }
 
 function parseInput(
@@ -355,6 +364,9 @@ function parseInput(
   ) {
     return failure("invalid_input", `hazard must be one of: ${HAZARD_IDS.join(", ")}.`);
   }
+  const place = raw.place.trim();
+  const coordinate = explicitCoordinate(place);
+  if (coordinate && "status" in coordinate) return coordinate;
   const analysisScope = raw.analysis_scope ?? "related_context";
   if (
     typeof analysisScope !== "string" ||
@@ -362,56 +374,12 @@ function parseInput(
   ) {
     return failure("invalid_input", `analysis_scope must be one of: ${ANALYSIS_SCOPES.join(", ")}.`);
   }
-  if (
-    raw.related_hazards !== undefined &&
-    (!Array.isArray(raw.related_hazards) ||
-      raw.related_hazards.length > 3 ||
-      new Set(raw.related_hazards).size !== raw.related_hazards.length ||
-      raw.related_hazards.some(
-        (hazard) => typeof hazard !== "string" || !(HAZARD_IDS as readonly string[]).includes(hazard)
-      ))
-  ) {
-    return failure("invalid_input", "related_hazards must contain up to three unique supported hazards.");
-  }
-  const relatedHazards = (raw.related_hazards ?? []) as HazardId[];
-  if (relatedHazards.includes(raw.hazard as HazardId)) {
-    return failure("invalid_input", "related_hazards must not repeat the primary hazard.");
-  }
-  if (analysisScope === "single_hazard_only" && relatedHazards.length > 0) {
-    return failure("invalid_input", "single_hazard_only cannot include related_hazards.");
-  }
-  const plannedRelatedCount = new Set([
-    ...DEFAULT_RELATED_HAZARDS[raw.hazard as HazardId],
-    ...relatedHazards,
-  ]).size;
-  if (plannedRelatedCount > 3) {
-    return failure("invalid_input", "A related-context request can include at most three context hazards.");
-  }
   const concern = raw.concern ?? "general";
   if (
     typeof concern !== "string" ||
     !(CONCERN_TYPES as readonly string[]).includes(concern)
   ) {
     return failure("invalid_input", `concern must be one of: ${CONCERN_TYPES.join(", ")}.`);
-  }
-
-  const hasLatitude = raw.latitude !== undefined;
-  const hasLongitude = raw.longitude !== undefined;
-  if (hasLatitude !== hasLongitude) {
-    return failure("invalid_input", "latitude and longitude must be supplied together.");
-  }
-  if (
-    hasLatitude &&
-    (typeof raw.latitude !== "number" ||
-      !Number.isFinite(raw.latitude) ||
-      raw.latitude < -90 ||
-      raw.latitude > 90 ||
-      typeof raw.longitude !== "number" ||
-      !Number.isFinite(raw.longitude) ||
-      raw.longitude < -180 ||
-      raw.longitude > 180)
-  ) {
-    return failure("invalid_input", "latitude or longitude is outside the valid WGS-84 range.");
   }
 
   const radiusKm = raw.radius_km ?? DEFAULT_RADIUS_KM;
@@ -424,25 +392,23 @@ function parseInput(
     return failure("invalid_input", "radius_km must be a finite number from 1 to 250.");
   }
 
-  const hasStart = raw.start_date !== undefined;
-  const hasEnd = raw.end_date !== undefined;
-  if (hasStart !== hasEnd) {
-    return failure("invalid_input", "start_date and end_date must be supplied together.");
+  if (typeof raw.time !== "string") {
+    return failure("invalid_input", "time must be latest_completed, YYYY-MM-DD, or YYYY-MM-DD/YYYY-MM-DD.");
   }
+  const timeParts = raw.time === "latest_completed" ? [] : raw.time.split("/");
   if (
-    hasStart &&
-    (typeof raw.start_date !== "string" ||
-      typeof raw.end_date !== "string" ||
-      !isStrictUtcDate(raw.start_date) ||
-      !isStrictUtcDate(raw.end_date))
+    timeParts.length > 2 ||
+    timeParts.some((part) => !isStrictUtcDate(part))
   ) {
-    return failure("invalid_input", "Dates must be real calendar dates in YYYY-MM-DD format.");
+    return failure("invalid_input", "time dates must be real calendar dates in YYYY-MM-DD format.");
   }
+  const startDate = timeParts[0];
+  const endDate = timeParts.at(-1);
   const latestCompleted = latestCompletedUtcDate(now);
   if (
-    typeof raw.start_date === "string" &&
-    typeof raw.end_date === "string" &&
-    (raw.start_date > raw.end_date || raw.end_date > latestCompleted)
+    startDate !== undefined &&
+    endDate !== undefined &&
+    (startDate > endDate || endDate > latestCompleted)
   ) {
     return failure(
       "invalid_input",
@@ -450,11 +416,11 @@ function parseInput(
     );
   }
   if (
-    typeof raw.start_date === "string" &&
-    typeof raw.end_date === "string" &&
+    startDate !== undefined &&
+    endDate !== undefined &&
     (analysisScope === "related_context" ||
       (raw.hazard !== "fire_smoke" && raw.hazard !== "flood_storm")) &&
-    raw.start_date !== raw.end_date
+    startDate !== endDate
   ) {
     return failure(
       "invalid_input",
@@ -475,20 +441,14 @@ function parseInput(
   }
 
   return {
-    place: raw.place.trim(),
+    place,
     hazard: raw.hazard as HazardId,
     analysisScope: analysisScope as AnalysisScope,
-    relatedHazards,
     concern: concern as ConcernType,
-    ...(hasLatitude
-      ? {
-          latitude: raw.latitude as number,
-          longitude: raw.longitude as number,
-        }
-      : {}),
+    ...(coordinate ? { latitude: coordinate.lat, longitude: coordinate.lon } : {}),
     radiusKm,
-    ...(typeof raw.start_date === "string"
-      ? { startDate: raw.start_date, endDate: raw.end_date as string }
+    ...(startDate !== undefined && endDate !== undefined
+      ? { startDate, endDate }
       : {}),
     ...(typeof raw.question === "string" ? { question: raw.question.trim() } : {}),
   };
@@ -592,11 +552,7 @@ async function resolvePlace(
     return failure("place_not_found", `No place candidate was found for “${input.place}”.`);
   }
   if (candidates.length > 1) {
-    return failure(
-      "needs_place_choice",
-      `I found ${candidates.length} possible places for “${input.place}”. Ask the person to choose one by label. Keep every other input unchanged, then retry with that choice's coordinates.`,
-      placeChoices(candidates)
-    );
+    return placeChoiceFailure(input.place, placeChoices(candidates));
   }
   return candidates[0];
 }
@@ -729,7 +685,12 @@ function compactSuccess(
     answer_order: ANSWER_ORDER,
     citations,
     limitations: limitations.slice(0, 2).map((item) => truncate(item, 180)),
-    ...(observationCount === 0 ? { no_data_is_not_no_danger: true as const } : {}),
+    ...(observationCount === 0
+      ? {
+          no_data_is_not_no_danger: true as const,
+          required_answer_boundary: "no_observations_do_not_prove_safety" as const,
+        }
+      : {}),
   };
 
   if (JSON.stringify(base).length <= MAX_OUTPUT_CHARACTERS) return base;
@@ -741,7 +702,22 @@ function compactSuccess(
     limitations: base.limitations.slice(0, 1).map((item) => truncate(item, 120)),
     citations: base.citations.slice(0, 1),
   };
-  return reduced;
+  if (JSON.stringify(reduced).length <= MAX_OUTPUT_CHARACTERS) return reduced;
+  const compact: ToolSuccess = {
+    ...reduced,
+    analysis_id: truncate(reduced.analysis_id, 120),
+    limitations: reduced.limitations.slice(0, 1).map((item) => truncate(item, 80)),
+    citations: reduced.citations.map((citation) => ({
+      ...citation,
+      product: truncate(citation.product, 60),
+    })),
+  };
+  if (JSON.stringify(compact).length <= MAX_OUTPUT_CHARACTERS) return compact;
+  return {
+    ...compact,
+    citations: compact.citations.map((citation) => ({ ...citation, url: null })),
+    limitations: [],
+  };
 }
 
 function compactEvidenceChain(analysis: ActiveAnalysis): CompactEvidenceChain {
@@ -818,24 +794,68 @@ function compactEvidenceBundle(
     claim_discussion_available:
       primary.outcome.hazardId === "wind_storm" && Boolean(primary.outcome.result.claimDiscussion),
     related_evidence_visible_in_shared_view: true,
-    ...(chainsWithObservations === 0 ? { no_data_is_not_no_danger: true as const } : {}),
+    ...(chainsWithObservations === 0
+      ? {
+          no_data_is_not_no_danger: true as const,
+          required_answer_boundary: "no_observations_do_not_prove_safety" as const,
+        }
+      : {}),
   };
   if (JSON.stringify(bundle).length <= MAX_OUTPUT_CHARACTERS) return bundle;
-  return {
+  const reduced: ToolEvidenceBundle = {
     ...bundle,
     chains: bundle.chains.map((chain) => ({
       ...chain,
       observation: null,
     })),
   };
+  if (JSON.stringify(reduced).length <= MAX_OUTPUT_CHARACTERS) return reduced;
+
+  const compact: ToolEvidenceBundle = {
+    ...reduced,
+    analysis_id: truncate(reduced.analysis_id, 120),
+    chains: reduced.chains.map((chain) => ({
+      ...chain,
+      citation: chain.citation
+        ? { ...chain.citation, product: truncate(chain.citation.product, 60) }
+        : null,
+      limitation: chain.limitation ? truncate(chain.limitation, 90) : null,
+    })),
+  };
+  if (JSON.stringify(compact).length <= MAX_OUTPUT_CHARACTERS) return compact;
+
+  const primaryUrlOnly: ToolEvidenceBundle = {
+    ...compact,
+    chains: compact.chains.map((chain) => ({
+      ...chain,
+      citation: chain.citation && chain.hazard !== primary.request.hazardId
+        ? { ...chain.citation, url: null }
+        : chain.citation,
+    })),
+  };
+  if (JSON.stringify(primaryUrlOnly).length <= MAX_OUTPUT_CHARACTERS) return primaryUrlOnly;
+
+  return {
+    ...primaryUrlOnly,
+    analysis_id: truncate(primaryUrlOnly.analysis_id, 60),
+    request: {
+      ...primaryUrlOnly.request,
+      place: truncate(primaryUrlOnly.request.place, 60),
+    },
+    chains: primaryUrlOnly.chains.map((chain) => ({
+      ...chain,
+      citation: chain.citation
+        ? { ...chain.citation, product: truncate(chain.citation.product, 30), url: null }
+        : null,
+      limitation: null,
+    })),
+  };
 }
 
 function plannedHazards(input: ParsedInput): HazardId[] {
   if (input.analysisScope === "single_hazard_only") return [input.hazard];
-  const related = [...new Set([
-    ...DEFAULT_RELATED_HAZARDS[input.hazard],
-    ...input.relatedHazards,
-  ])].filter((hazard) => hazard !== input.hazard);
+  const related = DEFAULT_RELATED_HAZARDS[input.hazard]
+    .filter((hazard) => hazard !== input.hazard);
   return [...related, input.hazard];
 }
 
@@ -960,7 +980,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Directly answer a concrete place-and-hazard question: resolve the place, query every applicable integrated official-source path, and synchronize Sky to Porch. Do not call discovery first. Related context runs associated evidence chains by default; use single_hazard_only only for an explicit restriction. Concern is optional: infer it when clear, ask one short follow-up only when a broad goal needs it, otherwise proceed with general. Lead with the strongest validated evidence and citations, then distinguish direct observations from evidence-supported inference and state confidence.",
+      "Analyze place+hazard; update UI; never call the help catalog first. DO NOT CALL for generic environmental conditions: season/place/goal does not imply heat, air, or any hazard; ask and wait. Pass place as stated. Never infer coordinates. Use time=latest_completed unless the person gave dates; never today. On needs_place_choice, ask and wait; after the reply retry the selected label, preserve other arguments, execute, and finish. Use single_hazard_only when all observations fit one hazard enum, including fire+smoke or rain+flood+inundation+gages; concern never broadens scope. Use related_context only for related/multiple hazard families. Infer concern if clear; otherwise general.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

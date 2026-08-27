@@ -4,30 +4,19 @@ import { CONCERN_TYPES, HAZARD_IDS, type HazardId } from "@/contracts/common";
 import type { SourceCoverageProfile } from "@/contracts/source-coverage";
 import {
   HAZARD_LABELS,
-  SOURCE_COVERAGE_PROFILES,
-  coverageProfileRegistryEntry,
   coverageProfilesForHazard,
 } from "@/data/source-coverage";
 import { WEBMCP_DEMO_SCENARIOS } from "@/data/places/demo-stories";
 import { DEFAULT_RELATED_HAZARDS } from "@/lib/webmcp/analyze-tool";
 
-export const LIST_HAZARDS_TOOL_NAME = "list_environmental_hazards";
+export const CAPABILITIES_TOOL_NAME = "get_sky_to_porch_help_and_demos";
 export const GET_COVERAGE_TOOL_NAME = "get_environmental_source_coverage";
-export const MAX_DISCOVERY_TOOL_OUTPUT_CHARACTERS = 1_500;
+export const MAX_DISCOVERY_TOOL_OUTPUT_CHARACTERS = 2_400;
 
-const SOURCE_IDS = [...new Set(SOURCE_COVERAGE_PROFILES.map((profile) => profile.sourceId))];
-const DEMO_SCENARIO_IDS = WEBMCP_DEMO_SCENARIOS.map((scenario) => scenario.id);
-
-export const LIST_HAZARDS_INPUT_SCHEMA = {
+export const CAPABILITIES_INPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  properties: {
-    demo_id: {
-      type: "string",
-      enum: DEMO_SCENARIO_IDS,
-      description: "Optional curated historical demo ID. Omit it to list supported hazards and the compact demo index.",
-    },
-  },
+  properties: {},
 } as const;
 
 export const GET_COVERAGE_INPUT_SCHEMA = {
@@ -39,11 +28,6 @@ export const GET_COVERAGE_INPUT_SCHEMA = {
       type: "string",
       enum: HAZARD_IDS,
       description: "Hazard whose checked-in source-coverage catalog should be inspected.",
-    },
-    source_id: {
-      type: "string",
-      enum: SOURCE_IDS,
-      description: "Optional source ID from the summary when one detailed profile is needed.",
     },
   },
 } as const;
@@ -72,6 +56,7 @@ function coverageSummary(hazard: HazardId, profiles: SourceCoverageProfile[]) {
       integration_status: profile.integrationStatus,
       evidence_role: profile.evidenceRole,
       region: compactText(profile.regionLabel, 80),
+      temporal_coverage: compactText(profile.temporalCoverage, 120),
     })),
     coverage_scope: "pipeline_eligibility_not_observation",
     live_sources_queried: false,
@@ -80,69 +65,18 @@ function coverageSummary(hazard: HazardId, profiles: SourceCoverageProfile[]) {
   } as const;
 }
 
-function coverageDetail(hazard: HazardId, profile: SourceCoverageProfile) {
-  const registry = coverageProfileRegistryEntry(profile.sourceId);
+export function createEnvironmentalCapabilitiesTool(): WebMCP.ModelContextTool {
   return {
-    status: "coverage_profile",
-    hazard,
-    hazard_label: HAZARD_LABELS[hazard],
-    source: {
-      source_id: profile.sourceId,
-      display_name: compactText(registry?.displayName ?? profile.sourceId, 70),
-      integration_status: profile.integrationStatus,
-      evidence_role: profile.evidenceRole,
-      coverage_level: profile.level,
-      region: compactText(profile.regionLabel, 100),
-      country_codes: profile.countryCodes,
-      temporal_coverage: compactText(profile.temporalCoverage, 150),
-      update_cadence: compactText(profile.updateCadence, 110),
-      spatial_resolution: compactText(profile.spatialResolution, 130),
-      coverage_note: compactText(profile.coverageNote, 190),
-      live_gate_note: compactText(profile.liveGateNote, 190),
-      ...(profile.lastVerifiedDate ? { last_verified_date: profile.lastVerifiedDate } : {}),
-      ...(registry ? { documentation_url: registry.documentationUrl } : {}),
-    },
-    coverage_scope: "pipeline_eligibility_not_observation",
-    live_sources_queried: false,
-    actual_observation_not_established: true,
-  } as const;
-}
-
-export function createListEnvironmentalHazardsTool(): WebMCP.ModelContextTool {
-  return {
-    name: LIST_HAZARDS_TOOL_NAME,
-    title: "List environmental hazards",
+    name: CAPABILITIES_TOOL_NAME,
+    title: "Get Sky to Porch help and demos",
     description:
-      "List supported hazards and a compact index of curated historical demos, or return one demo prompt by demo_id. Use only for capability questions, genuine hazard ambiguity, or when the person asks to choose a demo. Concrete place-and-hazard questions go directly to analyze_environmental_hazard.",
-    inputSchema: LIST_HAZARDS_INPUT_SCHEMA,
+      "Use only when an environmental analysis request has no named/implied hazard, or the person explicitly asks for supported features or demos. For a missing hazard, return options, ask which one, and wait. Never use for concrete place+hazard, preflight, or unrelated tasks. Returns supported hazards and ready demo inputs.",
+    inputSchema: CAPABILITIES_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute: async (input) => {
-      const unexpected = Object.keys(input).find((key) => key !== "demo_id");
+      const unexpected = Object.keys(input)[0];
       if (unexpected) {
         return invalidInput(`Unexpected input field: ${unexpected}.`);
-      }
-      if (input.demo_id !== undefined) {
-        if (typeof input.demo_id !== "string") {
-          return invalidInput("demo_id must be a curated demo ID.");
-        }
-        const scenario = WEBMCP_DEMO_SCENARIOS.find((item) => item.id === input.demo_id);
-        if (!scenario) {
-          return invalidInput(`demo_id must be one of: ${DEMO_SCENARIO_IDS.join(", ")}.`);
-        }
-        return {
-          status: "demo_scenario",
-          scenario: {
-            id: scenario.id,
-            title: scenario.title,
-            prompt: scenario.prompt,
-            analysis_input: {
-              ...scenario.analysisInput,
-              analysis_scope: "related_context",
-            },
-          },
-          next_step: "Call analyze_environmental_hazard directly with analysis_input when the person chooses this demo.",
-          ui_updated: false,
-        };
       }
       return {
         status: "hazard_catalog",
@@ -154,14 +88,26 @@ export function createListEnvironmentalHazardsTool(): WebMCP.ModelContextTool {
         concerns: CONCERN_TYPES,
         concern_guidance:
           "Concern is optional. Infer it when explicit; ask only when a broad goal needs it; otherwise use general and proceed.",
-        demo_scenarios: WEBMCP_DEMO_SCENARIOS.map((scenario) => ({
-          id: scenario.id,
-          title: scenario.title,
-        })),
+        missing_hazard_request:
+          "ask_person_to_choose_hazard_and_wait; do_not_analyze_or_guess",
+        demo_scenarios: WEBMCP_DEMO_SCENARIOS.map((scenario) => {
+          const { start_date: startDate, end_date: endDate, ...analysisInput } =
+            scenario.analysisInput;
+          return {
+            id: scenario.id,
+            title: scenario.title,
+            analysis_input: {
+              ...analysisInput,
+              time: startDate === endDate ? startDate : `${startDate}/${endDate}`,
+              analysis_scope: "related_context",
+              question: compactText(scenario.prompt, 100),
+            },
+          };
+        }),
         default_analysis_scope: "related_context",
         relationship: "related_evidence_for_assessment",
         selection_guidance:
-          "Use single_hazard_only only when the person explicitly restricts the question to one hazard.",
+          "Use single_hazard_only when all requested evidence fits one hazard enum; use related_context for related or multiple hazard families.",
         ui_updated: false,
       };
     },
@@ -173,12 +119,12 @@ export function createGetEnvironmentalSourceCoverageTool(): WebMCP.ModelContextT
     name: GET_COVERAGE_TOOL_NAME,
     title: "Get environmental source coverage",
     description:
-      "Read the checked-in source-coverage catalog for one hazard without making live requests. Use for capability, region, or time-range questions, not before every analysis. Coverage means pipeline eligibility only; it never proves an observation exists for a place or date.",
+      "Use directly for source-region, time-range, or eligibility questions about one hazard; never preflight with the capabilities catalog. Returns checked-in hazard-wide coverage without live requests. Do not call before ordinary analysis. Coverage is pipeline eligibility, never proof of an observation.",
     inputSchema: GET_COVERAGE_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute: async (input) => {
       const unexpected = Object.keys(input).find(
-        (key) => key !== "hazard" && key !== "source_id"
+        (key) => key !== "hazard"
       );
       if (unexpected) return invalidInput(`Unexpected input field: ${unexpected}.`);
 
@@ -188,18 +134,7 @@ export function createGetEnvironmentalSourceCoverageTool(): WebMCP.ModelContextT
       }
       const typedHazard = hazard as HazardId;
       const profiles = coverageProfilesForHazard(typedHazard);
-      const sourceId = input.source_id;
-      if (sourceId === undefined) {
-        return coverageSummary(typedHazard, profiles);
-      }
-      if (typeof sourceId !== "string") {
-        return invalidInput("source_id must be a supported source ID.");
-      }
-      const profile = profiles.find((item) => item.sourceId === sourceId);
-      if (!profile) {
-        return invalidInput(`source_id ${sourceId} is not registered for hazard ${typedHazard}.`);
-      }
-      return coverageDetail(typedHazard, profile);
+      return coverageSummary(typedHazard, profiles);
     },
   };
 }

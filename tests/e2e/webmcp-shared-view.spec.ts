@@ -1,6 +1,26 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { gotoHydrated } from "./helpers";
 import fireSuccessFixture from "../../src/data/fixtures/wp02/fire-success.json";
+
+const WEBMCP_TEST_GEOCODES: Record<string, { label: string; lon: number; lat: number }> = {
+  "Albuquerque, New Mexico": { label: "Albuquerque, New Mexico", lon: -106.6504, lat: 35.0844 },
+  "Tucson, Arizona": { label: "Tucson, Arizona", lon: -110.9747, lat: 32.2226 },
+  "Phoenix, Arizona": { label: "Phoenix, Arizona", lon: -112.074, lat: 33.4484 },
+  "Hilo, Hawaii": { label: "Hilo, Hawaii", lon: -155.0885, lat: 19.7074 },
+};
+
+async function mockWebMcpGeocode(page: Page): Promise<void> {
+  await page.route("**/api/geocode", async (route) => {
+    const body = route.request().postDataJSON() as { query?: string };
+    const candidate = body.query ? WEBMCP_TEST_GEOCODES[body.query] : undefined;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, results: candidate ? [candidate] : [] }),
+    });
+  });
+}
 
 test("shows a neutral waiting status while WebMCP tools are still registering", async ({
   page,
@@ -27,6 +47,7 @@ test("shows a neutral waiting status while WebMCP tools are still registering", 
 test("a non-demo Albuquerque question returns evidence and updates the shared human UI", async ({
   page,
 }) => {
+  await mockWebMcpGeocode(page);
   await page.addInitScript(() => {
     const state = globalThis as typeof globalThis & {
       __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
@@ -103,12 +124,9 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
     return tool.execute({
       place: "Albuquerque, New Mexico",
       hazard: "fire_smoke",
+      time: "2025-05-20",
       analysis_scope: "single_hazard_only",
-      latitude: 35.0844,
-      longitude: -106.6504,
       radius_km: 30,
-      start_date: "2025-05-20",
-      end_date: "2025-05-20",
       question: "What official fire and smoke observations were recorded near Albuquerque?",
     }, { signal: new AbortController().signal });
   }) as Record<string, unknown>;
@@ -117,7 +135,7 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
     status: "success",
     ui_updated: true,
     request: {
-      place: "Albuquerque, New Mexico (agent coordinates)",
+      place: "Albuquerque, New Mexico (OSM search)",
       hazard: "fire_smoke",
       concern: "general",
       radius_km: 30,
@@ -185,9 +203,100 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
   });
 });
 
+test("an ambiguous place waits for a person, then the selected label completes the shared analysis", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    state.__skyToPorchWebMcpTools = {};
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: async (tool: WebMCP.ModelContextTool) => {
+          state.__skyToPorchWebMcpTools![tool.name] = tool;
+        },
+      },
+    });
+  });
+
+  await page.route("**/api/geocode", async (route) => {
+    const body = route.request().postDataJSON() as { query: string };
+    const results = body.query === "Springfield, Illinois"
+      ? [{ label: "Springfield, Illinois", lon: -89.6501, lat: 39.7817 }]
+      : [
+          { label: "Springfield, Illinois", lon: -89.6501, lat: 39.7817 },
+          { label: "Springfield, Missouri", lon: -93.2923, lat: 37.209 },
+        ];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, results }),
+    });
+  });
+
+  let analysisQueries = 0;
+  await page.route("**/api/fire/query", async (route) => {
+    analysisQueries += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        result: {
+          kind: "unsupported_place",
+          rejectionReason: "Deterministic ambiguity-continuation boundary.",
+        },
+      }),
+    });
+  });
+
+  await gotoHydrated(page, "/");
+  const execute = (place: string) => page.evaluate(async (agentPlace) => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    const tool = state.__skyToPorchWebMcpTools?.analyze_environmental_hazard;
+    if (!tool) throw new Error("WebMCP analysis tool was not registered");
+    return tool.execute({
+      place: agentPlace,
+      hazard: "fire_smoke",
+      time: "latest_completed",
+      analysis_scope: "single_hazard_only",
+    }, { signal: new AbortController().signal });
+  }, place) as Promise<Record<string, unknown>>;
+
+  const ambiguous = await execute("Springfield");
+  expect(ambiguous).toMatchObject({
+    status: "needs_place_choice",
+    ui_updated: false,
+    requires_user_input: true,
+    required_next_action: "ask_user_to_choose_place_and_wait",
+    must_not_select_place: true,
+    must_not_retry_before_user_reply: true,
+    choices: [
+      { choice_id: "place-1", label: "Springfield, Illinois" },
+      { choice_id: "place-2", label: "Springfield, Missouri" },
+    ],
+  });
+  expect(analysisQueries).toBe(0);
+
+  const completed = await execute("Springfield, Illinois");
+  expect(completed).toMatchObject({
+    status: "unsupported_place",
+    ui_updated: true,
+    request: { place: "Springfield, Illinois (OSM search)" },
+  });
+  expect(analysisQueries).toBe(1);
+  await expect(page.locator('[data-testid="agent-analysis-receipt"]:visible'))
+    .toContainText("Springfield, Illinois");
+});
+
 test("registers WebMCP and shares an agent analysis with the visible product", async ({
   page,
 }, testInfo) => {
+  await mockWebMcpGeocode(page);
   await page.addInitScript(() => {
     const state = globalThis as typeof globalThis & {
       __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
@@ -234,7 +343,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
     };
     const tools = state.__skyToPorchWebMcpTools;
     const analysisTool = tools?.analyze_environmental_hazard;
-    const listTool = tools?.list_environmental_hazards;
+    const listTool = tools?.get_sky_to_porch_help_and_demos;
     const coverageTool = tools?.get_environmental_source_coverage;
     if (!analysisTool || !listTool || !coverageTool) return null;
     const options = { signal: new AbortController().signal };
@@ -248,7 +357,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
   expect(registered).toMatchObject({
     names: [
       "analyze_environmental_hazard",
-      "list_environmental_hazards",
+      "get_sky_to_porch_help_and_demos",
       "get_environmental_source_coverage",
     ],
     analysisAnnotations: { readOnlyHint: false, untrustedContentHint: true },
@@ -265,11 +374,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
     },
   });
 
-  const executeAgentAnalysis = async (input: {
-    place: string;
-    latitude: number;
-    longitude: number;
-  }) => page.evaluate(async (agentInput) => {
+  const executeAgentAnalysis = async (place: string) => page.evaluate(async (agentPlace) => {
     const state = globalThis as typeof globalThis & {
       __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
     };
@@ -277,23 +382,18 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
     if (!tool) throw new Error("WebMCP analysis tool was not registered");
     return tool.execute(
       {
-        place: agentInput.place,
+        place: agentPlace,
         hazard: "fire_smoke",
+        time: "latest_completed",
         analysis_scope: "single_hazard_only",
         concern: "pets",
-        latitude: agentInput.latitude,
-        longitude: agentInput.longitude,
         radius_km: 15,
       },
       { signal: new AbortController().signal }
     );
-  }, input) as Promise<Record<string, unknown>>;
+  }, place) as Promise<Record<string, unknown>>;
 
-  const output = await executeAgentAnalysis({
-    place: "Tucson, Arizona",
-    latitude: 32.2226,
-    longitude: -110.9747,
-  });
+  const output = await executeAgentAnalysis("Tucson, Arizona");
 
   expect(output).toMatchObject({
     status: "unsupported_place",
@@ -332,13 +432,9 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
 
   await expect(page.locator(
     '[data-testid="map-area"] [data-testid="selection-summary"]'
-  )).toHaveAttribute("data-selection-method", "agent_coordinate");
+  )).toHaveAttribute("data-selection-method", "place_search");
 
-  await executeAgentAnalysis({
-    place: "Phoenix, Arizona",
-    latitude: 33.4484,
-    longitude: -112.074,
-  });
+  await executeAgentAnalysis("Phoenix, Arizona");
   await expect(visibleReceipt.getByTestId("agent-analysis-receipt"))
     .toContainText("Phoenix, Arizona");
   await expect(visibleReceipt.getByTestId("agent-restore-previous"))
@@ -362,6 +458,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
 test("related-context scope automatically checks heat and drought as separate visible chains", async ({
   page,
 }) => {
+  await mockWebMcpGeocode(page);
   await page.addInitScript(() => {
     const state = globalThis as typeof globalThis & {
       __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
@@ -422,9 +519,8 @@ test("related-context scope automatically checks heat and drought as separate vi
       {
         place: "Phoenix, Arizona",
         hazard: "extreme_heat",
+        time: "latest_completed",
         concern: "health",
-        latitude: 33.4484,
-        longitude: -112.074,
         question: "How could heat and persistent dry conditions affect me?",
       },
       { signal: new AbortController().signal }
@@ -458,6 +554,7 @@ test("related-context scope automatically checks heat and drought as separate vi
 test("volcano related context automatically adds separate air-quality and heat chains", async ({
   page,
 }) => {
+  await mockWebMcpGeocode(page);
   await page.addInitScript(() => {
     const state = globalThis as typeof globalThis & {
       __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
@@ -531,9 +628,8 @@ test("volcano related context automatically adds separate air-quality and heat c
       {
         place: "Hilo, Hawaii",
         hazard: "earth_volcanoes",
+        time: "latest_completed",
         concern: "community",
-        latitude: 19.7074,
-        longitude: -155.0885,
         question: "Check volcanic activity, air quality, and heat together.",
       },
       { signal: new AbortController().signal }

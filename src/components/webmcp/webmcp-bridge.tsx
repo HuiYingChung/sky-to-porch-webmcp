@@ -11,7 +11,7 @@ import {
 } from "@/lib/webmcp/context-tools";
 import {
   createGetEnvironmentalSourceCoverageTool,
-  createListEnvironmentalHazardsTool,
+  createEnvironmentalCapabilitiesTool,
 } from "@/lib/webmcp/discovery-tools";
 
 interface WebMcpBridgeProps {
@@ -55,7 +55,7 @@ export function WebMcpBridge({
         runAnalysis,
         ...(runAnalysisBundle ? { runAnalysisBundle } : {}),
       }),
-      createListEnvironmentalHazardsTool(),
+      createEnvironmentalCapabilitiesTool(),
       createGetEnvironmentalSourceCoverageTool(),
     ],
     [runAnalysis, runAnalysisBundle]

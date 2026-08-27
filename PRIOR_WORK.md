@@ -28,6 +28,7 @@ includes:
   and volcanoes;
 - place, time, evidence, provenance, limitation, and source-coverage contracts;
 - deterministic evaluation and safe-display rules;
+- the existing Vercel Web Analytics dependency and root-layout pageview component;
 - fixture, integration, and browser tests.
 
 None of those capabilities is claimed as new WebMCP Challenge work.

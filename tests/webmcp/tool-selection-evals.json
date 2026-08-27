@@ -9,7 +9,7 @@
     ],
     "expectedCall": [
       {
-        "functionName": "list_environmental_hazards",
+        "functionName": "get_sky_to_porch_help_and_demos",
         "arguments": {}
       }
     ]
@@ -41,7 +41,7 @@
     ],
     "expectedCall": [
       {
-        "functionName": "list_environmental_hazards",
+        "functionName": "get_sky_to_porch_help_and_demos",
         "arguments": {}
       }
     ]
@@ -60,6 +60,7 @@
         "arguments": {
           "place": "Tucson",
           "hazard": "fire_smoke",
+          "time": "latest_completed",
           "analysis_scope": "single_hazard_only"
         }
       }
@@ -79,6 +80,7 @@
         "arguments": {
           "place": "Phoenix",
           "hazard": "extreme_heat",
+          "time": "latest_completed",
           "analysis_scope": "single_hazard_only",
           "concern": "pets"
         }
@@ -99,10 +101,9 @@
         "arguments": {
           "place": "41.8781, -87.6298",
           "hazard": "air_quality",
+          "time": "latest_completed",
           "analysis_scope": "single_hazard_only",
           "concern": "health",
-          "latitude": 41.8781,
-          "longitude": -87.6298,
           "radius_km": 15
         }
       }
@@ -122,10 +123,9 @@
         "arguments": {
           "place": "Houston",
           "hazard": "flood_storm",
+          "time": "2024-07-08",
           "analysis_scope": "single_hazard_only",
-          "concern": "travel",
-          "start_date": "2024-07-08",
-          "end_date": "2024-07-08"
+          "concern": "travel"
         }
       }
     ]
@@ -144,10 +144,9 @@
         "arguments": {
           "place": "Houston",
           "hazard": "wind_storm",
+          "time": "2024-07-08",
           "analysis_scope": "single_hazard_only",
-          "concern": "home",
-          "start_date": "2024-07-08",
-          "end_date": "2024-07-08"
+          "concern": "home"
         }
       }
     ]
@@ -166,9 +165,8 @@
         "arguments": {
           "place": "Houston",
           "hazard": "wind_storm",
+          "time": "2024-07-08",
           "concern": "home",
-          "start_date": "2024-07-08",
-          "end_date": "2024-07-08",
           "question": "How strongly do official wind and related flood or heavy-rain records support that Beryl contributed to my observed roof damage? Give the strongest evidence-supported assessment and confidence."
         }
       }
@@ -188,9 +186,8 @@
         "arguments": {
           "place": "Los Angeles",
           "hazard": "fire_smoke",
+          "time": "2025-01-09",
           "concern": "health",
-          "start_date": "2025-01-09",
-          "end_date": "2025-01-09",
           "question": "How strongly do official fire-and-smoke and related air-quality records support smoke or poor outdoor air as a plausible contributor to our symptoms?"
         }
       }
@@ -210,9 +207,8 @@
         "arguments": {
           "place": "Tucson",
           "hazard": "extreme_heat",
+          "time": "2025-07-10",
           "concern": "pets",
-          "start_date": "2025-07-10",
-          "end_date": "2025-07-10",
           "question": "How strongly do official heat and drought records support heat exposure as a plausible contributor to my dog's lethargy?"
         }
       }
@@ -232,9 +228,8 @@
         "arguments": {
           "place": "Houston",
           "hazard": "wind_storm",
-          "analysis_scope": "single_hazard_only",
-          "start_date": "2024-07-08",
-          "end_date": "2024-07-08"
+          "time": "2024-07-08",
+          "analysis_scope": "single_hazard_only"
         }
       }
     ]
@@ -248,21 +243,18 @@
       }
     ],
     "expectedCall": [
-      {
-        "functionName": "list_environmental_hazards",
-        "arguments": {
-          "demo_id": "tucson-heat-pets"
-        }
-      },
+        {
+          "functionName": "get_sky_to_porch_help_and_demos",
+          "arguments": {}
+        },
       {
         "functionName": "analyze_environmental_hazard",
         "arguments": {
           "place": "Tucson, Arizona",
           "hazard": "extreme_heat",
+          "time": "2025-07-10",
           "concern": "pets",
-          "radius_km": 25,
-          "start_date": "2025-07-10",
-          "end_date": "2025-07-10"
+          "radius_km": 25
         }
       }
     ]
@@ -313,8 +305,7 @@
         "arguments": {
           "place": "Albuquerque",
           "hazard": "drought_land",
-          "start_date": "2025-06-03",
-          "end_date": "2025-06-03",
+          "time": "2025-06-03",
           "question": "How strongly do official vegetation and drought records support unusually dry land?"
         }
       }
@@ -328,7 +319,12 @@
         "content": "Help me understand what last summer's environmental conditions around Denver mean for me."
       }
     ],
-    "expectedCall": []
+    "expectedCall": [],
+    "expectedAssistant": {
+      "mustAskUserToChooseHazard": true,
+      "mustWaitForUserReply": true,
+      "mayListHazardsBeforeQuestion": true
+    }
   },
   {
     "id": "broad-heat-drought-context",
@@ -344,6 +340,7 @@
         "arguments": {
           "place": "Phoenix",
           "hazard": "extreme_heat",
+          "time": "latest_completed",
           "concern": "pets"
         }
       }
@@ -363,6 +360,7 @@
         "arguments": {
           "place": "Los Angeles",
           "hazard": "fire_smoke",
+          "time": "latest_completed",
           "concern": "health"
         }
       }
@@ -382,6 +380,7 @@
         "arguments": {
           "place": "Hilo",
           "hazard": "earth_volcanoes",
+          "time": "latest_completed",
           "concern": "community"
         }
       }
@@ -401,6 +400,7 @@
         "arguments": {
           "place": "Springfield",
           "hazard": "fire_smoke",
+          "time": "latest_completed",
           "analysis_scope": "single_hazard_only"
         }
       }

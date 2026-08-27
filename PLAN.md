@@ -12,33 +12,40 @@
 - W1 shared analysis application layer: complete for the vertical slice
 - W2 shared client controller and state: complete with renderer compatibility
 - W3 WebMCP tools: three baseline tools plus two contextual tools implemented;
-  production native discovery, analysis, ambiguity, no-observation, shared-UI,
-  and contextual-tool journeys pass at `5cc1098`; production inspection exposed
-  a 2,834-character result above its 2,400-character contract, and the bounded
-  correction now passes a production-sized local regression pending publication
-  and production re-verification
+  production native discovery, analysis, no-observation, shared-UI, and
+  contextual-tool journeys pass at `c6f3c8c`. Contextual inspection is now
+  production-conformant at 2,219 characters. Local candidate `ceb182a` fixes
+  the exposed primary-bundle cap, strengthens ambiguity handling with
+  label-only choices and a tested selected-label continuation, and separates
+  missing-hazard help from concrete analysis; publication and production
+  re-verification remain pending
 - W4 provider cleanup: complete; deterministic-only application runtime
-- W5 verification: the published `5cc1098` candidate passed exact remote CI at
-  run `33055412709`; the current private candidate passes typecheck, lint, 1,289
-  unit tests, 132 integration tests, a production build, 228 browser journeys,
-  and secret check. Repeated model-scored evals remain pending because no model
-  backend is configured
+- W5 verification: the published `c6f3c8c` candidate passed exact remote CI at
+  run `33105415851`; exact local candidate `ceb182a` passes typecheck, lint,
+  1,309 unit tests, 132 integration tests, a 14-page production build, a clean
+  230-journey desktop/mobile Playwright run, and a tracked-archive secret scan.
+  Final-schema `gpt-5-mini` with low reasoning passes three independent runs:
+  66/66 semantic selection/argument cases and 6/6 ambiguity wait/resume cases
 - W5a shared-view UX: complete; full deterministic and browser regression pass
 - W5b Canadian Flood ground evidence: complete; bounded ECCC GeoMet live smoke
   and the full 220-journey browser regression passed
 - W5c Wind & Storm evidence: the supported in-app browser locally verified the
   Beryl related-context bundle, separate Wind and Flood chains, synchronized
   shared UI, conditional claim guide, and narrow single-hazard boundary;
-  those journeys now also pass in production at `5cc1098`, while the newly found
-  contextual-output cap correction remains local and awaits publication/recheck
+  those journeys now also pass in production at `c6f3c8c`; contextual inspection
+  is within its cap, while the newly found primary-bundle cap correction remains
+  local and awaits publication/recheck
 - W5d compound environmental context: locally verified for Heat–Drought,
   Fire/Smoke–Air Quality, and Volcano–Air Quality–Heat, including one parallel
   shared-view transaction; supported-browser Agent verification pending
 - W6 release and submission: private release preparation in progress; the repo
-  remains private; the clean local candidate's mechanical reachable-history
-  preflight passes, and Devpost/video drafts are prepared. Visibility,
-  deployment, push, video publication, and submission still require explicit
-  authorization
+  remains private; published commit `c6f3c8c` passed its mechanical
+  reachable-history preflight, and Devpost/video drafts are prepared. The new
+  product corrections are committed at `ceb182a`; PR #5 head `e00e7c4` passed
+  exact remote CI run `33120305386` and its Vercel preview check. Production
+  deployment and native-Agent re-verification remain pending.
+  Visibility, deployment, push, video publication, and submission still require
+  explicit authorization
 
 The production/local/native evidence split for the current acceptance package
 is recorded in
@@ -143,9 +150,9 @@ place-and-hazard question straight to the analysis tool, so discovery is not a
 mandatory or fragile preflight sequence. Coverage output states that pipeline
 eligibility is not proof of an observation. Contextual tools expose the current
 validated evidence and, only after Home + Wind, the bounded claim-discussion
-guide. The existing hazard-list tool also exposes a compact three-demo index
-and one selected scenario by `demo_id`; no separate demo or citation tool is
-added.
+guide. The existing no-input hazard-list tool exposes compact ready inputs for
+all three demos in one response; no selector, separate demo tool, or citation
+tool is added.
 
 ### W4 — Provider cleanup
 
@@ -246,16 +253,18 @@ Technical WebMCP details remain Codex's responsibility.
 
 - WebMCP tools are discoverable in the supported production in-app browser.
   Production discovery, primary execution, shared UI, ambiguity,
-  no-observation, and contextual registration pass at `5cc1098`; a local
-  correction for the inspection tool's output limit awaits publication and
-  production re-verification.
+  no-observation, and contextual registration pass at `c6f3c8c`; contextual
+  output is within its limit. Candidate `ceb182a` fixes the primary limit and
+  passes local deterministic, browser, and three-run model checks; it still
+  awaits publication and production native-Agent re-verification.
 - Human and agent interactions share one evidence pipeline and UI state.
 - The deterministic safety model is unchanged or stronger.
 - Tool descriptions and outputs stay within current implementation guidance.
-- All deterministic tests, model evals, CI, and exact-candidate checks pass.
-  (Exact remote CI passes for published `5cc1098`; the current local correction
-  passes its full local gate but still needs repeated model-scored evals,
-  publication, and exact remote CI.)
+- All deterministic tests and exact-candidate checks pass locally. The
+  separate model gate passes 66/66 semantic selection/argument cases and 6/6
+  ambiguity wait/resume journeys across three runs. PR #5 exact-head CI passes
+  at `e00e7c4`; production-native evidence still applies only to published
+  `c6f3c8c` until this candidate is merged and deployed.
 - Prior work and new work are unambiguous.
 - The repository is publicly reproducible under a recognized open-source
   license.

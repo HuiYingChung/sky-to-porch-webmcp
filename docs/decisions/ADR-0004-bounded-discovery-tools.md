@@ -1,7 +1,11 @@
 # ADR-0004: Bounded discovery tools without a mandatory waterfall
 
-**Status:** Superseded in part by ADR-0005
+**Status:** Superseded in part by ADR-0005 and ADR-0006
 **Date:** 2026-08-26
+
+Current-name note: the selector-free capability tool described below was
+renamed to `get_sky_to_porch_help_and_demos` in `ceb182a` so Agents do not use
+it as a preflight before concrete analysis.
 
 ## Context
 
