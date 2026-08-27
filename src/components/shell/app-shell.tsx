@@ -70,25 +70,58 @@ const PANEL_LIMITS: Record<DesktopPanel, { min: number; max: number }> = {
 
 function HeaderControls({ onOpenAbout }: { onOpenAbout: () => void }) {
   const { webMcpStatus } = useQueryDraft();
+  const agentStatus = webMcpStatus === "ready"
+    ? {
+        label: "Agent ready",
+        title: "Sky to Porch WebMCP tools are registered and ready for an Agent",
+        color: "var(--status-success-fg)",
+      }
+    : webMcpStatus === "checking" || webMcpStatus === "registering"
+      ? {
+          label: "Waiting for Agent",
+          title: webMcpStatus === "checking"
+            ? "Checking whether this browser exposes WebMCP"
+            : "Registering Sky to Porch WebMCP tools",
+          color: "var(--status-loading-fg)",
+        }
+      : {
+          label: "Agent unavailable",
+          title: webMcpStatus === "unsupported"
+            ? "This browser does not expose WebMCP to Sky to Porch"
+            : "Sky to Porch could not register its WebMCP tools",
+          color: "var(--status-loading-fg)",
+        };
+
   return (
     <div className="app-header-controls">
-      {webMcpStatus === "ready" && (
+      <span
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid="webmcp-status"
+        data-status={webMcpStatus}
+        title={agentStatus.title}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "6px",
+          color: agentStatus.color,
+          fontSize: "14px",
+          whiteSpace: "nowrap",
+        }}
+      >
         <span
-          role="status"
-          data-testid="webmcp-ready-badge"
-          title="This browser can discover the Sky to Porch WebMCP tool"
+          aria-hidden="true"
           style={{
-            padding: "3px 7px",
-            border: "1px solid var(--border-default)",
-            borderRadius: "999px",
-            color: "var(--text-secondary)",
-            fontSize: "12px",
-            whiteSpace: "nowrap",
+            width: "7px",
+            height: "7px",
+            borderRadius: "50%",
+            background: "currentColor",
+            flexShrink: 0,
           }}
-        >
-          Agent-ready
-        </span>
-      )}
+        />
+        {agentStatus.label}
+      </span>
       <button type="button" className="app-about-button" onClick={onOpenAbout}>
         About
       </button>
