@@ -112,6 +112,10 @@ interface ToolFailure {
   ui_updated: false;
   no_data_is_not_no_danger: true;
   choices?: AgentPlaceChoice[];
+  requires_user_input?: true;
+  required_next_action?: "ask_user_to_choose_place_and_wait";
+  must_not_select_place?: true;
+  must_not_retry_before_user_reply?: true;
 }
 
 interface CompactObservation {
@@ -255,13 +259,13 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
       type: "number",
       minimum: -90,
       maximum: 90,
-      description: "Latitude for an already chosen place candidate; requires longitude.",
+      description: "Latitude the person supplied, or from a candidate they selected in a later message; requires longitude. Never infer it to bypass ambiguity.",
     },
     longitude: {
       type: "number",
       minimum: -180,
       maximum: 180,
-      description: "Longitude for an already chosen place candidate; requires latitude.",
+      description: "Longitude the person supplied, or from a candidate they selected in a later message; requires latitude. Never infer it to bypass ambiguity.",
     },
     radius_km: {
       type: "number",
@@ -302,10 +306,27 @@ function failure(
   };
 }
 
+function placeChoiceFailure(
+  query: string,
+  choices: AgentPlaceChoice[]
+): ToolFailure {
+  return {
+    status: "needs_place_choice",
+    message: `STOP: I found ${choices.length} possible places for “${query}”. Do not select a place or retry yet. Ask the person to choose one label below, then wait for a new user message. Only after the person replies, keep every other input unchanged and retry with that choice's coordinates.`,
+    ui_updated: false,
+    no_data_is_not_no_danger: true,
+    requires_user_input: true,
+    required_next_action: "ask_user_to_choose_place_and_wait",
+    must_not_select_place: true,
+    must_not_retry_before_user_reply: true,
+    choices,
+  };
+}
+
 function placeChoices(candidates: GeocodeCandidate[]): AgentPlaceChoice[] {
   return candidates.map((candidate, index) => ({
     choice_id: `place-${index + 1}`,
-    label: candidate.label,
+    label: truncate(candidate.label, 120),
     retry_with: {
       latitude: candidate.lat,
       longitude: candidate.lon,
@@ -592,11 +613,7 @@ async function resolvePlace(
     return failure("place_not_found", `No place candidate was found for “${input.place}”.`);
   }
   if (candidates.length > 1) {
-    return failure(
-      "needs_place_choice",
-      `I found ${candidates.length} possible places for “${input.place}”. Ask the person to choose one by label. Keep every other input unchanged, then retry with that choice's coordinates.`,
-      placeChoices(candidates)
-    );
+    return placeChoiceFailure(input.place, placeChoices(candidates));
   }
   return candidates[0];
 }
@@ -741,7 +758,22 @@ function compactSuccess(
     limitations: base.limitations.slice(0, 1).map((item) => truncate(item, 120)),
     citations: base.citations.slice(0, 1),
   };
-  return reduced;
+  if (JSON.stringify(reduced).length <= MAX_OUTPUT_CHARACTERS) return reduced;
+  const compact: ToolSuccess = {
+    ...reduced,
+    analysis_id: truncate(reduced.analysis_id, 120),
+    limitations: reduced.limitations.slice(0, 1).map((item) => truncate(item, 80)),
+    citations: reduced.citations.map((citation) => ({
+      ...citation,
+      product: truncate(citation.product, 60),
+    })),
+  };
+  if (JSON.stringify(compact).length <= MAX_OUTPUT_CHARACTERS) return compact;
+  return {
+    ...compact,
+    citations: compact.citations.map((citation) => ({ ...citation, url: null })),
+    limitations: [],
+  };
 }
 
 function compactEvidenceChain(analysis: ActiveAnalysis): CompactEvidenceChain {
@@ -821,11 +853,52 @@ function compactEvidenceBundle(
     ...(chainsWithObservations === 0 ? { no_data_is_not_no_danger: true as const } : {}),
   };
   if (JSON.stringify(bundle).length <= MAX_OUTPUT_CHARACTERS) return bundle;
-  return {
+  const reduced: ToolEvidenceBundle = {
     ...bundle,
     chains: bundle.chains.map((chain) => ({
       ...chain,
       observation: null,
+    })),
+  };
+  if (JSON.stringify(reduced).length <= MAX_OUTPUT_CHARACTERS) return reduced;
+
+  const compact: ToolEvidenceBundle = {
+    ...reduced,
+    analysis_id: truncate(reduced.analysis_id, 120),
+    chains: reduced.chains.map((chain) => ({
+      ...chain,
+      citation: chain.citation
+        ? { ...chain.citation, product: truncate(chain.citation.product, 60) }
+        : null,
+      limitation: chain.limitation ? truncate(chain.limitation, 90) : null,
+    })),
+  };
+  if (JSON.stringify(compact).length <= MAX_OUTPUT_CHARACTERS) return compact;
+
+  const primaryUrlOnly: ToolEvidenceBundle = {
+    ...compact,
+    chains: compact.chains.map((chain) => ({
+      ...chain,
+      citation: chain.citation && chain.hazard !== primary.request.hazardId
+        ? { ...chain.citation, url: null }
+        : chain.citation,
+    })),
+  };
+  if (JSON.stringify(primaryUrlOnly).length <= MAX_OUTPUT_CHARACTERS) return primaryUrlOnly;
+
+  return {
+    ...primaryUrlOnly,
+    analysis_id: truncate(primaryUrlOnly.analysis_id, 60),
+    request: {
+      ...primaryUrlOnly.request,
+      place: truncate(primaryUrlOnly.request.place, 60),
+    },
+    chains: primaryUrlOnly.chains.map((chain) => ({
+      ...chain,
+      citation: chain.citation
+        ? { ...chain.citation, product: truncate(chain.citation.product, 30), url: null }
+        : null,
+      limitation: null,
     })),
   };
 }
@@ -960,7 +1033,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Directly answer a concrete place-and-hazard question: resolve the place, query every applicable integrated official-source path, and synchronize Sky to Porch. Do not call discovery first. Related context runs associated evidence chains by default; use single_hazard_only only for an explicit restriction. Concern is optional: infer it when clear, ask one short follow-up only when a broad goal needs it, otherwise proceed with general. Lead with the strongest validated evidence and citations, then distinguish direct observations from evidence-supported inference and state confidence.",
+      "Analyze a concrete place and hazard through applicable official sources and update the shared UI. Call directly; skip discovery. Never infer coordinates for a named place; use them only if the person supplied them or selected a returned candidate in a later message. On needs_place_choice, STOP: do not call any tool again, choose, or retry. Ask the person to choose and wait for their reply. Default to related_context; use single_hazard_only only for an explicit restriction. Infer concern when clear; ask once only for a broad goal, otherwise use general. Lead with strongest evidence and citations, supported inference, confidence, and separate evidence chains.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

@@ -166,6 +166,12 @@ describe("WebMCP environmental hazard tool", () => {
     expect(output.status).toBe("needs_place_choice");
     expect(output.ui_updated).toBe(false);
     expect(output.no_data_is_not_no_danger).toBe(true);
+    expect(output).toMatchObject({
+      requires_user_input: true,
+      required_next_action: "ask_user_to_choose_place_and_wait",
+      must_not_select_place: true,
+      must_not_retry_before_user_reply: true,
+    });
     expect("choices" in output ? output.choices : undefined).toEqual([
       {
         choice_id: "place-1",
@@ -178,11 +184,23 @@ describe("WebMCP environmental hazard tool", () => {
         retry_with: { latitude: 37.21, longitude: -93.29 },
       },
     ]);
-    expect("message" in output ? output.message : "").toContain(
-      "Keep every other input unchanged"
-    );
+    const message = "message" in output ? output.message : "";
+    expect(message).toContain("STOP:");
+    expect(message).toContain("wait for a new user message");
+    expect(message).toContain("keep every other input unchanged");
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
     expect(runAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("tells the agent not to infer coordinates or continue after ambiguity", () => {
+    const tool = createAnalyzeHazardTool({ runAnalysis: vi.fn() });
+
+    expect(tool.description).toContain("Never infer coordinates for a named place");
+    expect(tool.description).toContain("do not call any tool again");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.latitude.description)
+      .toContain("Never infer it to bypass ambiguity");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.longitude.description)
+      .toContain("Never infer it to bypass ambiguity");
   });
 
   it("uses supplied coordinates, defaults to general/latest, returns citations, and caps output", async () => {
@@ -365,6 +383,87 @@ describe("WebMCP environmental hazard tool", () => {
       ],
     });
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
+  });
+
+  it("keeps a production-sized Beryl evidence bundle inside the primary output limit", async () => {
+    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => {
+      const base = evidenceWithLongContent();
+      const isWind = request.hazardId === "wind_storm";
+      const observation = {
+        ...base.observations[0],
+        observationId: isWind
+          ? "obs-ghcnh-wind-gust-USW00000188-20240708143500000"
+          : "obs-gibs-imerg-custom-area-2024-07-08",
+        variableName: isWind
+          ? "Peak observed wind gust"
+          : "GIBS IMERG precipitation visualization PNG",
+        provenance: {
+          ...base.observations[0].provenance,
+          sourceId: isWind
+            ? "noaa_ncei_global_hourly" as const
+            : "nasa_gibs_imerg" as const,
+          sourceUrl: isWind
+            ? "https://www.ncei.noaa.gov/oa/global-historical-climatology-network/hourly/access/by-year/2024/psv/GHCNh_USW00000188_2024.psv"
+            : "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=IMERG_Precipitation_Rate&SRS=EPSG%3A4326&STYLES=&WIDTH=512&HEIGHT=512&TIME=2024-07-08&BBOX=-95.62849777141066%2C29.535822206252245%2C-95.11110222858933%2C29.984977793747756",
+          product: isWind
+            ? "NOAA NCEI GHCNh Version 1 station-by-year PSV"
+            : "NASA GIBS best-service layer IMERG_Precipitation_Rate; GetMap does not expose a numeric rainfall value",
+          observedAt: isWind
+            ? "2024-07-08T14:35:00.000Z"
+            : "2024-07-08T00:00:00Z",
+        },
+      };
+      const evidence: EvidenceObject = {
+        ...base,
+        evidenceId: `evidence-${request.hazardId}`,
+        hazardId: request.hazardId,
+        observations: [observation],
+        limitations: [{
+          limitationId: `limitation-${request.hazardId}`,
+          source: observation.provenance.sourceId,
+          description: isWind
+            ? "The selected in-area station is an outdoor point observation. It does not establish roof-level wind, wind at an address, property damage, or causation."
+            : "GIBS imagery is visualization evidence only. Numeric rainfall, surface-water extent, route status, and property impact are not inferred from image colors.",
+          required: true,
+        }],
+      };
+      return {
+        analysisId: `analysis-1-${isWind ? 1 : 0}-${request.hazardId}`,
+        origin: "agent",
+        request,
+        outcome: {
+          hazardId: request.hazardId,
+          result: { kind: "success", evidence },
+        } as ActiveAnalysis["outcome"],
+        completedAt: "2026-08-26T18:00:01.000Z",
+      };
+    });
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Houston, Texas, United States",
+        hazard: "wind_storm",
+        concern: "home",
+        latitude: 29.7604,
+        longitude: -95.3698,
+        radius_km: 25,
+        start_date: "2024-07-08",
+        end_date: "2024-07-08",
+        question: "Could Hurricane Beryl have damaged my home or roof, and what official environmental evidence can help me discuss it with my insurer?",
+      },
+      toolOptions(),
+      { runAnalysis, now: () => NOW }
+    );
+
+    expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
+    expect(output).toMatchObject({
+      status: "related_environmental_evidence_bundle",
+      included_chains: ["flood_storm", "wind_storm"],
+      chains: [
+        { hazard: "flood_storm", citation: { source: "nasa_gibs_imerg" } },
+        { hazard: "wind_storm", citation: { source: "noaa_ncei_global_hourly" } },
+      ],
+    });
   });
 
   it("reports moderate assessment confidence when every chain has independent official sources", async () => {
