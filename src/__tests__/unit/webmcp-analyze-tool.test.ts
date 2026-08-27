@@ -712,44 +712,16 @@ describe("WebMCP environmental hazard tool", () => {
     });
   });
 
-  it("lets a broad question extend a default profile without merging evidence", async () => {
-    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
-      analysisId: `analysis-${request.hazardId}`,
-      origin: "agent",
-      request,
-      outcome: {
-        hazardId: request.hazardId,
-        result: { kind: "unsupported_coverage", rejectionReason: "Bounded test result." },
-      } as ActiveAnalysis["outcome"],
-      completedAt: "2026-08-26T18:00:01.000Z",
-    }));
-
-    const output = await executeAnalyzeHazardTool(
-      {
-        place: "Los Angeles, California",
-        hazard: "fire_smoke",
-        related_hazards: ["extreme_heat", "drought_land"],
-        latitude: 34.0522,
-        longitude: -118.2437,
-      },
-      toolOptions(),
-      { runAnalysis, now: () => NOW }
-    );
-
-    expect(runAnalysis.mock.calls.map(([request]) => request.hazardId)).toEqual([
-      "air_quality",
-      "extreme_heat",
-      "drought_land",
-      "fire_smoke",
-    ]);
-    expect(output).toMatchObject({
-      included_chains: ["air_quality", "extreme_heat", "drought_land", "fire_smoke"],
-      evidence_scope: "separate_related_hazard_chains",
-    });
-  });
-
   it.each([
     [{ place: "Tucson", hazard: "fire_smoke", latitude: 32.2 }, "latitude and longitude"],
+    [
+      {
+        place: "Tucson",
+        hazard: "fire_smoke",
+        related_hazards: ["air_quality"],
+      },
+      "Unexpected input field",
+    ],
     [
       {
         place: "Tucson",

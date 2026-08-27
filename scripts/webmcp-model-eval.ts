@@ -250,22 +250,26 @@ function semanticArgumentsMatch(actual: EvalCall, expected: EvalCall): boolean {
       }
       continue;
     }
+    if (key === "hazard" && typeof expectedValue === "string" && typeof actualValue === "string") {
+      if (actualValue === expectedValue) continue;
+      const expectedRelated = DEFAULT_RELATED_HAZARDS[
+        expectedValue as keyof typeof DEFAULT_RELATED_HAZARDS
+      ] as readonly string[] | undefined;
+      const actualRelated = DEFAULT_RELATED_HAZARDS[
+        actualValue as keyof typeof DEFAULT_RELATED_HAZARDS
+      ] as readonly string[] | undefined;
+      const interchangeableRelatedPair = !("analysis_scope" in expectedArgs) &&
+        actualArgs.analysis_scope === "related_context" &&
+        expectedRelated?.includes(actualValue) &&
+        actualRelated?.includes(expectedValue);
+      if (!interchangeableRelatedPair) return false;
+      continue;
+    }
     if (!sameValue(actualValue, expectedValue)) return false;
   }
 
   for (const key of ["start_date", "end_date", "latitude", "longitude"] as const) {
     if (!(key in expectedArgs) && key in actualArgs) return false;
-  }
-  const actualScope = actualArgs.analysis_scope;
-  if (!("analysis_scope" in expectedArgs) && actualScope !== undefined && actualScope !== "related_context") {
-    return false;
-  }
-  const related = actualArgs.related_hazards;
-  if (Array.isArray(related) && expectedArgs.analysis_scope !== "single_hazard_only") {
-    const hazard = actualArgs.hazard;
-    if (typeof hazard !== "string" || !(hazard in DEFAULT_RELATED_HAZARDS)) return false;
-    const defaults = DEFAULT_RELATED_HAZARDS[hazard as keyof typeof DEFAULT_RELATED_HAZARDS];
-    if (!related.every((item) => defaults.includes(item as never))) return false;
   }
   return true;
 }

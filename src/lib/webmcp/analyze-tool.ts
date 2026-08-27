@@ -23,7 +23,7 @@ export const ANSWER_ORDER = [
   "direct_observation_then_labelled_inference",
   "confidence_and_evidence_that_would_change_it",
 ] as const;
-const ANALYSIS_SCOPES = ["related_context", "single_hazard_only"] as const;
+const ANALYSIS_SCOPES = ["single_hazard_only", "related_context"] as const;
 type AnalysisScope = (typeof ANALYSIS_SCOPES)[number];
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/;
@@ -54,7 +54,6 @@ const INPUT_KEYS = new Set([
   "end_date",
   "question",
   "analysis_scope",
-  "related_hazards",
 ]);
 
 export interface AnalyzeHazardToolDependencies {
@@ -76,7 +75,6 @@ interface ParsedInput {
   place: string;
   hazard: HazardId;
   analysisScope: AnalysisScope;
-  relatedHazards: HazardId[];
   concern: ConcernType;
   latitude?: number;
   longitude?: number;
@@ -242,19 +240,12 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     hazard: {
       type: "string",
       enum: HAZARD_IDS,
-      description: "Primary hazard, never analysis_scope. Pairs: smoke+air fire_smoke; wind+flood wind_storm; heat+drought extreme_heat; volcano context earth_volcanoes.",
+      description: "Use only a hazard explicitly named or clearly implied. For generic environmental conditions or what they mean, ask which hazard; never guess.",
     },
     analysis_scope: {
       type: "string",
       enum: ANALYSIS_SCOPES,
       description: "Use single_hazard_only for one named hazard or measurement; related_context for broad impact, multiple, or related-condition questions.",
-    },
-    related_hazards: {
-      type: "array",
-      items: { type: "string", enum: HAZARD_IDS },
-      uniqueItems: true,
-      maxItems: 3,
-      description: "Omit unless the person explicitly names a non-default related hazard. Never add hazards already covered by product defaults. Maximum three.",
     },
     concern: {
       type: "string",
@@ -283,12 +274,12 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     start_date: {
       type: "string",
       pattern: "^\\d{4}-\\d{2}-\\d{2}$",
-      description: "Completed UTC start date. Supply with end_date.",
+      description: "Copy the person's exact completed UTC date here. Always supply with end_date; never widen, shift, or omit a stated date.",
     },
     end_date: {
       type: "string",
       pattern: "^\\d{4}-\\d{2}-\\d{2}$",
-      description: "Completed UTC end date. Supply with start_date.",
+      description: "Copy the person's exact completed UTC date here. Always supply with start_date; never widen, shift, or omit a stated date.",
     },
     question: {
       type: "string",
@@ -396,31 +387,6 @@ function parseInput(
   ) {
     return failure("invalid_input", `analysis_scope must be one of: ${ANALYSIS_SCOPES.join(", ")}.`);
   }
-  if (
-    raw.related_hazards !== undefined &&
-    (!Array.isArray(raw.related_hazards) ||
-      raw.related_hazards.length > 3 ||
-      new Set(raw.related_hazards).size !== raw.related_hazards.length ||
-      raw.related_hazards.some(
-        (hazard) => typeof hazard !== "string" || !(HAZARD_IDS as readonly string[]).includes(hazard)
-      ))
-  ) {
-    return failure("invalid_input", "related_hazards must contain up to three unique supported hazards.");
-  }
-  const relatedHazards = (raw.related_hazards ?? []) as HazardId[];
-  if (relatedHazards.includes(raw.hazard as HazardId)) {
-    return failure("invalid_input", "related_hazards must not repeat the primary hazard.");
-  }
-  if (analysisScope === "single_hazard_only" && relatedHazards.length > 0) {
-    return failure("invalid_input", "single_hazard_only cannot include related_hazards.");
-  }
-  const plannedRelatedCount = new Set([
-    ...DEFAULT_RELATED_HAZARDS[raw.hazard as HazardId],
-    ...relatedHazards,
-  ]).size;
-  if (plannedRelatedCount > 3) {
-    return failure("invalid_input", "A related-context request can include at most three context hazards.");
-  }
   const concern = raw.concern ?? "general";
   if (
     typeof concern !== "string" ||
@@ -512,7 +478,6 @@ function parseInput(
     place: raw.place.trim(),
     hazard: raw.hazard as HazardId,
     analysisScope: analysisScope as AnalysisScope,
-    relatedHazards,
     concern: concern as ConcernType,
     ...(hasLatitude
       ? {
@@ -918,10 +883,8 @@ function compactEvidenceBundle(
 
 function plannedHazards(input: ParsedInput): HazardId[] {
   if (input.analysisScope === "single_hazard_only") return [input.hazard];
-  const related = [...new Set([
-    ...DEFAULT_RELATED_HAZARDS[input.hazard],
-    ...input.relatedHazards,
-  ])].filter((hazard) => hazard !== input.hazard);
+  const related = DEFAULT_RELATED_HAZARDS[input.hazard]
+    .filter((hazard) => hazard !== input.hazard);
   return [...related, input.hazard];
 }
 
@@ -1046,7 +1009,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Analyze place/hazard; update UI; skip discovery. If no hazard is named or inferable, ask. Call ambiguous names as given so the tool returns choices. Never infer coordinates for a named place; use only user-given or selected-candidate values. On needs_place_choice, do not choose or retry before a new user reply: ask and wait. After choice, this task is still unfinished: immediately call this tool again with selected label and retry_with coordinates, preserve other args, and finish. Use single_hazard_only for one named hazard/measurement; related_context for broad/multiple conditions. Infer concern if clear; ask once for a broad goal, else general.",
+      "Analyze place/hazard; update UI; skip discovery. If no hazard is named or inferable, ask. Call ambiguous names as given so the tool returns choices. Never infer coordinates for a named place; use only user-given or selected-candidate values. Preserve stated dates exactly. On needs_place_choice, do not choose or retry before a new user reply: ask and wait. After choice, this task is still unfinished: immediately call this tool again with selected label and retry_with coordinates, preserve other args, and finish. Use single_hazard_only for one named hazard/measurement; related_context for broad/multiple conditions. Infer concern if clear; ask once for a broad goal, else general.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,
