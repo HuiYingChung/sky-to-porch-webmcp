@@ -9,7 +9,7 @@
     ],
     "expectedCall": [
       {
-        "functionName": "list_environmental_hazards",
+        "functionName": "get_sky_to_porch_help_and_demos",
         "arguments": {}
       }
     ]
@@ -41,7 +41,7 @@
     ],
     "expectedCall": [
       {
-        "functionName": "list_environmental_hazards",
+        "functionName": "get_sky_to_porch_help_and_demos",
         "arguments": {}
       }
     ]
@@ -244,7 +244,7 @@
     ],
     "expectedCall": [
         {
-          "functionName": "list_environmental_hazards",
+          "functionName": "get_sky_to_porch_help_and_demos",
           "arguments": {}
         },
       {
@@ -319,7 +319,12 @@
         "content": "Help me understand what last summer's environmental conditions around Denver mean for me."
       }
     ],
-    "expectedCall": []
+    "expectedCall": [],
+    "expectedAssistant": {
+      "mustAskUserToChooseHazard": true,
+      "mustWaitForUserReply": true,
+      "mayListHazardsBeforeQuestion": true
+    }
   },
   {
     "id": "broad-heat-drought-context",

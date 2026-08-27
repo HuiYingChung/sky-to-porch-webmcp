@@ -168,6 +168,7 @@ interface ToolSuccess {
   citations: CompactCitation[];
   limitations: string[];
   no_data_is_not_no_danger?: true;
+  required_answer_boundary?: "no_observations_do_not_prove_safety";
 }
 
 type EvidenceScope = ToolSuccess["evidence_scope"];
@@ -215,6 +216,7 @@ interface ToolEvidenceBundle {
   claim_discussion_available: boolean;
   related_evidence_visible_in_shared_view: true;
   no_data_is_not_no_danger?: true;
+  required_answer_boundary?: "no_observations_do_not_prove_safety";
 }
 
 export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess | ToolEvidenceBundle;
@@ -228,22 +230,22 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
       type: "string",
       minLength: 2,
       maxLength: 200,
-      description: "Place name, or an exact 'latitude, longitude' pair stated by the person. Call ambiguous names as written; wait if choices return.",
+      description: "Geographic name only, or exact coordinates the person stated. Strip context/possessives: 'near my Houston home' becomes 'Houston'. Keep ambiguous names and wait if choices return.",
     },
     hazard: {
       type: "string",
       enum: HAZARD_IDS,
-      description: "Use only a hazard explicitly named or clearly implied. For generic environmental conditions or what they mean, ask which hazard; never guess.",
+      description: "Choose a named/implied hazard; never infer from season/place/concern/generic conditions. Smoke + air uses fire_smoke/related_context. Volcano + air/heat uses earth_volcanoes/related_context. If none, ask and wait.",
     },
     analysis_scope: {
       type: "string",
       enum: ANALYSIS_SCOPES,
-      description: "Use single_hazard_only for one named hazard or measurement; related_context for broad impact, multiple, or related-condition questions.",
+      description: "single_hazard_only when all terms map to one enum; flood_storm includes rain, flood, inundation, and gages. A concern never broadens scope. related_context only for 2+ hazard enums or related/all/together evidence.",
     },
     concern: {
       type: "string",
       enum: CONCERN_TYPES,
-      description: "Optional explanation lens. Infer when explicit; ask only if a broad goal needs it. Narrow evidence questions may omit it and use general.",
+      description: "Use pets for dog/cat/animal; health for person/family; home whenever home/roof/property/insurer appears; travel for travel. Never map pet symptoms to health. Otherwise general.",
     },
     radius_km: {
       type: "number",
@@ -683,7 +685,12 @@ function compactSuccess(
     answer_order: ANSWER_ORDER,
     citations,
     limitations: limitations.slice(0, 2).map((item) => truncate(item, 180)),
-    ...(observationCount === 0 ? { no_data_is_not_no_danger: true as const } : {}),
+    ...(observationCount === 0
+      ? {
+          no_data_is_not_no_danger: true as const,
+          required_answer_boundary: "no_observations_do_not_prove_safety" as const,
+        }
+      : {}),
   };
 
   if (JSON.stringify(base).length <= MAX_OUTPUT_CHARACTERS) return base;
@@ -787,7 +794,12 @@ function compactEvidenceBundle(
     claim_discussion_available:
       primary.outcome.hazardId === "wind_storm" && Boolean(primary.outcome.result.claimDiscussion),
     related_evidence_visible_in_shared_view: true,
-    ...(chainsWithObservations === 0 ? { no_data_is_not_no_danger: true as const } : {}),
+    ...(chainsWithObservations === 0
+      ? {
+          no_data_is_not_no_danger: true as const,
+          required_answer_boundary: "no_observations_do_not_prove_safety" as const,
+        }
+      : {}),
   };
   if (JSON.stringify(bundle).length <= MAX_OUTPUT_CHARACTERS) return bundle;
   const reduced: ToolEvidenceBundle = {
@@ -968,7 +980,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Analyze place/hazard; update UI; skip discovery. If no hazard is named or inferable, ask. Pass named or ambiguous places exactly as stated; coordinates are accepted only inside place when the person stated them. Never infer coordinates. Use time=latest_completed unless the person stated dates; never use today. On needs_place_choice, ask and wait for a new user reply. After choice the task is unfinished: immediately call this tool again with the selected label, preserve every other argument, and finish. Use single_hazard_only for one named hazard/measurement; related_context for broad/multiple conditions. Infer concern if clear; ask once for a broad goal, else general.",
+      "Analyze place+hazard; update UI; never call the help catalog first. DO NOT CALL for generic environmental conditions: season/place/goal does not imply heat, air, or any hazard; ask and wait. Pass place as stated. Never infer coordinates. Use time=latest_completed unless the person gave dates; never today. On needs_place_choice, ask and wait; after the reply retry the selected label, preserve other arguments, execute, and finish. Use single_hazard_only when all observations fit one hazard enum, including fire+smoke or rain+flood+inundation+gages; concern never broadens scope. Use related_context only for related/multiple hazard families. Infer concern if clear; otherwise general.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

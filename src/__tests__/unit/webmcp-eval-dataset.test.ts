@@ -9,8 +9,8 @@ import {
 import {
   GET_COVERAGE_INPUT_SCHEMA,
   GET_COVERAGE_TOOL_NAME,
-  LIST_HAZARDS_INPUT_SCHEMA,
-  LIST_HAZARDS_TOOL_NAME,
+  CAPABILITIES_INPUT_SCHEMA,
+  CAPABILITIES_TOOL_NAME,
 } from "@/lib/webmcp/discovery-tools";
 import {
   INSPECT_EVIDENCE_INPUT_SCHEMA,
@@ -29,6 +29,11 @@ interface EvalCase {
   availableAfter?: "completed_environmental_analysis" | "completed_home_wind_analysis";
   messages: Array<{ role: "user"; content: string }>;
   expectedCall: EvalCall[];
+  expectedAssistant?: {
+    mustAskUserToChooseHazard?: boolean;
+    mustWaitForUserReply?: boolean;
+    mayListHazardsBeforeQuestion?: boolean;
+  };
 }
 
 interface PostToolBehaviorCase {
@@ -41,6 +46,8 @@ interface PostToolBehaviorCase {
     assistantMustWaitForNextUserMessage?: boolean;
     toolCallsAfterUserReply?: EvalCall[];
     assistantMustContinueTask?: boolean;
+    assistantMustFinishAfterToolResult?: boolean;
+    assistantMustPreserveNoObservationBoundary?: boolean;
   };
 }
 
@@ -125,13 +132,29 @@ describe("WebMCP tool-selection eval dataset", () => {
         },
       }],
       assistantMustContinueTask: true,
+      assistantMustFinishAfterToolResult: true,
+      assistantMustPreserveNoObservationBoundary: true,
+    });
+  });
+
+  it("asks and waits instead of guessing a broad missing hazard", () => {
+    const selection = dataset.find(
+      (item) => item.id === "broad-goal-ask-clarification"
+    );
+    expect(selection).toMatchObject({
+      expectedCall: [],
+      expectedAssistant: {
+        mustAskUserToChooseHazard: true,
+        mustWaitForUserReply: true,
+        mayListHazardsBeforeQuestion: true,
+      },
     });
   });
 
   it("keeps expected calls aligned with the registered tool contract", () => {
     const schemas = {
       [ANALYZE_HAZARD_TOOL_NAME]: ANALYZE_HAZARD_INPUT_SCHEMA.properties,
-      [LIST_HAZARDS_TOOL_NAME]: LIST_HAZARDS_INPUT_SCHEMA.properties,
+      [CAPABILITIES_TOOL_NAME]: CAPABILITIES_INPUT_SCHEMA.properties,
       [GET_COVERAGE_TOOL_NAME]: GET_COVERAGE_INPUT_SCHEMA.properties,
       [INSPECT_EVIDENCE_TOOL_NAME]: INSPECT_EVIDENCE_INPUT_SCHEMA.properties,
       [PREPARE_STORM_CLAIM_TOOL_NAME]: PREPARE_STORM_CLAIM_INPUT_SCHEMA.properties,
@@ -163,7 +186,7 @@ describe("WebMCP tool-selection eval dataset", () => {
     ));
     expect(calledTools).toEqual(new Set([
       ANALYZE_HAZARD_TOOL_NAME,
-      LIST_HAZARDS_TOOL_NAME,
+      CAPABILITIES_TOOL_NAME,
       GET_COVERAGE_TOOL_NAME,
       INSPECT_EVIDENCE_TOOL_NAME,
       PREPARE_STORM_CLAIM_TOOL_NAME,
@@ -185,7 +208,7 @@ describe("WebMCP tool-selection eval dataset", () => {
 
   it("uses discovery only for capability questions and keeps concrete asks direct", () => {
     expect(dataset.find((item) => item.id === "capability-discovery")?.expectedCall[0])
-      .toMatchObject({ functionName: LIST_HAZARDS_TOOL_NAME, arguments: {} });
+      .toMatchObject({ functionName: CAPABILITIES_TOOL_NAME, arguments: {} });
     expect(dataset.find((item) => item.id === "coverage-discovery-air-quality")?.expectedCall[0])
       .toMatchObject({
         functionName: GET_COVERAGE_TOOL_NAME,
@@ -213,12 +236,17 @@ describe("WebMCP tool-selection eval dataset", () => {
     });
     expect(narrow?.expectedCall[0].arguments).not.toHaveProperty("concern");
     expect(broad?.expectedCall).toEqual([]);
+    expect(broad?.expectedAssistant).toEqual({
+      mustAskUserToChooseHazard: true,
+      mustWaitForUserReply: true,
+      mayListHazardsBeforeQuestion: true,
+    });
   });
 
   it("selects a curated demo through the existing discovery tool before analysis", () => {
     const selected = dataset.find((item) => item.id === "selected-tucson-demo");
     expect(selected?.expectedCall.map((call) => call.functionName)).toEqual([
-      LIST_HAZARDS_TOOL_NAME,
+      CAPABILITIES_TOOL_NAME,
       ANALYZE_HAZARD_TOOL_NAME,
     ]);
     expect(selected?.expectedCall[0].arguments).toEqual({});

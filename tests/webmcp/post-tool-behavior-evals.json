@@ -130,7 +130,9 @@
           }
         }
       ],
-      "assistantMustContinueTask": true
+      "assistantMustContinueTask": true,
+      "assistantMustFinishAfterToolResult": true,
+      "assistantMustPreserveNoObservationBoundary": true
     }
   }
 ]

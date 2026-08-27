@@ -79,7 +79,7 @@ describe("WebMcpBridge", () => {
 
     expect(registerTool.mock.calls.map(([tool]) => tool.name)).toEqual([
       "analyze_environmental_hazard",
-      "list_environmental_hazards",
+      "get_sky_to_porch_help_and_demos",
       "get_environmental_source_coverage",
     ]);
     const baselineSignals = registerTool.mock.calls.map(([, options]) => options.signal);
@@ -180,7 +180,7 @@ describe("WebMcpBridge", () => {
 
     expect(registerTool.mock.calls.map(([tool]) => tool.name)).toEqual([
       "analyze_environmental_hazard",
-      "list_environmental_hazards",
+      "get_sky_to_porch_help_and_demos",
       "get_environmental_source_coverage",
       "inspect_current_environmental_evidence",
       "prepare_storm_claim_discussion",

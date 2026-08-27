@@ -9,11 +9,11 @@ import {
 import { WEBMCP_DEMO_SCENARIOS } from "@/data/places/demo-stories";
 import { DEFAULT_RELATED_HAZARDS } from "@/lib/webmcp/analyze-tool";
 
-export const LIST_HAZARDS_TOOL_NAME = "list_environmental_hazards";
+export const CAPABILITIES_TOOL_NAME = "get_sky_to_porch_help_and_demos";
 export const GET_COVERAGE_TOOL_NAME = "get_environmental_source_coverage";
 export const MAX_DISCOVERY_TOOL_OUTPUT_CHARACTERS = 2_400;
 
-export const LIST_HAZARDS_INPUT_SCHEMA = {
+export const CAPABILITIES_INPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {},
@@ -65,13 +65,13 @@ function coverageSummary(hazard: HazardId, profiles: SourceCoverageProfile[]) {
   } as const;
 }
 
-export function createListEnvironmentalHazardsTool(): WebMCP.ModelContextTool {
+export function createEnvironmentalCapabilitiesTool(): WebMCP.ModelContextTool {
   return {
-    name: LIST_HAZARDS_TOOL_NAME,
-    title: "List environmental hazards",
+    name: CAPABILITIES_TOOL_NAME,
+    title: "Get Sky to Porch help and demos",
     description:
-      "List supported hazards and three curated demos with ready analysis inputs. Use for capability questions, genuine hazard ambiguity, or when the person asks for a demo. It takes no input. Concrete place-and-hazard questions always go directly to analyze_environmental_hazard, even when the place also appears in a demo.",
-    inputSchema: LIST_HAZARDS_INPUT_SCHEMA,
+      "Use only when an environmental analysis request has no named/implied hazard, or the person explicitly asks for supported features or demos. For a missing hazard, return options, ask which one, and wait. Never use for concrete place+hazard, preflight, or unrelated tasks. Returns supported hazards and ready demo inputs.",
+    inputSchema: CAPABILITIES_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute: async (input) => {
       const unexpected = Object.keys(input)[0];
@@ -88,6 +88,8 @@ export function createListEnvironmentalHazardsTool(): WebMCP.ModelContextTool {
         concerns: CONCERN_TYPES,
         concern_guidance:
           "Concern is optional. Infer it when explicit; ask only when a broad goal needs it; otherwise use general and proceed.",
+        missing_hazard_request:
+          "ask_person_to_choose_hazard_and_wait; do_not_analyze_or_guess",
         demo_scenarios: WEBMCP_DEMO_SCENARIOS.map((scenario) => {
           const { start_date: startDate, end_date: endDate, ...analysisInput } =
             scenario.analysisInput;
@@ -98,14 +100,14 @@ export function createListEnvironmentalHazardsTool(): WebMCP.ModelContextTool {
               ...analysisInput,
               time: startDate === endDate ? startDate : `${startDate}/${endDate}`,
               analysis_scope: "related_context",
-              question: compactText(scenario.prompt, 120),
+              question: compactText(scenario.prompt, 100),
             },
           };
         }),
         default_analysis_scope: "related_context",
         relationship: "related_evidence_for_assessment",
         selection_guidance:
-          "Use single_hazard_only only when the person explicitly restricts the question to one hazard.",
+          "Use single_hazard_only when all requested evidence fits one hazard enum; use related_context for related or multiple hazard families.",
         ui_updated: false,
       };
     },
@@ -117,7 +119,7 @@ export function createGetEnvironmentalSourceCoverageTool(): WebMCP.ModelContextT
     name: GET_COVERAGE_TOOL_NAME,
     title: "Get environmental source coverage",
     description:
-      "Read all checked-in source regions and time ranges for one hazard without live requests. It always returns the hazard-wide catalog and takes only hazard. Do not call before every analysis. Coverage is pipeline eligibility, never proof of an observation.",
+      "Use directly for source-region, time-range, or eligibility questions about one hazard; never preflight with the capabilities catalog. Returns checked-in hazard-wide coverage without live requests. Do not call before ordinary analysis. Coverage is pipeline eligibility, never proof of an observation.",
     inputSchema: GET_COVERAGE_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute: async (input) => {

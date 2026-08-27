@@ -4,11 +4,11 @@ import { WEBMCP_DEMO_SCENARIOS } from "@/data/places/demo-stories";
 import { SOURCE_COVERAGE_PROFILES } from "@/data/source-coverage";
 import {
   createGetEnvironmentalSourceCoverageTool,
-  createListEnvironmentalHazardsTool,
+  createEnvironmentalCapabilitiesTool,
   GET_COVERAGE_INPUT_SCHEMA,
   GET_COVERAGE_TOOL_NAME,
-  LIST_HAZARDS_INPUT_SCHEMA,
-  LIST_HAZARDS_TOOL_NAME,
+  CAPABILITIES_INPUT_SCHEMA,
+  CAPABILITIES_TOOL_NAME,
   MAX_DISCOVERY_TOOL_OUTPUT_CHARACTERS,
 } from "@/lib/webmcp/discovery-tools";
 
@@ -16,7 +16,7 @@ const options = { signal: new AbortController().signal } as WebMCP.ToolExecuteCa
 
 describe("WebMCP discovery tools", () => {
   it("lists every governed hazard and related-context default without updating the UI", async () => {
-    const tool = createListEnvironmentalHazardsTool();
+    const tool = createEnvironmentalCapabilitiesTool();
     const output = await tool.execute({}, options) as {
       hazards: Array<{ hazard: string; default_related_hazards: string[] }>;
       concerns: string[];
@@ -25,15 +25,18 @@ describe("WebMCP discovery tools", () => {
         title: string;
         analysis_input: Record<string, unknown>;
       }>;
+      missing_hazard_request: string;
     };
 
-    expect(tool.name).toBe(LIST_HAZARDS_TOOL_NAME);
+    expect(tool.name).toBe(CAPABILITIES_TOOL_NAME);
     expect(tool.description.length).toBeLessThanOrEqual(500);
     expect(tool.annotations).toEqual({ readOnlyHint: true, untrustedContentHint: false });
     expect(output).toMatchObject({
       status: "hazard_catalog",
       default_analysis_scope: "related_context",
       relationship: "related_evidence_for_assessment",
+      missing_hazard_request:
+        "ask_person_to_choose_hazard_and_wait; do_not_analyze_or_guess",
       ui_updated: false,
     });
     expect(output.hazards.map((item) => item.hazard)).toEqual(HAZARD_IDS);
@@ -54,7 +57,7 @@ describe("WebMCP discovery tools", () => {
         });
       expect(String(output.demo_scenarios.find(
         (item) => item.id === scenario.id
-      )?.analysis_input.question).length).toBeLessThanOrEqual(120);
+      )?.analysis_input.question).length).toBeLessThanOrEqual(100);
     }
     expect(output.hazards.find((item) => item.hazard === "wind_storm"))
       .toMatchObject({ default_related_hazards: ["flood_storm"] });
@@ -66,14 +69,20 @@ describe("WebMCP discovery tools", () => {
   });
 
   it("takes no selector input so the model cannot guess a demo", async () => {
-    const tool = createListEnvironmentalHazardsTool();
-    expect(LIST_HAZARDS_INPUT_SCHEMA.properties).toEqual({});
+    const tool = createEnvironmentalCapabilitiesTool();
+    expect(tool.description).toContain(
+      "Never use for concrete place+hazard, preflight, or unrelated tasks"
+    );
+    expect(tool.description).toContain(
+      "For a missing hazard, return options, ask which one, and wait"
+    );
+    expect(CAPABILITIES_INPUT_SCHEMA.properties).toEqual({});
     await expect(tool.execute({ demo_id: "tucson-heat-pets" }, options))
       .resolves.toMatchObject({ status: "invalid_input", ui_updated: false });
   });
 
   it("rejects unexpected hazard-catalog input", async () => {
-    const output = await createListEnvironmentalHazardsTool().execute(
+    const output = await createEnvironmentalCapabilitiesTool().execute(
       { hazard: "fire_smoke" },
       options
     );

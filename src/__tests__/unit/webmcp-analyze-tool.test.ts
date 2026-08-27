@@ -89,7 +89,7 @@ describe("WebMCP environmental hazard tool", () => {
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.additionalProperties).toBe(false);
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.required).toEqual(["place", "hazard", "time"]);
     for (const property of Object.values(ANALYZE_HAZARD_INPUT_SCHEMA.properties)) {
-      expect(property.description.length).toBeLessThanOrEqual(150);
+      expect(property.description.length).toBeLessThanOrEqual(220);
     }
   });
 
@@ -135,6 +135,7 @@ describe("WebMCP environmental hazard tool", () => {
       evidence: null,
       limitations: ["Deterministic provider failure boundary."],
       no_data_is_not_no_danger: true,
+      required_answer_boundary: "no_observations_do_not_prove_safety",
       evidence_scope: "regional_wind_observations",
     });
   });
@@ -199,9 +200,26 @@ describe("WebMCP environmental hazard tool", () => {
     const tool = createAnalyzeHazardTool({ runAnalysis: vi.fn() });
 
     expect(tool.description).toContain("Never infer coordinates");
-    expect(tool.description).toContain("wait for a new user reply");
-    expect(tool.description).toContain("the task is unfinished");
-    expect(tool.description).toContain("immediately call this tool again");
+    expect(tool.description).toContain("ask and wait");
+    expect(tool.description).toContain("after the reply");
+    expect(tool.description).toContain("after the reply retry");
+    expect(tool.description).toContain("execute, and finish");
+    expect(tool.description).toContain("including fire+smoke or rain+flood+inundation+gages");
+    expect(tool.description).toContain("season/place/goal does not imply heat, air, or any hazard");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.analysis_scope.description)
+      .toContain("all terms map to one enum");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.hazard.description)
+      .toContain("never infer from season/place/concern/generic conditions");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.hazard.description)
+      .toContain("Volcano + air/heat uses earth_volcanoes/related_context");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.place.description)
+      .toContain("'near my Houston home' becomes 'Houston'");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.concern.description)
+      .toContain("pets for dog/cat/animal");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.concern.description)
+      .toContain("home whenever home/roof/property/insurer appears");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.concern.description)
+      .toContain("Never map pet symptoms to health");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties).not.toHaveProperty("latitude");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties).not.toHaveProperty("longitude");
   });
@@ -351,6 +369,9 @@ describe("WebMCP environmental hazard tool", () => {
     expect(request.placeSelection.timeSelection.endTs).toBe("2026-08-25T23:59:59.000Z");
     expect(output.status).toBe("unsupported_coverage");
     expect(output.no_data_is_not_no_danger).toBe(true);
+    expect(output).toMatchObject({
+      required_answer_boundary: "no_observations_do_not_prove_safety",
+    });
     expect("limitations" in output ? output.limitations[0] : undefined).toBe("No station coverage.");
   });
 

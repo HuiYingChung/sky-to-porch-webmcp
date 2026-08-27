@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { loadEnvConfig } from "@next/env";
-import type { ActiveAnalysis } from "@/lib/analysis/types";
+import type { ActiveAnalysis, AnalysisRequest } from "@/lib/analysis/types";
 import {
   createAnalyzeHazardTool,
   DEFAULT_RELATED_HAZARDS,
@@ -12,8 +12,13 @@ import {
 } from "@/lib/webmcp/context-tools";
 import {
   createGetEnvironmentalSourceCoverageTool,
-  createListEnvironmentalHazardsTool,
+  createEnvironmentalCapabilitiesTool,
 } from "@/lib/webmcp/discovery-tools";
+import {
+  asksUserToChooseHazard,
+  normalizeEvalPlace,
+  preservesNoObservationBoundary,
+} from "./webmcp-model-eval-scoring";
 
 interface EvalCall {
   functionName: string;
@@ -25,6 +30,11 @@ interface EvalCase {
   availableAfter?: "completed_environmental_analysis" | "completed_home_wind_analysis";
   messages: Array<{ role: "user"; content: string }>;
   expectedCall: EvalCall[];
+  expectedAssistant?: {
+    mustAskUserToChooseHazard?: boolean;
+    mustWaitForUserReply?: boolean;
+    mayListHazardsBeforeQuestion?: boolean;
+  };
 }
 
 interface PostToolEvalCase {
@@ -37,6 +47,8 @@ interface PostToolEvalCase {
     assistantMustWaitForNextUserMessage?: boolean;
     toolCallsAfterUserReply?: EvalCall[];
     assistantMustContinueTask?: boolean;
+    assistantMustFinishAfterToolResult?: boolean;
+    assistantMustPreserveNoObservationBoundary?: boolean;
   };
 }
 
@@ -64,10 +76,33 @@ interface RunOutcome {
   actual_calls: EvalCall[];
   exact_match: boolean;
   expected_argument_subset_match: boolean;
+  assistant_expectations_match: boolean;
   semantic_match: boolean;
   response_ids: string[];
   response_text: string;
   usage: Array<Record<string, unknown> | undefined>;
+  raw_responses: ApiResponse[];
+}
+
+type ReasoningEffort = "minimal" | "low" | "medium";
+
+interface PostToolRunOutcome {
+  case_id: string;
+  run: number;
+  expected_calls: EvalCall[];
+  actual_calls: EvalCall[];
+  response_text: string;
+  final_response_text: string;
+  expected_calls_match: boolean;
+  asks_user_to_choose: boolean;
+  waits_for_next_message: boolean;
+  appears_to_choose_candidate: boolean;
+  finishes_after_tool_result: boolean;
+  preserves_no_observation_boundary: boolean;
+  passed: boolean;
+  response_ids: string[];
+  usage: Array<Record<string, unknown> | undefined>;
+  tool_execution_output?: unknown;
   raw_responses: ApiResponse[];
 }
 
@@ -90,10 +125,15 @@ function parseArgs() {
   if (!Number.isInteger(runs) || runs < 1 || runs > 5) {
     throw new Error("--runs must be an integer from 1 through 5");
   }
+  const reasoning = option("--reasoning") ?? "low";
+  if (!["minimal", "low", "medium"].includes(reasoning)) {
+    throw new Error("--reasoning must be minimal, low, or medium");
+  }
   return {
     runs,
-    caseId: option("--case"),
+    caseIds: (option("--case") ?? "").split(",").map((value) => value.trim()).filter(Boolean),
     model: option("--model") ?? "gpt-5-mini",
+    reasoning: reasoning as ReasoningEffort,
     includePostTool: values.includes("--include-post-tool"),
   };
 }
@@ -119,10 +159,45 @@ function sampleCompletedAnalysis(): ActiveAnalysis {
   } as unknown as ActiveAnalysis;
 }
 
-function availableTools(item?: EvalCase) {
+function modelEvalAnalysis(request: AnalysisRequest): ActiveAnalysis {
+  return {
+    analysisId: `model-eval-completed-${request.hazardId}`,
+    origin: "agent",
+    request,
+    outcome: {
+      hazardId: request.hazardId,
+      result: {
+        kind: "unsupported_coverage",
+        rejectionReason:
+          "The model-evaluation fixture returned no official observation. This does not mean there is no danger.",
+      },
+    } as ActiveAnalysis["outcome"],
+    completedAt: "2026-08-27T00:00:01.000Z",
+  };
+}
+
+function modelEvalGeocoder(_url: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const body = JSON.parse(String(init?.body ?? "{}")) as { query?: string };
+  const query = typeof body.query === "string" ? body.query : "Selected place";
+  return Promise.resolve(new Response(JSON.stringify({
+    ok: true,
+    results: [{ label: query, lon: -89.6501, lat: 39.7817 }],
+  }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  }));
+}
+
+function availableTools(item?: EvalCase, executeAnalysis = false) {
   const baseline = [
-    createAnalyzeHazardTool({ runAnalysis: async () => null }),
-    createListEnvironmentalHazardsTool(),
+    createAnalyzeHazardTool(executeAnalysis
+      ? {
+          runAnalysis: async (request) => modelEvalAnalysis(request),
+          fetchImpl: modelEvalGeocoder,
+          now: () => new Date("2026-08-27T12:00:00.000Z"),
+        }
+      : { runAnalysis: async () => null }),
+    createEnvironmentalCapabilitiesTool(),
     createGetEnvironmentalSourceCoverageTool(),
   ];
   if (!item?.availableAfter) return baseline;
@@ -220,10 +295,6 @@ function exactCall(actual: EvalCall, expected: EvalCall): boolean {
     Object.keys(actual.arguments).length === Object.keys(expected.arguments).length;
 }
 
-function normalizedPlace(value: string): string {
-  return value.toLocaleLowerCase("en-US").replace(/\s+/gu, " ").trim();
-}
-
 function semanticArgumentsMatch(actual: EvalCall, expected: EvalCall): boolean {
   const actualArgs = actual.arguments;
   const expectedArgs = expected.arguments;
@@ -241,8 +312,8 @@ function semanticArgumentsMatch(actual: EvalCall, expected: EvalCall): boolean {
     }
     if (key === "place" && typeof expectedValue === "string") {
       if (typeof actualValue !== "string") return false;
-      const expectedPlace = normalizedPlace(expectedValue);
-      const actualPlace = normalizedPlace(actualValue);
+      const expectedPlace = normalizeEvalPlace(expectedValue);
+      const actualPlace = normalizeEvalPlace(actualValue);
       if (actualPlace !== expectedPlace && !actualPlace.startsWith(`${expectedPlace},`)) {
         return false;
       }
@@ -272,6 +343,38 @@ function semanticArgumentsMatch(actual: EvalCall, expected: EvalCall): boolean {
   return true;
 }
 
+function assistantExpectationsMatch(
+  item: EvalCase,
+  actualCalls: EvalCall[],
+  text: string
+): boolean {
+  if (!item.expectedAssistant) return true;
+  if (
+    item.expectedAssistant.mustAskUserToChooseHazard &&
+    !asksUserToChooseHazard(text)
+  ) return false;
+  const onlyAllowedClarificationCall = actualCalls.length === 0 || (
+    item.expectedAssistant.mayListHazardsBeforeQuestion === true &&
+    actualCalls.length === 1 &&
+    actualCalls[0].functionName === "get_sky_to_porch_help_and_demos" &&
+    Object.keys(actualCalls[0].arguments).length === 0
+  );
+  if (item.expectedAssistant.mustWaitForUserReply && !onlyAllowedClarificationCall) return false;
+  return true;
+}
+
+function selectionCallsSemanticMatch(item: EvalCase, actualCalls: EvalCall[]): boolean {
+  const expectedCallsMatch = actualCalls.length === item.expectedCall.length && actualCalls.every(
+    (call, index) => semanticArgumentsMatch(call, item.expectedCall[index])
+  );
+  if (expectedCallsMatch) return true;
+  return item.expectedCall.length === 0 &&
+    item.expectedAssistant?.mayListHazardsBeforeQuestion === true &&
+    actualCalls.length === 1 &&
+    actualCalls[0].functionName === "get_sky_to_porch_help_and_demos" &&
+    Object.keys(actualCalls[0].arguments).length === 0;
+}
+
 async function executeForContinuation(
   tools: WebMCP.ModelContextTool[],
   call: ApiFunctionCall
@@ -285,6 +388,7 @@ async function executeForContinuation(
 async function runSelectionCase(
   apiKey: string,
   model: string,
+  reasoning: ReasoningEffort,
   item: EvalCase,
   run: number
 ): Promise<RunOutcome> {
@@ -297,7 +401,12 @@ async function runSelectionCase(
   }));
   let previousResponseId: string | undefined;
 
-  for (let turn = 0; turn < Math.max(1, item.expectedCall.length); turn += 1) {
+  const maximumTurns = Math.max(
+    1,
+    item.expectedCall.length,
+    item.expectedAssistant?.mayListHazardsBeforeQuestion ? 2 : 1
+  );
+  for (let turn = 0; turn < maximumTurns; turn += 1) {
     const response = await request(apiKey, {
       model,
       instructions: SYSTEM_INSTRUCTIONS,
@@ -305,7 +414,7 @@ async function runSelectionCase(
       tools: apiTools(tools),
       tool_choice: "auto",
       parallel_tool_calls: false,
-      reasoning: { effort: "minimal" },
+      reasoning: { effort: reasoning },
       text: { verbosity: "low" },
       max_output_tokens: 2_000,
       ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
@@ -315,7 +424,11 @@ async function runSelectionCase(
     if (calls.length === 0) break;
     const call = calls[0];
     actualCalls.push(parseCall(call));
-    if (actualCalls.length >= item.expectedCall.length) break;
+    const allowedClarificationPreflight =
+      item.expectedAssistant?.mayListHazardsBeforeQuestion === true &&
+      actualCalls.length === 1 &&
+      call.name === "get_sky_to_porch_help_and_demos";
+    if (actualCalls.length >= item.expectedCall.length && !allowedClarificationPreflight) break;
     const result = await executeForContinuation(tools, call);
     previousResponseId = response.id;
     input = [{
@@ -332,9 +445,10 @@ async function runSelectionCase(
     (call, index) => call.functionName === item.expectedCall[index].functionName &&
       sameValue(call.arguments, item.expectedCall[index].arguments)
   );
-  const semantic = actualCalls.length === item.expectedCall.length && actualCalls.every(
-    (call, index) => semanticArgumentsMatch(call, item.expectedCall[index])
-  );
+  const callSemanticsMatch = selectionCallsSemanticMatch(item, actualCalls);
+  const combinedResponseText = responses.map(responseText).filter(Boolean).join("\n");
+  const assistantMatch = assistantExpectationsMatch(item, actualCalls, combinedResponseText);
+  const semantic = callSemanticsMatch && assistantMatch;
   return {
     case_id: item.id,
     run,
@@ -342,9 +456,10 @@ async function runSelectionCase(
     actual_calls: actualCalls,
     exact_match: exact,
     expected_argument_subset_match: subset,
+    assistant_expectations_match: assistantMatch,
     semantic_match: semantic,
     response_ids: responses.map((response) => response.id),
-    response_text: responses.map(responseText).filter(Boolean).join("\n"),
+    response_text: combinedResponseText,
     usage: responses.map((response) => response.usage),
     raw_responses: responses,
   };
@@ -358,7 +473,7 @@ function postToolInput(item: PostToolEvalCase): Array<Record<string, unknown>> {
   const assistantMessage = item.messages[1] as {
     functionCall: { functionName: string; arguments: Record<string, unknown> };
   };
-  const callId = "call_ambiguous_place_eval";
+  const callId = "call_post_tool_eval";
   return [
     item.messages[0],
     {
@@ -382,22 +497,26 @@ function postToolInput(item: PostToolEvalCase): Array<Record<string, unknown>> {
 async function runPostToolCase(
   apiKey: string,
   model: string,
+  reasoning: ReasoningEffort,
   item: PostToolEvalCase,
   run: number
-) {
-  const response = await request(apiKey, {
+): Promise<PostToolRunOutcome> {
+  const tools = availableTools(undefined, true);
+  const firstResponse = await request(apiKey, {
     model,
     instructions: SYSTEM_INSTRUCTIONS,
     input: postToolInput(item),
-    tools: apiTools(availableTools()),
+    tools: apiTools(tools),
     tool_choice: "auto",
     parallel_tool_calls: false,
-    reasoning: { effort: "minimal" },
+    reasoning: { effort: reasoning },
     text: { verbosity: "low" },
     max_output_tokens: 2_000,
   });
-  const text = responseText(response);
-  const calls = functionCalls(response).map(parseCall);
+  const responses = [firstResponse];
+  const text = responseText(firstResponse);
+  const apiCalls = functionCalls(firstResponse);
+  const calls = apiCalls.map(parseCall);
   const expectedCalls = item.expected.toolCallsAfterUserReply ??
     item.expected.toolCallsBeforeNextUserMessage ?? [];
   const expectedCallsMatch = calls.length === expectedCalls.length && calls.every(
@@ -406,8 +525,43 @@ async function runPostToolCase(
   const asksUserToChoose = /\b(which|choose|select)\b/iu.test(text);
   const waitsForNextMessage = calls.length === 0;
   const appearsToChooseCandidate = /\b(I(?:'ll| will| choose| chose) (?:use|choose)?\s*(?:Springfield,\s*)?(?:Massachusetts|Illinois|Missouri))\b/iu.test(text);
+  let toolExecutionOutput: unknown;
+  let finalResponseText = "";
+  let finalCalls: EvalCall[] = [];
+  if (
+    item.expected.assistantMustFinishAfterToolResult &&
+    expectedCallsMatch &&
+    apiCalls.length === 1
+  ) {
+    toolExecutionOutput = await executeForContinuation(tools, apiCalls[0]);
+    const finalResponse = await request(apiKey, {
+      model,
+      instructions: SYSTEM_INSTRUCTIONS,
+      input: [{
+        type: "function_call_output",
+        call_id: apiCalls[0].call_id,
+        output: JSON.stringify(toolExecutionOutput),
+      }],
+      previous_response_id: firstResponse.id,
+      tools: apiTools(tools),
+      tool_choice: "auto",
+      parallel_tool_calls: false,
+      reasoning: { effort: reasoning },
+      text: { verbosity: "low" },
+      max_output_tokens: 2_000,
+    });
+    responses.push(finalResponse);
+    finalResponseText = responseText(finalResponse);
+    finalCalls = functionCalls(finalResponse).map(parseCall);
+  }
+  const finishesAfterToolResult = !item.expected.assistantMustFinishAfterToolResult || (
+    finalCalls.length === 0 && finalResponseText.trim().length > 0
+  );
+  const preservesNoObservationBoundaryResult =
+    !item.expected.assistantMustPreserveNoObservationBoundary ||
+    preservesNoObservationBoundary(finalResponseText);
   const passed = item.expected.assistantMustContinueTask
-    ? expectedCallsMatch
+    ? expectedCallsMatch && finishesAfterToolResult && preservesNoObservationBoundaryResult
     : expectedCallsMatch && asksUserToChoose && waitsForNextMessage && !appearsToChooseCandidate;
   return {
     case_id: item.id,
@@ -415,14 +569,51 @@ async function runPostToolCase(
     expected_calls: expectedCalls,
     actual_calls: calls,
     response_text: text,
+    final_response_text: finalResponseText,
     expected_calls_match: expectedCallsMatch,
     asks_user_to_choose: asksUserToChoose,
     waits_for_next_message: waitsForNextMessage,
     appears_to_choose_candidate: appearsToChooseCandidate,
+    finishes_after_tool_result: finishesAfterToolResult,
+    preserves_no_observation_boundary: preservesNoObservationBoundaryResult,
     passed,
-    response_id: response.id,
-    usage: response.usage,
-    raw_response: response,
+    response_ids: responses.map((response) => response.id),
+    usage: responses.map((response) => response.usage),
+    ...(toolExecutionOutput !== undefined ? { tool_execution_output: toolExecutionOutput } : {}),
+    raw_responses: responses,
+  };
+}
+
+function numericUsage(record: Record<string, unknown> | undefined, key: string): number {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function usageSummary(
+  model: string,
+  records: Array<Record<string, unknown> | undefined>
+) {
+  const inputTokens = records.reduce((sum, record) => sum + numericUsage(record, "input_tokens"), 0);
+  const outputTokens = records.reduce((sum, record) => sum + numericUsage(record, "output_tokens"), 0);
+  const cachedInputTokens = records.reduce((sum, record) => {
+    const details = record?.input_tokens_details;
+    return sum + (typeof details === "object" && details !== null
+      ? numericUsage(details as Record<string, unknown>, "cached_tokens")
+      : 0);
+  }, 0);
+  const uncachedInputTokens = Math.max(0, inputTokens - cachedInputTokens);
+  const estimatedCostUsd = model === "gpt-5-mini"
+    ? (uncachedInputTokens * 0.25 + cachedInputTokens * 0.025 + outputTokens * 2) / 1_000_000
+    : null;
+  return {
+    response_count: records.length,
+    input_tokens: inputTokens,
+    cached_input_tokens: cachedInputTokens,
+    output_tokens: outputTokens,
+    estimated_cost_usd: estimatedCostUsd,
+    estimate_basis: estimatedCostUsd === null
+      ? null
+      : "gpt-5-mini public token rates checked 2026-08-27; excludes account-specific adjustments",
   };
 }
 
@@ -439,27 +630,41 @@ async function main() {
     process.cwd(),
     "tests/webmcp/post-tool-behavior-evals.json"
   ), "utf8")) as PostToolEvalCase[];
-  const selected = options.caseId
-    ? dataset.filter((item) => item.id === options.caseId)
+  const selected = options.caseIds.length > 0
+    ? dataset.filter((item) => options.caseIds.includes(item.id))
     : dataset;
-  const selectedPostTool = options.caseId
-    ? postToolDataset.filter((item) => item.id === options.caseId)
+  const selectedPostTool = options.caseIds.length > 0
+    ? postToolDataset.filter((item) => options.caseIds.includes(item.id))
     : options.includePostTool
       ? postToolDataset
       : [];
-  if (options.caseId && selected.length === 0 && selectedPostTool.length === 0) {
-    throw new Error(`Unknown case: ${options.caseId}`);
+  const knownIds = new Set([...dataset, ...postToolDataset].map((item) => item.id));
+  const unknownIds = options.caseIds.filter((id) => !knownIds.has(id));
+  if (unknownIds.length > 0) {
+    throw new Error(`Unknown case: ${unknownIds.join(", ")}`);
   }
 
   const outcomes: RunOutcome[] = [];
-  const postToolOutcomes: unknown[] = [];
+  const postToolOutcomes: PostToolRunOutcome[] = [];
   for (let run = 1; run <= options.runs; run += 1) {
     for (const item of selected) {
-      outcomes.push(await runSelectionCase(apiKey, options.model, item, run));
-      console.log(`[${run}/${options.runs}] ${item.id}: ${outcomes.at(-1)?.exact_match ? "PASS" : "CHECK"}`);
+      outcomes.push(await runSelectionCase(
+        apiKey,
+        options.model,
+        options.reasoning,
+        item,
+        run
+      ));
+      console.log(`[${run}/${options.runs}] ${item.id}: ${outcomes.at(-1)?.semantic_match ? "PASS" : "CHECK"}`);
     }
     for (const item of selectedPostTool) {
-      const outcome = await runPostToolCase(apiKey, options.model, item, run);
+      const outcome = await runPostToolCase(
+        apiKey,
+        options.model,
+        options.reasoning,
+        item,
+        run
+      );
       postToolOutcomes.push(outcome);
       console.log(`[${run}/${options.runs}] ${item.id}: ${outcome.passed ? "PASS" : "CHECK"}`);
     }
@@ -468,6 +673,10 @@ async function main() {
   const exactPasses = outcomes.filter((item) => item.exact_match).length;
   const subsetPasses = outcomes.filter((item) => item.expected_argument_subset_match).length;
   const semanticPasses = outcomes.filter((item) => item.semantic_match).length;
+  const usage = usageSummary(options.model, [
+    ...outcomes.flatMap((item) => item.usage),
+    ...postToolOutcomes.flatMap((item) => item.usage),
+  ]);
   const timestamp = new Date().toISOString().replaceAll(":", "-");
   const outputDirectory = resolve(process.cwd(), "artifacts/webmcp-evals");
   await mkdir(outputDirectory, { recursive: true });
@@ -475,6 +684,7 @@ async function main() {
   await writeFile(outputPath, JSON.stringify({
     generated_at: new Date().toISOString(),
     model: options.model,
+    reasoning_effort: options.reasoning,
     runs: options.runs,
     selection_summary: {
       exact_passes: exactPasses,
@@ -483,17 +693,20 @@ async function main() {
       total: outcomes.length,
     },
     post_tool_summary: {
-      passes: postToolOutcomes.filter((item) => (
-        item as { passed?: boolean }
-      ).passed).length,
+      passes: postToolOutcomes.filter((item) => item.passed).length,
       total: postToolOutcomes.length,
     },
+    usage_summary: usage,
     outcomes,
     post_tool_outcomes: postToolOutcomes,
   }, null, 2));
   console.log(`Selection exact: ${exactPasses}/${outcomes.length}`);
   console.log(`Selection expected-subset: ${subsetPasses}/${outcomes.length}`);
   console.log(`Selection semantic: ${semanticPasses}/${outcomes.length}`);
+  console.log(`Post-tool behavior: ${postToolOutcomes.filter((item) => item.passed).length}/${postToolOutcomes.length}`);
+  if (usage.estimated_cost_usd !== null) {
+    console.log(`Estimated API cost: $${usage.estimated_cost_usd.toFixed(4)}`);
+  }
   console.log(`Raw outcomes: ${outputPath}`);
 }
 

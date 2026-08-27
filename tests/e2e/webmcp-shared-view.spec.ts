@@ -343,7 +343,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
     };
     const tools = state.__skyToPorchWebMcpTools;
     const analysisTool = tools?.analyze_environmental_hazard;
-    const listTool = tools?.list_environmental_hazards;
+    const listTool = tools?.get_sky_to_porch_help_and_demos;
     const coverageTool = tools?.get_environmental_source_coverage;
     if (!analysisTool || !listTool || !coverageTool) return null;
     const options = { signal: new AbortController().signal };
@@ -357,7 +357,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
   expect(registered).toMatchObject({
     names: [
       "analyze_environmental_hazard",
-      "list_environmental_hazards",
+      "get_sky_to_porch_help_and_demos",
       "get_environmental_source_coverage",
     ],
     analysisAnnotations: { readOnlyHint: false, untrustedContentHint: true },
