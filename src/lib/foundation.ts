@@ -17,7 +17,7 @@ export type FoundationStatus = {
  * ships; no route or test may hardcode its own stage string.
  */
 export const CURRENT_STAGE =
-  "WP-14 + ADR-0037/0041 — six-hazard live evidence, nationwide heat ground stations, per-layer map status";
+  "WebMCP + ADR-0002 — seven-hazard evidence, automatic storm-impact bundle, per-layer map status";
 
 /**
  * Return true when all required environment variables for a named integration

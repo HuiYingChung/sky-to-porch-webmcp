@@ -471,7 +471,8 @@ describe("UXFIX-01 guided query flow", () => {
     click(byTestId("find-evidence-btn"));
     await flush();
 
-    // ADR-0044: the Houston card switches to its own hazard (Flood) and
+    // ADR-0044 + ADR-0002: the Houston card switches to its primary Wind
+    // evidence chain and
     // geometry; the second submit must carry the new place, not Tucson.
     click(byTestId("t-gq-place-demo-houston"));
     await flush();
@@ -481,7 +482,7 @@ describe("UXFIX-01 guided query flow", () => {
     expect(recordedCalls).toHaveLength(2);
     expect(recordedCalls.map((call) => call.url)).toEqual([
       "/api/heat/query",
-      "/api/flood/query",
+      "/api/storm/query",
     ]);
     const centers = recordedCalls.map((call) => {
       const area = call.body.area as { west: number; south: number; east: number; north: number };

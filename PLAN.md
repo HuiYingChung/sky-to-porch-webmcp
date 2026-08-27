@@ -11,13 +11,21 @@
 - W0 repository baseline: complete
 - W1 shared analysis application layer: complete for the vertical slice
 - W2 shared client controller and state: complete with renderer compatibility
-- W3 WebMCP tool: implemented; supported-browser agent verification pending
+- W3 WebMCP tools: three baseline tools plus two contextual tools implemented;
+  supported-browser agent verification pending
 - W4 provider cleanup: complete; deterministic-only application runtime
-- W5 verification: local deterministic gates pass, including 220 browser
-  journeys; supported-browser and model eval runs pending
+- W5 verification: typecheck, lint, 1277 unit tests, 132 integration tests,
+  production build, 224 browser journeys, and secret check pass;
+  supported-browser and model eval runs pending
 - W5a shared-view UX: complete; full deterministic and browser regression pass
 - W5b Canadian Flood ground evidence: complete; bounded ECCC GeoMet live smoke
   and the full 220-journey browser regression passed
+- W5c Wind & Storm evidence: locally verified, including a live localhost
+  related-context Agent bundle with separate successful wind and water chains;
+  supported-browser Agent verification pending
+- W5d compound environmental context: locally verified for Heat–Drought,
+  Fire/Smoke–Air Quality, and Volcano–Air Quality–Heat, including one parallel
+  shared-view transaction; supported-browser Agent verification pending
 - W6 release and submission: pending explicit authorization
 
 ## 1. Goal
@@ -108,9 +116,13 @@ optional question; execute the deterministic analysis pipeline; update the
 shared map and evidence panel; and return a compact structured result with
 state, observations, provenance, limitations, and verification links.
 
-A second read-only tool may expose source coverage or the current analysis only
-if agent-selection evals demonstrate a clear need. Avoid tool sequences that
-are easy to call in the wrong order.
+Two baseline discovery tools expose the governed hazard vocabulary and the
+checked-in source-coverage catalog. Their descriptions direct a concrete
+place-and-hazard question straight to the analysis tool, so discovery is not a
+mandatory or fragile preflight sequence. Coverage output states that pipeline
+eligibility is not proof of an observation. Contextual tools expose the current
+validated evidence and, only after Home + Wind, the bounded claim-discussion
+guide.
 
 ### W4 — Provider cleanup
 
@@ -140,6 +152,23 @@ are easy to call in the wrong order.
 - preserve no observation, source failure, pagination overflow, and
   non-applicable coverage as separate deterministic outcomes.
 
+### W5c — Wind & Storm evidence and claim-discussion use case
+
+- add `wind_storm` as a separate hazard from the existing `flood_storm` path;
+- use in-area NOAA GHCNh wind speed and gust observations without importing
+  rainfall, flood extent, or water-gage evidence;
+- add pinned official Beryl regional context only within its governed date and
+  area;
+- expose machine-readable wind-only and water-only evidence scopes to WebMCP;
+- default broad Agent questions to `related_context`, so a Wind question
+  automatically gathers the separate Flood chain without asking the user to
+  name the relevant data types; reserve `single_hazard_only` for an explicitly
+  narrow request;
+- make the insurer-discussion checklist conditional on a completed Home + Wind
+  result and keep it local, bounded, and non-adjudicative;
+- retain Home, Travel, Pets, Health, Power & Internet, and Community as the
+  product's broader concern contexts.
+
 ### W6 — Release and submission
 
 - reconcile prior work, README, UI, video, and submission claims;
@@ -160,7 +189,16 @@ The product owner has ruled on the first three checkpoints:
    person to choose; the Agent never guesses;
 3. mobile opens Meaning, where a trust strip exposes evidence state, source
    count, limitations, and a direct Evidence action;
-4. the final three-minute demonstration journey remains pending.
+4. the primary demonstration uses Hurricane Beryl in Houston to ask whether
+   wind could have damaged a roof and what official evidence can support an
+   insurer discussion; this is one use case, not the site's entire purpose;
+5. wind and water remain separate evidence chains. For a broad storm-impact
+   question, the default related-context orchestration runs and labels both
+   analyses instead of asking the user to enumerate hazards;
+6. the same default applies to Heat–Drought, Fire/Smoke–Air Quality, and
+   Volcano–Air Quality–Heat. Every chain remains independently sourced and the
+   bundle states that co-occurrence is not causation. Only an explicitly
+   single-hazard question may select `single_hazard_only`.
 
 Technical WebMCP details remain Codex's responsibility.
 

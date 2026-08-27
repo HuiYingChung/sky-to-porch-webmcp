@@ -17,8 +17,24 @@ import {
 export const ANALYZE_HAZARD_TOOL_NAME = "analyze_environmental_hazard";
 const DEFAULT_RADIUS_KM = 25;
 const MAX_OUTPUT_CHARACTERS = 1_500;
+const ANALYSIS_SCOPES = ["related_context", "single_hazard_only"] as const;
+type AnalysisScope = (typeof ANALYSIS_SCOPES)[number];
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/;
+
+/**
+ * Product-owned default relationships. These are retrieval companions, not
+ * causal claims, and they do not recurse beyond the chosen primary hazard.
+ */
+export const DEFAULT_RELATED_HAZARDS: Readonly<Record<HazardId, readonly HazardId[]>> = {
+  fire_smoke: ["air_quality"],
+  flood_storm: ["wind_storm"],
+  wind_storm: ["flood_storm"],
+  extreme_heat: ["drought_land"],
+  drought_land: ["extreme_heat"],
+  air_quality: ["fire_smoke"],
+  earth_volcanoes: ["air_quality", "extreme_heat"],
+};
 
 const INPUT_KEYS = new Set([
   "place",
@@ -30,6 +46,8 @@ const INPUT_KEYS = new Set([
   "start_date",
   "end_date",
   "question",
+  "analysis_scope",
+  "related_hazards",
 ]);
 
 export interface AnalyzeHazardToolDependencies {
@@ -38,6 +56,11 @@ export interface AnalyzeHazardToolDependencies {
     origin?: "agent",
     signal?: AbortSignal
   ) => Promise<ActiveAnalysis | null>;
+  runAnalysisBundle?: (
+    requests: AnalysisRequest[],
+    origin?: "agent",
+    signal?: AbortSignal
+  ) => Promise<ActiveAnalysis[] | null>;
   fetchImpl?: typeof fetch;
   now?: () => Date;
 }
@@ -45,6 +68,8 @@ export interface AnalyzeHazardToolDependencies {
 interface ParsedInput {
   place: string;
   hazard: HazardId;
+  analysisScope: AnalysisScope;
+  relatedHazards: HazardId[];
   concern: ConcernType;
   latitude?: number;
   longitude?: number;
@@ -94,6 +119,14 @@ interface ToolSuccess {
   status: string;
   analysis_id: string;
   ui_updated: true;
+  evidence_scope:
+    | "wind_only_no_rain_flood_or_water_gages"
+    | "water_only_no_wind_damage_causation"
+    | "heat_conditions_no_drought_or_volcano_causation"
+    | "drought_land_context_no_heat_or_fire_causation"
+    | "fire_smoke_indicators_no_air_quality_inference"
+    | "air_quality_conditions_no_source_attribution"
+    | "earth_volcano_observations_no_air_or_heat_causation";
   request: {
     place: string;
     hazard: HazardId;
@@ -113,7 +146,39 @@ interface ToolSuccess {
   no_data_is_not_no_danger: true;
 }
 
-export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess;
+type EvidenceScope = ToolSuccess["evidence_scope"];
+
+interface CompactEvidenceChain {
+  hazard: HazardId;
+  evidence_scope: EvidenceScope;
+  status: string;
+  observation: CompactObservation | null;
+  limitation: string | null;
+  verify_url: string | null;
+}
+
+interface ToolEvidenceBundle {
+  status: "related_environmental_evidence_bundle";
+  analysis_id: string;
+  ui_updated: true;
+  evidence_scope: "separate_related_hazard_chains";
+  relationship: "co_occurring_context_not_causation";
+  request: {
+    place: string;
+    hazard: HazardId;
+    analysis_scope: "related_context";
+    concern: ConcernType;
+    radius_km: number;
+    time: string;
+  };
+  included_chains: HazardId[];
+  chains: CompactEvidenceChain[];
+  claim_discussion_available: boolean;
+  related_evidence_visible_in_shared_view: true;
+  no_data_is_not_no_danger: true;
+}
+
+export type AnalyzeHazardToolOutput = ToolFailure | ToolSuccess | ToolEvidenceBundle;
 
 export const ANALYZE_HAZARD_INPUT_SCHEMA = {
   type: "object",
@@ -129,7 +194,20 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     hazard: {
       type: "string",
       enum: HAZARD_IDS,
-      description: "Environmental hazard to investigate.",
+      description: "Main hazard named or most central to the person's question.",
+    },
+    analysis_scope: {
+      type: "string",
+      enum: ANALYSIS_SCOPES,
+      default: "related_context",
+      description: "Default to related_context. Use single_hazard_only only when the person explicitly restricts the question to one hazard.",
+    },
+    related_hazards: {
+      type: "array",
+      items: { type: "string", enum: HAZARD_IDS },
+      uniqueItems: true,
+      maxItems: 3,
+      description: "Extra plausible context hazards named or implied by a broad question, beyond the product defaults. Maximum three.",
     },
     concern: {
       type: "string",
@@ -241,6 +319,38 @@ function parseInput(
   ) {
     return failure("invalid_input", `hazard must be one of: ${HAZARD_IDS.join(", ")}.`);
   }
+  const analysisScope = raw.analysis_scope ?? "related_context";
+  if (
+    typeof analysisScope !== "string" ||
+    !(ANALYSIS_SCOPES as readonly string[]).includes(analysisScope)
+  ) {
+    return failure("invalid_input", `analysis_scope must be one of: ${ANALYSIS_SCOPES.join(", ")}.`);
+  }
+  if (
+    raw.related_hazards !== undefined &&
+    (!Array.isArray(raw.related_hazards) ||
+      raw.related_hazards.length > 3 ||
+      new Set(raw.related_hazards).size !== raw.related_hazards.length ||
+      raw.related_hazards.some(
+        (hazard) => typeof hazard !== "string" || !(HAZARD_IDS as readonly string[]).includes(hazard)
+      ))
+  ) {
+    return failure("invalid_input", "related_hazards must contain up to three unique supported hazards.");
+  }
+  const relatedHazards = (raw.related_hazards ?? []) as HazardId[];
+  if (relatedHazards.includes(raw.hazard as HazardId)) {
+    return failure("invalid_input", "related_hazards must not repeat the primary hazard.");
+  }
+  if (analysisScope === "single_hazard_only" && relatedHazards.length > 0) {
+    return failure("invalid_input", "single_hazard_only cannot include related_hazards.");
+  }
+  const plannedRelatedCount = new Set([
+    ...DEFAULT_RELATED_HAZARDS[raw.hazard as HazardId],
+    ...relatedHazards,
+  ]).size;
+  if (plannedRelatedCount > 3) {
+    return failure("invalid_input", "A related-context request can include at most three context hazards.");
+  }
   const concern = raw.concern ?? "home";
   if (
     typeof concern !== "string" ||
@@ -306,11 +416,16 @@ function parseInput(
   if (
     typeof raw.start_date === "string" &&
     typeof raw.end_date === "string" &&
-    raw.hazard !== "fire_smoke" &&
-    raw.hazard !== "flood_storm" &&
+    (analysisScope === "related_context" ||
+      (raw.hazard !== "fire_smoke" && raw.hazard !== "flood_storm")) &&
     raw.start_date !== raw.end_date
   ) {
-    return failure("invalid_input", `${raw.hazard} accepts exactly one completed UTC date.`);
+    return failure(
+      "invalid_input",
+      analysisScope === "related_context"
+        ? "related_context accepts one completed UTC date so every evidence chain has the same temporal anchor."
+        : `${raw.hazard} accepts exactly one completed UTC date.`
+    );
   }
 
   if (
@@ -326,6 +441,8 @@ function parseInput(
   return {
     place: raw.place.trim(),
     hazard: raw.hazard as HazardId,
+    analysisScope: analysisScope as AnalysisScope,
+    relatedHazards,
     concern: concern as ConcernType,
     ...(hasLatitude
       ? {
@@ -349,20 +466,20 @@ function selectionTime(
     return {
       type: "custom",
       startTs: `${input.startDate}T00:00:00.000Z`,
-      endTs: `${input.endDate}T00:00:00.000Z`,
+      endTs: `${input.endDate}T23:59:59.000Z`,
       display: input.startDate === input.endDate
         ? input.startDate
         : `${input.startDate}/${input.endDate}`,
     };
   }
-  if (input.hazard === "fire_smoke") {
+  if (input.hazard === "fire_smoke" && input.analysisScope === "single_hazard_only") {
     return { type: "latest", display: "latest completed source date" };
   }
   const completed = latestCompletedUtcDate(now);
   return {
     type: "custom",
     startTs: `${completed}T00:00:00.000Z`,
-    endTs: `${completed}T00:00:00.000Z`,
+    endTs: `${completed}T23:59:59.000Z`,
     display: completed,
   };
 }
@@ -463,6 +580,25 @@ function compactObservation(observation: Observation): CompactObservation {
   };
 }
 
+export function evidenceScopeForHazard(hazard: HazardId): EvidenceScope {
+  switch (hazard) {
+    case "wind_storm":
+      return "wind_only_no_rain_flood_or_water_gages";
+    case "flood_storm":
+      return "water_only_no_wind_damage_causation";
+    case "extreme_heat":
+      return "heat_conditions_no_drought_or_volcano_causation";
+    case "drought_land":
+      return "drought_land_context_no_heat_or_fire_causation";
+    case "fire_smoke":
+      return "fire_smoke_indicators_no_air_quality_inference";
+    case "air_quality":
+      return "air_quality_conditions_no_source_attribution";
+    case "earth_volcanoes":
+      return "earth_volcano_observations_no_air_or_heat_causation";
+  }
+}
+
 function resultDetails(analysis: ActiveAnalysis): {
   kind: string;
   evidence?: EvidenceObject;
@@ -511,6 +647,7 @@ function compactSuccess(
     status: details.kind,
     analysis_id: analysis.analysisId,
     ui_updated: true,
+    evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
     request: {
       place: truncate(analysis.request.placeSelection.label, 100),
       hazard: analysis.request.hazardId,
@@ -542,6 +679,71 @@ function compactSuccess(
     verify_urls: base.verify_urls.slice(0, 1),
   };
   return reduced;
+}
+
+function compactEvidenceChain(analysis: ActiveAnalysis): CompactEvidenceChain {
+  const details = resultDetails(analysis);
+  const evidence = details.evidence;
+  const observation = evidence?.observations[0];
+  const limitation = details.rejectionReason ?? details.limitations[0] ?? null;
+  const verifyUrl = evidence?.observations
+    .map((item) => item.provenance.sourceUrl)
+    .find((url): url is string => typeof url === "string" && url.length <= 300) ?? null;
+  return {
+    hazard: analysis.request.hazardId,
+    evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
+    status: details.kind,
+    observation: observation ? compactObservation(observation) : null,
+    limitation: limitation ? truncate(limitation, 130) : null,
+    verify_url: verifyUrl,
+  };
+}
+
+function compactEvidenceBundle(
+  analyses: ActiveAnalysis[],
+  primary: ActiveAnalysis,
+  timeDisplay: string
+): ToolEvidenceBundle {
+  const includedChains = analyses.map((analysis) => analysis.request.hazardId);
+  const bundle: ToolEvidenceBundle = {
+    status: "related_environmental_evidence_bundle",
+    analysis_id: `related-bundle:${analyses.map((analysis) => analysis.analysisId).join(":")}`,
+    ui_updated: true,
+    evidence_scope: "separate_related_hazard_chains",
+    relationship: "co_occurring_context_not_causation",
+    request: {
+      place: truncate(primary.request.placeSelection.label, 100),
+      hazard: primary.request.hazardId,
+      analysis_scope: "related_context",
+      concern: primary.request.concern,
+      radius_km: primary.request.placeSelection.analysisArea.radiusKm,
+      time: timeDisplay,
+    },
+    included_chains: includedChains,
+    chains: analyses.map(compactEvidenceChain),
+    claim_discussion_available:
+      primary.outcome.hazardId === "wind_storm" && Boolean(primary.outcome.result.claimDiscussion),
+    related_evidence_visible_in_shared_view: true,
+    no_data_is_not_no_danger: true,
+  };
+  if (JSON.stringify(bundle).length <= MAX_OUTPUT_CHARACTERS) return bundle;
+  return {
+    ...bundle,
+    chains: bundle.chains.map((chain) => ({
+      ...chain,
+      observation: null,
+      verify_url: null,
+    })),
+  };
+}
+
+function plannedHazards(input: ParsedInput): HazardId[] {
+  if (input.analysisScope === "single_hazard_only") return [input.hazard];
+  const related = [...new Set([
+    ...DEFAULT_RELATED_HAZARDS[input.hazard],
+    ...input.relatedHazards,
+  ])].filter((hazard) => hazard !== input.hazard);
+  return [...related, input.hazard];
 }
 
 export async function executeAnalyzeHazardTool(
@@ -579,6 +781,57 @@ export async function executeAnalyzeHazardTool(
     );
   }
 
+  const hazards = plannedHazards(input);
+  if (hazards.length > 1) {
+    const commonRequest = {
+      concern: input.concern,
+      placeSelection,
+      ...(input.question ? { optionalQuestion: input.question } : {}),
+      evidenceMode: "live" as const,
+    };
+    const requests = hazards.map((hazardId, index): AnalysisRequest => {
+      const role = index === 0
+        ? "start_context"
+        : index === hazards.length - 1
+          ? "primary"
+          : "context";
+      return {
+        ...commonRequest,
+        hazardId,
+        evidenceBundle: {
+          primaryHazardId: input.hazard,
+          includedHazardIds: hazards,
+          role,
+        },
+      };
+    });
+    let analyses: ActiveAnalysis[] | null;
+    if (dependencies.runAnalysisBundle) {
+      analyses = await dependencies.runAnalysisBundle(requests, "agent", options.signal);
+    } else {
+      analyses = [];
+      for (const request of requests) {
+        const analysis = await dependencies.runAnalysis(
+          request,
+          "agent",
+          options.signal
+        );
+        if (analysis === null) {
+          analyses = null;
+          break;
+        }
+        analyses.push(analysis);
+      }
+    }
+    if (analyses === null) {
+      return failure(
+        "superseded",
+        "A newer request replaced the related-context investigation before every evidence chain completed."
+      );
+    }
+    return compactEvidenceBundle(analyses, analyses[analyses.length - 1], time.display);
+  }
+
   const analysis = await dependencies.runAnalysis(
     {
       hazardId: input.hazard,
@@ -609,7 +862,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Resolve a place, retrieve bounded environmental evidence, and synchronize Sky to Porch's map and evidence panel. Use for fire/smoke, flood/storm, extreme heat, drought/land, air quality, or earthquakes/volcanoes. If place search is ambiguous, ask the user to choose a returned candidate. Missing data never means no danger.",
+      "Directly answer a concrete place-and-hazard question: resolve the place, retrieve bounded source evidence, and synchronize Sky to Porch. Do not call discovery tools first. Related context runs separate associated-hazard chains by default; use single_hazard_only only for an explicit restriction. Return only validated observations and limitations—never invent values, merge causation, or treat missing data as no danger.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

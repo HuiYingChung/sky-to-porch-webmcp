@@ -10,8 +10,9 @@ import {
 import { selectFireAreaPrimarySource } from "@/lib/fire/live-adapter";
 import { buildFloodExtentRequest } from "@/lib/flood/extent-source-contract";
 import { buildPreparedGhcnhGroundPlan } from "@/lib/heat/ground-source-contract";
+import { buildPreparedGhcnhWindPlan } from "@/lib/storm/ground-source-contract";
 
-describe("six-hazard U.S. coverage source-plan matrix", () => {
+describe("seven-hazard U.S. coverage source-plan matrix", () => {
   it.each(US_COVERAGE_AREA_CASES)(
     "$region / $label has a deterministic geographically addressed path for every selectable hazard",
     (coverageCase) => {
@@ -19,6 +20,7 @@ describe("six-hazard U.S. coverage source-plan matrix", () => {
       const firePrimary = selectFireAreaPrimarySource(coverageCase.area);
       const floodExtent = buildFloodExtentRequest("2024-07-08", coverageCase.area);
       const heatGround = buildPreparedGhcnhGroundPlan("2024-07-08", coverageCase.area);
+      const windGround = buildPreparedGhcnhWindPlan("2024-07-08", coverageCase.area);
       const droughtSatellite = new URL(buildGibsNdviWmsUrl("2024-06-04", coverageCase.area));
       const droughtRegional = buildUsdmAdministrativePercentRequest(
         "2024-06-04",
@@ -38,6 +40,7 @@ describe("six-hazard U.S. coverage source-plan matrix", () => {
       const pathByHazard = {
         fire_smoke: firePrimary,
         flood_storm: floodExtent.sourceId,
+        wind_storm: windGround.sourceId,
         extreme_heat: heatGround.sourceId,
         drought_land: `${droughtSatellite.searchParams.get("LAYERS")}:${droughtRegional.administrativeArea.fips}`,
         air_quality: airSatellite.sourceId,
@@ -51,6 +54,9 @@ describe("six-hazard U.S. coverage source-plan matrix", () => {
         `${coverageCase.area.west},${coverageCase.area.south},${coverageCase.area.east},${coverageCase.area.north}`
       );
       expect(heatGround.area).toEqual(coverageCase.area);
+      expect(windGround.area).toEqual(coverageCase.area);
+      expect(windGround.requiredVariables).toEqual(["wind_direction", "wind_speed", "wind_gust"]);
+      expect(windGround.outsideAreaFallback).toBe(false);
       expect(droughtSatellite.searchParams.get("BBOX")).toBe(
         `${coverageCase.area.west},${coverageCase.area.south},${coverageCase.area.east},${coverageCase.area.north}`
       );

@@ -182,8 +182,14 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
     if (!allowed || allowed.includes(timeType)) return;
 
     const targetType: TimeRangeType = allowed.includes("latest") ? "latest" : "custom";
-    let nextStart = customStart;
-    let nextEnd = customEnd;
+    const canonicalCustomStart = placeSelection?.timeSelection.type === "custom"
+      ? tsToDateInput(placeSelection.timeSelection.startTs)
+      : "";
+    const canonicalCustomEnd = placeSelection?.timeSelection.type === "custom"
+      ? tsToDateInput(placeSelection.timeSelection.endTs)
+      : "";
+    let nextStart = canonicalCustomStart || customStart;
+    let nextEnd = canonicalCustomEnd || customEnd;
     if (targetType === "custom") {
       if (!isDateInputValue(nextStart)) nextStart = dateBounds.defaultDate;
       if (!isDateInputValue(nextEnd)) nextEnd = dateBounds.defaultDate;
@@ -398,6 +404,7 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
     droughtEvidenceMode
   );
   const usesSingleObservationDate =
+    draft.hazardId === "wind_storm" ||
     draft.hazardId === "extreme_heat" ||
     draft.hazardId === "drought_land" ||
     draft.hazardId === "air_quality" ||

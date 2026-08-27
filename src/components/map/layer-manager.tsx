@@ -87,6 +87,7 @@ export const INITIAL_LAYERS: LayerState[] = [
 export const HAZARD_DEFAULT_LAYERS: Record<HazardId, readonly LayerId[]> = {
   fire_smoke: ["wildfire_nrt"],
   flood_storm: ["gibs_precipitation", "flood_extent"],
+  wind_storm: [],
   extreme_heat: ["gibs_surface_temp"],
   drought_land: [],
   air_quality: [],

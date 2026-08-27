@@ -152,6 +152,7 @@ describe("WebMCP environmental hazard tool", () => {
       {
         place: "Tucson, Arizona",
         hazard: "fire_smoke",
+        analysis_scope: "single_hazard_only",
         latitude: 32.2226,
         longitude: -110.9747,
       },
@@ -188,6 +189,7 @@ describe("WebMCP environmental hazard tool", () => {
       {
         place: "Tucson, Arizona",
         hazard: "extreme_heat",
+        analysis_scope: "single_hazard_only",
         concern: "health",
         latitude: 32.2226,
         longitude: -110.9747,
@@ -198,10 +200,242 @@ describe("WebMCP environmental hazard tool", () => {
 
     const request = runAnalysis.mock.calls[0][0];
     expect(request.placeSelection.timeSelection.startTs).toBe("2026-08-25T00:00:00.000Z");
-    expect(request.placeSelection.timeSelection.endTs).toBe("2026-08-25T00:00:00.000Z");
+    expect(request.placeSelection.timeSelection.endTs).toBe("2026-08-25T23:59:59.000Z");
     expect(output.status).toBe("unsupported_coverage");
     expect(output.no_data_is_not_no_danger).toBe(true);
     expect("limitations" in output ? output.limitations[0] : undefined).toBe("No station coverage.");
+  });
+
+  it.each([
+    ["wind_storm", "wind_only_no_rain_flood_or_water_gages"],
+    ["flood_storm", "water_only_no_wind_damage_causation"],
+  ] as const)("labels the %s evidence chain so same-event data stays distinct", async (
+    hazardId,
+    evidenceScope
+  ) => {
+    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
+      analysisId: `analysis-${hazardId}`,
+      origin: "agent",
+      request,
+      outcome: {
+        hazardId,
+        result: { kind: "unsupported_coverage", rejectionReason: "No source coverage." },
+      } as ActiveAnalysis["outcome"],
+      completedAt: "2026-08-26T18:00:01.000Z",
+    }));
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Houston, Texas",
+        hazard: hazardId,
+        analysis_scope: "single_hazard_only",
+        latitude: 29.7604,
+        longitude: -95.3698,
+        start_date: "2024-07-08",
+        end_date: "2024-07-08",
+      },
+      toolOptions(),
+      { runAnalysis, now: () => NOW }
+    );
+
+    expect(output).toMatchObject({ evidence_scope: evidenceScope });
+  });
+
+  it("automatically gathers separate wind and water chains for a broad storm-impact question", async () => {
+    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
+      analysisId: `analysis-${request.hazardId}`,
+      origin: "agent",
+      request,
+      outcome: {
+        hazardId: request.hazardId,
+        result: { kind: "unsupported_coverage", rejectionReason: `No ${request.hazardId} coverage.` },
+      } as ActiveAnalysis["outcome"],
+      completedAt: "2026-08-26T18:00:01.000Z",
+    }));
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Houston, Texas",
+        hazard: "wind_storm",
+        concern: "home",
+        latitude: 29.7604,
+        longitude: -95.3698,
+        start_date: "2024-07-08",
+        end_date: "2024-07-08",
+        question: "Could this storm have damaged my home, and what can I discuss with my insurer?",
+      },
+      toolOptions(),
+      { runAnalysis, now: () => NOW }
+    );
+
+    expect(runAnalysis.mock.calls.map(([request]) => request.hazardId)).toEqual([
+      "flood_storm",
+      "wind_storm",
+    ]);
+    expect(output).toMatchObject({
+      status: "related_environmental_evidence_bundle",
+      evidence_scope: "separate_related_hazard_chains",
+      relationship: "co_occurring_context_not_causation",
+      included_chains: ["flood_storm", "wind_storm"],
+      chains: [
+        {
+          hazard: "flood_storm",
+          evidence_scope: "water_only_no_wind_damage_causation",
+        },
+        {
+          hazard: "wind_storm",
+          evidence_scope: "wind_only_no_rain_flood_or_water_gages",
+        },
+      ],
+    });
+    expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
+  });
+
+  it.each([
+    ["extreme_heat", ["drought_land", "extreme_heat"]],
+    ["drought_land", ["extreme_heat", "drought_land"]],
+    ["fire_smoke", ["air_quality", "fire_smoke"]],
+    ["air_quality", ["fire_smoke", "air_quality"]],
+    ["earth_volcanoes", ["air_quality", "extreme_heat", "earth_volcanoes"]],
+  ] as const)("defaults broad %s questions to the governed related-context plan", async (
+    hazard,
+    expectedHazards
+  ) => {
+    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
+      analysisId: `analysis-${request.hazardId}`,
+      origin: "agent",
+      request,
+      outcome: {
+        hazardId: request.hazardId,
+        result: { kind: "unsupported_coverage", rejectionReason: `No ${request.hazardId} coverage.` },
+      } as ActiveAnalysis["outcome"],
+      completedAt: "2026-08-26T18:00:01.000Z",
+    }));
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Test place",
+        hazard,
+        latitude: 32.2226,
+        longitude: -110.9747,
+      },
+      toolOptions(),
+      { runAnalysis, now: () => NOW }
+    );
+
+    expect(runAnalysis.mock.calls.map(([request]) => request.hazardId)).toEqual(expectedHazards);
+    expect(output).toMatchObject({
+      status: "related_environmental_evidence_bundle",
+      relationship: "co_occurring_context_not_causation",
+      included_chains: expectedHazards,
+    });
+    expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
+  });
+
+  it("runs exactly one chain only when the Agent marks an explicitly narrow question", async () => {
+    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
+      analysisId: `analysis-${request.hazardId}`,
+      origin: "agent",
+      request,
+      outcome: {
+        hazardId: "extreme_heat",
+        result: { kind: "unsupported_coverage", rejectionReason: "No heat coverage." },
+      },
+      completedAt: "2026-08-26T18:00:01.000Z",
+    }));
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Phoenix, Arizona",
+        hazard: "extreme_heat",
+        analysis_scope: "single_hazard_only",
+        latitude: 33.4484,
+        longitude: -112.074,
+        question: "What was the maximum temperature on this date only?",
+      },
+      toolOptions(),
+      { runAnalysis, now: () => NOW }
+    );
+
+    expect(runAnalysis).toHaveBeenCalledTimes(1);
+    expect(output).toMatchObject({
+      evidence_scope: "heat_conditions_no_drought_or_volcano_causation",
+      request: { hazard: "extreme_heat" },
+    });
+  });
+
+  it("uses one parallel bundle transaction when the shared controller provides it", async () => {
+    const runAnalysis = vi.fn();
+    const runAnalysisBundle = vi.fn(async (requests: AnalysisRequest[]): Promise<ActiveAnalysis[]> =>
+      requests.map((request) => ({
+        analysisId: `analysis-${request.hazardId}`,
+        origin: "agent",
+        request,
+        outcome: {
+          hazardId: request.hazardId,
+          result: { kind: "unsupported_coverage", rejectionReason: "Bounded test result." },
+        } as ActiveAnalysis["outcome"],
+        completedAt: "2026-08-26T18:00:01.000Z",
+      }))
+    );
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Hilo, Hawaii",
+        hazard: "earth_volcanoes",
+        latitude: 19.7074,
+        longitude: -155.0885,
+      },
+      toolOptions(),
+      { runAnalysis, runAnalysisBundle, now: () => NOW }
+    );
+
+    expect(runAnalysis).not.toHaveBeenCalled();
+    expect(runAnalysisBundle).toHaveBeenCalledTimes(1);
+    expect(runAnalysisBundle.mock.calls[0][0].map((request) => request.hazardId)).toEqual([
+      "air_quality",
+      "extreme_heat",
+      "earth_volcanoes",
+    ]);
+    expect(output).toMatchObject({
+      included_chains: ["air_quality", "extreme_heat", "earth_volcanoes"],
+    });
+  });
+
+  it("lets a broad question extend a default profile without merging evidence", async () => {
+    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
+      analysisId: `analysis-${request.hazardId}`,
+      origin: "agent",
+      request,
+      outcome: {
+        hazardId: request.hazardId,
+        result: { kind: "unsupported_coverage", rejectionReason: "Bounded test result." },
+      } as ActiveAnalysis["outcome"],
+      completedAt: "2026-08-26T18:00:01.000Z",
+    }));
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Los Angeles, California",
+        hazard: "fire_smoke",
+        related_hazards: ["extreme_heat", "drought_land"],
+        latitude: 34.0522,
+        longitude: -118.2437,
+      },
+      toolOptions(),
+      { runAnalysis, now: () => NOW }
+    );
+
+    expect(runAnalysis.mock.calls.map(([request]) => request.hazardId)).toEqual([
+      "air_quality",
+      "extreme_heat",
+      "drought_land",
+      "fire_smoke",
+    ]);
+    expect(output).toMatchObject({
+      included_chains: ["air_quality", "extreme_heat", "drought_land", "fire_smoke"],
+      evidence_scope: "separate_related_hazard_chains",
+    });
   });
 
   it.each([
@@ -210,6 +444,7 @@ describe("WebMCP environmental hazard tool", () => {
       {
         place: "Tucson",
         hazard: "extreme_heat",
+        analysis_scope: "single_hazard_only",
         latitude: 32.2,
         longitude: -110.9,
         start_date: "2026-08-20",

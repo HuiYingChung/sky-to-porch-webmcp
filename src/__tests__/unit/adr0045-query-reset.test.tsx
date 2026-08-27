@@ -95,7 +95,7 @@ describe("ADR-0045 Start over", () => {
     click(byTestId("t-gq-place-demo-houston"));
     const probe = byTestId("canonical-selection-probe");
     expect(probe.getAttribute("data-demo-place-id")).toBe("demo-houston");
-    expect(probe.getAttribute("data-hazard")).toBe("flood_storm");
+    expect(probe.getAttribute("data-hazard")).toBe("wind_storm");
 
     const concernSelect = byTestId("concern-select") as HTMLSelectElement;
     act(() => {

@@ -6,13 +6,14 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
 }, testInfo) => {
   await page.addInitScript(() => {
     const state = globalThis as typeof globalThis & {
-      __skyToPorchWebMcpTool?: WebMCP.ModelContextTool;
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
     };
+    state.__skyToPorchWebMcpTools = {};
     Object.defineProperty(document, "modelContext", {
       configurable: true,
       value: {
         registerTool: async (tool: WebMCP.ModelContextTool) => {
-          state.__skyToPorchWebMcpTool = tool;
+          state.__skyToPorchWebMcpTools![tool.name] = tool;
         },
       },
     });
@@ -38,20 +39,41 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
   await expect(page.locator('[data-testid="webmcp-ready-badge"]:visible'))
     .toHaveText("Agent-ready");
 
-  const registered = await page.evaluate(() => {
+  const registered = await page.evaluate(async () => {
     const state = globalThis as typeof globalThis & {
-      __skyToPorchWebMcpTool?: WebMCP.ModelContextTool;
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
     };
-    return state.__skyToPorchWebMcpTool
-      ? {
-          name: state.__skyToPorchWebMcpTool.name,
-          annotations: state.__skyToPorchWebMcpTool.annotations,
-        }
-      : null;
+    const tools = state.__skyToPorchWebMcpTools;
+    const analysisTool = tools?.analyze_environmental_hazard;
+    const listTool = tools?.list_environmental_hazards;
+    const coverageTool = tools?.get_environmental_source_coverage;
+    if (!analysisTool || !listTool || !coverageTool) return null;
+    const options = { signal: new AbortController().signal };
+    return {
+      names: Object.keys(tools),
+      analysisAnnotations: analysisTool.annotations,
+      hazardCatalog: await listTool.execute({}, options),
+      coverageCatalog: await coverageTool.execute({ hazard: "air_quality" }, options),
+    };
   });
-  expect(registered).toEqual({
-    name: "analyze_environmental_hazard",
-    annotations: { readOnlyHint: false, untrustedContentHint: true },
+  expect(registered).toMatchObject({
+    names: [
+      "analyze_environmental_hazard",
+      "list_environmental_hazards",
+      "get_environmental_source_coverage",
+    ],
+    analysisAnnotations: { readOnlyHint: false, untrustedContentHint: true },
+    hazardCatalog: {
+      status: "hazard_catalog",
+      ui_updated: false,
+    },
+    coverageCatalog: {
+      status: "coverage_catalog",
+      hazard: "air_quality",
+      coverage_scope: "pipeline_eligibility_not_observation",
+      live_sources_queried: false,
+      actual_observation_not_established: true,
+    },
   });
 
   const executeAgentAnalysis = async (input: {
@@ -60,13 +82,15 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
     longitude: number;
   }) => page.evaluate(async (agentInput) => {
     const state = globalThis as typeof globalThis & {
-      __skyToPorchWebMcpTool?: WebMCP.ModelContextTool;
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
     };
-    if (!state.__skyToPorchWebMcpTool) throw new Error("WebMCP tool was not registered");
-    return state.__skyToPorchWebMcpTool.execute(
+    const tool = state.__skyToPorchWebMcpTools?.analyze_environmental_hazard;
+    if (!tool) throw new Error("WebMCP analysis tool was not registered");
+    return tool.execute(
       {
         place: agentInput.place,
         hazard: "fire_smoke",
+        analysis_scope: "single_hazard_only",
         concern: "pets",
         latitude: agentInput.latitude,
         longitude: agentInput.longitude,
@@ -144,4 +168,204 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
       "true"
     );
   }
+});
+
+test("related-context scope automatically checks heat and drought as separate visible chains", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    state.__skyToPorchWebMcpTools = {};
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: async (tool: WebMCP.ModelContextTool) => {
+          state.__skyToPorchWebMcpTools![tool.name] = tool;
+        },
+      },
+    });
+  });
+
+  const queriedHazards: string[] = [];
+  await page.route("**/api/drought/query", async (route) => {
+    queriedHazards.push("drought_land");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        result: {
+          kind: "unsupported_coverage",
+          sourceOutcomes: {},
+          rejectionReason: "Deterministic drought context boundary.",
+        },
+      }),
+    });
+  });
+  await page.route("**/api/heat/query", async (route) => {
+    queriedHazards.push("extreme_heat");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        result: {
+          kind: "unsupported_coverage",
+          rejectionReason: "Deterministic heat context boundary.",
+        },
+      }),
+    });
+  });
+
+  await gotoHydrated(page, "/");
+  await expect(page.locator('[data-testid="webmcp-ready-badge"]:visible'))
+    .toHaveText("Agent-ready");
+
+  const output = await page.evaluate(async () => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    const tool = state.__skyToPorchWebMcpTools?.analyze_environmental_hazard;
+    if (!tool) throw new Error("WebMCP analysis tool was not registered");
+    return tool.execute(
+      {
+        place: "Phoenix, Arizona",
+        hazard: "extreme_heat",
+        concern: "health",
+        latitude: 33.4484,
+        longitude: -112.074,
+        question: "How could heat and persistent dry conditions affect me?",
+      },
+      { signal: new AbortController().signal }
+    );
+  }) as Record<string, unknown>;
+
+  expect(queriedHazards).toHaveLength(2);
+  expect(queriedHazards).toEqual(expect.arrayContaining(["drought_land", "extreme_heat"]));
+  expect(output).toMatchObject({
+    status: "related_environmental_evidence_bundle",
+    relationship: "co_occurring_context_not_causation",
+    included_chains: ["drought_land", "extreme_heat"],
+  });
+  expect(JSON.stringify(output).length).toBeLessThanOrEqual(1_500);
+
+  const visibleReceipt = page.locator('[data-testid="agent-analysis-notice"]:visible');
+  await expect(visibleReceipt.getByTestId("agent-analysis-receipt"))
+    .toContainText("Extreme Heat · Phoenix, Arizona");
+  await expect(visibleReceipt.getByTestId("agent-related-context-receipt"))
+    .toContainText("Drought & Land");
+  await expect(visibleReceipt.getByTestId("agent-related-context-receipt"))
+    .toContainText("co-occurrence is not causation");
+
+  const visibleInsight = page.locator('[data-testid="insight-navigation"]:visible');
+  await expect(visibleInsight.getByTestId("related-drought_land-evidence-chain"))
+    .toContainText("Collected automatically under related-context scope");
+  await expect(visibleInsight.getByTestId("related-drought_land-evidence-chain"))
+    .toContainText("co-occurrence does not establish");
+});
+
+test("volcano related context automatically adds separate air-quality and heat chains", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    state.__skyToPorchWebMcpTools = {};
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: async (tool: WebMCP.ModelContextTool) => {
+          state.__skyToPorchWebMcpTools![tool.name] = tool;
+        },
+      },
+    });
+  });
+
+  const queriedHazards: string[] = [];
+  for (const [path, hazardId] of [
+    ["**/api/air/query", "air_quality"],
+    ["**/api/volcano/query", "earth_volcanoes"],
+  ] as const) {
+    await page.route(path, async (route) => {
+      queriedHazards.push(hazardId);
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          result: {
+            kind: "unsupported_coverage",
+            hazardId,
+            date: body.date,
+            area: body.area,
+            retrievalAttempted: true,
+            sourceOutcomes: {},
+            meaning: {
+              concern: "community",
+              summary: `Deterministic ${hazardId} context boundary.`,
+              optionalQuestionAcknowledged: true,
+            },
+            limitations: ["This chain does not establish cross-hazard causation."],
+            rejectionReason: `No ${hazardId} observation in this deterministic test.`,
+          },
+        }),
+      });
+    });
+  }
+  await page.route("**/api/heat/query", async (route) => {
+    queriedHazards.push("extreme_heat");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        result: {
+          kind: "unsupported_coverage",
+          rejectionReason: "Deterministic heat context boundary.",
+        },
+      }),
+    });
+  });
+
+  await gotoHydrated(page, "/");
+  const output = await page.evaluate(async () => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    const tool = state.__skyToPorchWebMcpTools?.analyze_environmental_hazard;
+    if (!tool) throw new Error("WebMCP analysis tool was not registered");
+    return tool.execute(
+      {
+        place: "Hilo, Hawaii",
+        hazard: "earth_volcanoes",
+        concern: "community",
+        latitude: 19.7074,
+        longitude: -155.0885,
+        question: "Check volcanic activity, air quality, and heat together.",
+      },
+      { signal: new AbortController().signal }
+    );
+  }) as Record<string, unknown>;
+
+  expect(queriedHazards).toHaveLength(3);
+  expect(queriedHazards).toEqual(expect.arrayContaining([
+    "air_quality",
+    "extreme_heat",
+    "earth_volcanoes",
+  ]));
+  expect(output).toMatchObject({
+    relationship: "co_occurring_context_not_causation",
+    included_chains: ["air_quality", "extreme_heat", "earth_volcanoes"],
+  });
+  expect(JSON.stringify(output).length).toBeLessThanOrEqual(1_500);
+
+  const visibleInsight = page.locator('[data-testid="insight-navigation"]:visible');
+  await expect(visibleInsight.getByTestId("related-air_quality-evidence-chain"))
+    .toContainText("Related Air Quality evidence");
+  await expect(visibleInsight.getByTestId("related-extreme_heat-evidence-chain"))
+    .toContainText("Related Extreme Heat evidence");
 });

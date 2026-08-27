@@ -11,6 +11,7 @@ const PUBLIC_SOURCE_URLS: Readonly<Record<string, string>> = {
   nws_station_observations: "https://www.weather.gov/documentation/services-web-api",
   noaa_ncei_global_hourly:
     "https://www.ncei.noaa.gov/products/global-historical-climatology-network-hourly",
+  nws_tropical_cyclone_report: "https://www.weather.gov/hgx/beryl2024",
   us_drought_monitor_rest: "https://droughtmonitor.unl.edu/DmData/WebServiceInfo.aspx",
 };
 

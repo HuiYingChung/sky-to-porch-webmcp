@@ -25,6 +25,7 @@ import {
   type HeatQueryResult,
 } from "@/lib/heat/types";
 import type { CoverageGapQueryResult } from "@/lib/coverage-gap/types";
+import type { StormQueryResult } from "@/lib/storm/types";
 import type {
   AnalysisExecutionOptions,
   AnalysisOutcome,
@@ -517,6 +518,63 @@ async function analyzeFlood(
   }
 }
 
+async function analyzeWindStorm(
+  request: AnalysisRequest,
+  optionalQuestion: string | undefined,
+  options: AnalysisExecutionOptions
+): Promise<AnalysisOutcome> {
+  const { placeSelection, concern } = request;
+  const dates = completedDates(placeSelection);
+  const date = dates && dates.startDate === dates.endDate
+    ? dates.startDate
+    : null;
+  if (date === null) {
+    return {
+      hazardId: "wind_storm",
+      result: {
+        kind: "unsupported_date",
+        rejectionReason: "Wind & Storm needs exactly one completed UTC date.",
+      },
+    };
+  }
+  try {
+    const { response, payload } = await postJson(
+      "/api/storm/query",
+      {
+        ...canonicalAreaQueryForSelection(placeSelection),
+        date,
+        mode: "live",
+        concern,
+        ...(optionalQuestion ? { optionalQuestion } : {}),
+      },
+      options
+    );
+    if (payload.ok === true && payload.result) {
+      return {
+        hazardId: "wind_storm",
+        result: payload.result as StormQueryResult,
+      };
+    }
+    return {
+      hazardId: "wind_storm",
+      result: {
+        kind: "source_failure",
+        rejectionReason: failureReason(response, payload, "Wind & Storm"),
+      },
+    };
+  } catch (error) {
+    throwIfAborted(error);
+    return {
+      hazardId: "wind_storm",
+      result: {
+        kind: "source_failure",
+        rejectionReason:
+          "Wind request failed. No rain, flood, fixture, or out-of-area station evidence was substituted.",
+      },
+    };
+  }
+}
+
 async function analyzeFire(
   request: AnalysisRequest,
   optionalQuestion: string | undefined,
@@ -623,6 +681,8 @@ export async function executeAnalysisRequest(
       return analyzeHeat(request, optionalQuestion, options);
     case "flood_storm":
       return analyzeFlood(request, optionalQuestion, options);
+    case "wind_storm":
+      return analyzeWindStorm(request, optionalQuestion, options);
     case "fire_smoke":
       return analyzeFire(request, optionalQuestion, options);
   }

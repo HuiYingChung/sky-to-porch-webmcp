@@ -11,12 +11,19 @@ The pre-existing product has been imported behind a documented prior-work
 boundary. A browser-native WebMCP vertical slice is now implemented and
 verified locally with deterministic unit, integration, and browser tests.
 
-The current tool is `analyze_environmental_hazard`. It resolves a place or
+The primary tool is `analyze_environmental_hazard`. It resolves a place or
 accepts selected coordinates, runs the same hazard-analysis application layer
 as the human form, updates the map and Insight panel, and returns a compact
-evidence result. Supported-browser discovery with the challenge agent and
-model-backed tool-selection evals remain release gates; this repository does
-not yet claim a public live WebMCP experience.
+evidence result. Two baseline read-only tools list the governed hazards and the
+checked-in source-coverage catalog; they are for capability questions, not
+mandatory preflight calls before a concrete analysis. After a result exists, a
+read-only evidence-inspection tool is available; a Home + Wind result also
+makes a local storm-claim discussion tool available. Supported-browser
+discovery with the challenge agent and model-backed tool-selection evals remain
+release gates; this repository does not yet claim a public live WebMCP
+experience. Exact local verification records include
+[the related-context analysis](docs/testing/wind-storm-verification-2026-08-26.md)
+and [the bounded discovery tools](docs/testing/discovery-tools-verification-2026-08-26.md).
 
 The original application and the exact prior-work boundary are documented in
 [PRIOR_WORK.md](PRIOR_WORK.md).
@@ -66,6 +73,35 @@ threshold. Missing or failed GeoMet evidence remains visible and never becomes
 a claim of no flooding, safe travel, or no property impact. Other GeoMet
 weather and AQHI collections are not part of this integration.
 
+## Related environmental context, without merged causation
+
+`Wind & Storm` uses selected-area NOAA GHCNh wind speed and gust observations.
+For Hurricane Beryl on 2024-07-08, a pinned NWS Houston/Galveston report may
+also contribute regional post-event wind context when the selected geometry is
+inside its governed Southeast Texas scope. These records do not establish wind
+at a roof, property damage, causation, policy coverage, or a claim outcome.
+
+`Flood & Heavy Rain` is the existing `flood_storm` path. It uses rainfall,
+flood extent, inundation, and water-gage evidence; it does not establish wind
+damage. Every WebMCP result includes a machine-readable evidence scope. A broad
+storm-impact question uses `wind_storm` with the default `related_context`
+scope, so the tool automatically runs both analyses and returns two related but
+unmerged evidence chains.
+
+The same product-owned relationship table covers Extreme Heat with Drought &
+Land, Fire & Smoke with Air Quality, and Earth & Volcanoes with both Air
+Quality and Extreme Heat. Related context is the Agent default. Only a question
+that explicitly limits itself to one hazard uses `single_hazard_only`. Each
+chain preserves its own source coverage, observation time, evidence state,
+freshness, confidence, provenance, and limitations. The bundle label
+`co_occurring_context_not_causation` prevents the Agent from presenting a
+co-occurrence as proof that one hazard caused another.
+
+The Houston Beryl roof-and-insurer journey is one practical Home use case, not
+the definition of the site. Sky to Porch also supports Travel, Pets, Health,
+Power & Internet, and Community questions within each source's truthful
+coverage.
+
 ## Architecture
 
 Human UI and WebMCP tools share one application layer:
@@ -88,6 +124,13 @@ rate limits.
 
 - Feature-detects `document.modelContext` and registers from a client
   component.
+- Registers `analyze_environmental_hazard`, `list_environmental_hazards`, and
+  `get_environmental_source_coverage` as the baseline surface. Concrete
+  environmental questions go directly to analysis; discovery is reserved for
+  capability or source-eligibility questions.
+- Reads coverage from the same deterministic catalog as the human About UI,
+  performs no live request, and labels it pipeline eligibility rather than an
+  observation for a place or date.
 - Uses an `AbortController` for registration lifecycle and forwards tool-call
   cancellation through geocoding and evidence retrieval.
 - Rejects unknown fields, invalid coordinates, invalid or incomplete dates,
@@ -102,6 +145,20 @@ rate limits.
   danger.
 - Marks source-derived output as untrusted content and does not claim the tool
   is read-only because it intentionally changes the visible page state.
+- Defaults Agent requests to `related_context`, using a bounded product-owned
+  relationship table. `single_hazard_only` is reserved for an explicitly
+  narrow question. One tool execution can therefore gather two or three
+  separately labelled chains without asking the person to know the hazard or
+  source taxonomy.
+- Labels every bundle `co_occurring_context_not_causation`. Wind and water,
+  heat and drought, smoke and ambient air quality, and volcano, air, and heat
+  never substitute for one another or silently become a causal conclusion.
+- Registers `inspect_current_environmental_evidence` only while a completed
+  analysis is active. It reads the bounded primary result and related-chain
+  statuses without starting another hazard query.
+- Registers `prepare_storm_claim_discussion` only after a Home + Wind result.
+  It opens a documentation checklist in the current page and never submits a
+  claim or decides causation, coverage, liability, repair scope, or outcome.
 - Keeps the compact tool result within the current approximately 1.5K-character
   guidance while leaving complete evidence in the UI.
 

@@ -5,9 +5,19 @@ import type { DroughtQueryResult } from "@/lib/drought/types";
 import type { FireQueryResult } from "@/lib/fire/types";
 import type { FloodQueryResult } from "@/lib/flood/types";
 import type { HeatQueryResult } from "@/lib/heat/types";
+import type { StormQueryResult } from "@/lib/storm/types";
 
 export type AnalysisEvidenceMode = "live" | "fixture";
 export type AnalysisOrigin = "human" | "agent";
+
+export interface EvidenceBundleContext {
+  /** The hazard the Agent chose as the main subject of the question. */
+  primaryHazardId: HazardId;
+  /** All independently executed evidence chains, including the primary chain. */
+  includedHazardIds: HazardId[];
+  /** Controls shared-view preservation while the bundle runs sequentially. */
+  role: "start_context" | "context" | "primary";
+}
 
 export interface AnalysisRequest {
   hazardId: HazardId;
@@ -15,11 +25,14 @@ export interface AnalysisRequest {
   placeSelection: PlaceSelection;
   optionalQuestion?: string;
   evidenceMode?: AnalysisEvidenceMode;
+  /** Internal WebMCP orchestration metadata; never changes source ownership. */
+  evidenceBundle?: EvidenceBundleContext;
 }
 
 export type AnalysisOutcome =
   | { hazardId: "fire_smoke"; result: FireQueryResult }
   | { hazardId: "flood_storm"; result: FloodQueryResult }
+  | { hazardId: "wind_storm"; result: StormQueryResult }
   | { hazardId: "extreme_heat"; result: HeatQueryResult }
   | { hazardId: "drought_land"; result: DroughtQueryResult }
   | {

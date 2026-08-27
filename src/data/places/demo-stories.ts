@@ -63,9 +63,14 @@ export const DEMO_STORIES: readonly DemoStory[] = [
   {
     placeId: "demo-houston",
     name: "Houston, TX",
-    story: "Hurricane Beryl (July 2024) — rain imagery, flood extent, and river gages.",
+    story: "Hurricane Beryl (July 2024) — wind, rain, flooding, and evidence for real-world decisions.",
     radiusKm: 50,
     hazards: [
+      {
+        hazardId: "wind_storm",
+        timeLabel: "Jul 8, 2024",
+        preset: { kind: "fixed", startDate: "2024-07-08", endDate: "2024-07-08" },
+      },
       {
         hazardId: "flood_storm",
         timeLabel: "Jul 8–9, 2024",

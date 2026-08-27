@@ -23,6 +23,25 @@ The service owns:
 
 ## Implemented tool surface
 
+Three baseline tools are registered whenever WebMCP is available. Two more
+tools are registered only while the necessary validated page state exists.
+
+### list_environmental_hazards
+
+Returns the governed hazard IDs, user-concern vocabulary, and non-recursive
+related-context defaults. It is read-only and intended only for capability
+questions or genuine hazard ambiguity. Its description tells the Agent not to
+insert it before a concrete analysis request.
+
+### get_environmental_source_coverage
+
+Reads the same checked-in source-coverage catalog shown by the human About UI.
+A hazard-only call returns a compact source index; an optional `source_id`
+returns one detailed coverage profile with its official documentation link.
+It makes no live request and labels every result
+`pipeline_eligibility_not_observation`, so region or time eligibility cannot be
+presented as an actual observation for a selected place and date.
+
 ### analyze_environmental_hazard
 
 Runs the complete safe analysis path and synchronizes the visible UI.
@@ -31,6 +50,9 @@ Inputs:
 
 - place text or selected-area coordinates;
 - hazard;
+- analysis scope (`related_context` by default, or `single_hazard_only` only
+  for an explicitly narrow question);
+- optional additional related hazards named or implied by a broad question;
 - time window;
 - everyday concern;
 - optional question.
@@ -46,11 +68,38 @@ Output:
 
 The output excludes raw source payloads and long prose.
 
-### Optional second tool
+Its description tells the Agent to call it directly for a concrete
+place-and-hazard question rather than creating a discovery-tool waterfall.
 
-A source-coverage or current-analysis tool will be added only if evals show it
-improves tool selection or the shared user journey. It must not introduce a
-fragile required call order.
+### inspect_current_environmental_evidence
+
+Registered only while a completed result is active. It reads the compact
+primary evidence, source identifiers, limitations, the hazard-specific scope,
+and any separately retained related-chain statuses. It does not run another
+query and is not required before or after the primary tool.
+
+### prepare_storm_claim_discussion
+
+Registered only while the current result is Home + Wind & Storm and a bounded
+claim-discussion guide exists. It opens that guide in the visible page and
+returns a compact documentation checklist. It does not contact an insurer,
+submit a claim, or decide damage, causation, coverage, liability, repair scope,
+or outcome.
+
+Related context is the Agent default. Deterministic code expands the selected
+primary hazard through a bounded, non-recursive relationship table: Wind with
+Flood, Heat with Drought, Fire/Smoke with Air Quality, and Volcanoes with Air
+Quality and Heat. The Agent may add hazards that a broad question names or
+strongly implies, up to three context chains. It uses `single_hazard_only` only
+when the person explicitly restricts the request to one hazard.
+
+Every result exposes a hazard-specific `evidence_scope`. The tool resolves the
+place once, runs independent domain analyses in parallel under one cancellation
+and stale-generation guard, and returns one compact bundle labelled
+`co_occurring_context_not_causation`. The shared UI commits the finished bundle
+as one transaction, renders the primary evidence first, and keeps related
+chains in separate sections. No companion observation repairs another chain's
+no-data or source-failure state.
 
 When no coordinates are supplied, place search returns at most three choices.
 One result proceeds; multiple results return `needs_place_choice` with
@@ -72,20 +121,25 @@ reminder for missing, incomplete, quiet, stale, or failed evidence.
 
 Register tools from a client component after feature detection. Tie
 registration to an AbortController so unmounting or replacement unregisters
-the tools. Keep definitions stable and use the shared controller's current
-state through safe closures.
+the tools. The three baseline tools share one registration lifecycle. Keep
+definitions stable and use the shared controller's current state through safe
+closures for the two contextual tools.
 
 ## Security and failure behavior
 
 - The tool does not mutate persistent or external state, but its
   `readOnlyHint` is false because synchronizing the visible page is an
   intentional state change.
+- Hazard and coverage discovery are accurately marked read-only and never
+  update the shared UI or query a live source.
 - External observations are marked as untrusted content.
 - Cross-origin exposure is disabled unless an exact trusted origin is
   explicitly required.
 - Invalid input, ambiguity, unsupported coverage, no observation, source
   failure, and internal failure return distinct compact error states.
 - Tool output must not turn missing evidence into reassurance.
+- A shared storm name must not merge wind observations into a water result or
+  water observations into a wind result.
 
 ## Internal-model decision
 
