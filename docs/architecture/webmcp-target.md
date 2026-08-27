@@ -26,14 +26,15 @@ The service owns:
 Three baseline tools are registered whenever WebMCP is available. Two more
 tools are registered only while the necessary validated page state exists.
 
-### list_environmental_hazards
+### get_sky_to_porch_help_and_demos
 
 Returns the governed hazard IDs, optional user-concern vocabulary,
 non-recursive related-context defaults, and a compact index of three curated
 historical demos with ready analysis inputs. It takes no selector input. It is
-read-only and intended only for capability questions, genuine hazard
-ambiguity, or explicit demo selection; it is not a mandatory preflight before
-a concrete analysis request.
+read-only and intended only when a request lacks a named or implied hazard, for
+capability questions, or for explicit demo selection. For missing-hazard
+requests, the Agent may use this help catalog once, must ask the person to
+choose, and must wait. It is not a preflight before concrete analysis.
 
 ### get_environmental_source_coverage
 
@@ -108,9 +109,9 @@ no-data or source-failure state.
 
 When no coordinates are supplied, place search returns at most three choices.
 One result proceeds; multiple results return `needs_place_choice` with
-card-ready labels and exact retry coordinates. The agent keeps the hazard,
-concern, dates, radius, and question unchanged and asks the person before
-calling again.
+card-ready labels and no public coordinate bypass. The Agent keeps the hazard,
+concern, time, radius, and question unchanged, asks the person, waits for the
+reply, then calls analysis with the selected label and finishes the task.
 
 After a successful Agent analysis, the visible product shows an action receipt
 with the place, hazard, and time. Evidence is one action away. If another

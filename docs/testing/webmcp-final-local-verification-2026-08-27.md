@@ -2,12 +2,12 @@
 
 ## Candidate and boundary
 
-- Branch: `main`
-- Product/documentation commit: `b3859f9405ccdc387fb2cc35bfc304ee548537e6`
-- Repository state at the gate: clean; ten local commits ahead of `origin/main`
-- No push, deployment, visibility change, or submission occurred.
+- Branch: `fix/webmcp-place-choice-evaluation`
+- Product commit: `ceb182a`
+- This record establishes local exact-product evidence. PR CI, merge,
+  deployment, visibility, and production-native behavior remain separate.
 - Production-native evidence remains attached to published commit `c6f3c8c`;
-  this record is local exact-candidate evidence only.
+  this record does not transfer that evidence to `ceb182a`.
 
 ## Implemented boundary
 
@@ -19,51 +19,55 @@
   label.
 - Every analysis call carries one required time intent:
   `latest_completed`, one completed UTC date, or a bounded date range.
-- The list and source-coverage tools no longer expose guessable demo or source
-  selectors.
+- The help/demo and source-coverage tools expose no guessable demo or source
+  selectors; their names and descriptions separate missing-hazard help from
+  concrete analysis.
 
 ## Deterministic exact-candidate gate
 
-The following ran against `b3859f9`:
+The following ran against product commit `ceb182a`:
 
 - TypeScript: pass.
 - ESLint: pass with no warnings or errors.
-- Unit: 70 files, 1,294 tests passed.
+- Unit: 71 files, 1,309 tests passed.
 - Integration: 10 files, 132 tests passed.
 - Production build: pass; 14 of 14 pages generated.
-- Playwright first full run: 229/230 passed; one unrelated existing Heat-layer
-  checkbox did not toggle under six-worker concurrency.
-- The failed Heat case passed alone, then the complete suite was rerun with
-  four workers: 230/230 passed.
-- Secret scan: pass on a `git archive` tracked-file snapshot of `b3859f9`.
-  The archive has no `.git`, so the scanner reported Git enumeration
-  unavailable and scanned the complete extracted tree instead. `.env.local`
-  was never present in that snapshot; Git independently reports it ignored by
-  `*.env.local` and not tracked.
+- Playwright: 230/230 desktop/mobile journeys passed after the sandbox-blocked
+  browser spawn was rerun with browser-process permission.
+- Secret scan: pass on an exact `ceb182a` tracked-file archive that excluded
+  `.env.local` by construction.
 
-The browser suite includes the new desktop and mobile journey that proves an
-ambiguous Springfield call runs no evidence query, the selected Illinois label
-then runs one analysis, and the shared Agent receipt/UI updates.
+The browser suite proves an ambiguous Springfield call runs no evidence query,
+the selected Illinois label then runs one analysis, and the shared Agent
+receipt/UI updates.
 
-## Model-backed evaluation
+## Improved model-backed evaluation
 
-The final-schema baseline used `gpt-5-mini`, one run of all 22 selection cases,
-and both multi-turn ambiguity cases. Raw responses remain locally under the
-gitignored artifact:
-`artifacts/webmcp-evals/2026-08-27T20-36-49.746Z-gpt-5-mini.json`.
+Product commit `ceb182a` strengthened the tool contract and made the runner
+execute the complete post-choice continuation, including the selected-label
+tool result and the final safety-bounded answer. The final `gpt-5-mini` gate
+used low reasoning for three runs of all 22 selection cases and both multi-turn
+ambiguity cases. Raw responses remain locally under the gitignored artifact:
+`artifacts/webmcp-evals/2026-08-27T21-43-45.875Z-gpt-5-mini.json`.
 
-- semantic selection and arguments: 18/22;
-- exact calls: 6/22;
-- expected-argument subset: 10/22;
-- asks and waits after ambiguous output: pass;
-- resumes after the person's Springfield, Illinois choice with
-  `time=latest_completed`: pass;
-- usage: 25 API responses, 24,666 input tokens (2,048 cached) and 1,927 output
-  tokens.
+- semantic selection and arguments: 66/66;
+- exact calls: 18/66;
+- expected-argument subset: 51/66;
+- asks and waits after ambiguous output: 3/3;
+- resumes after the person's Springfield, Illinois choice, executes the tool,
+  finishes the answer, and preserves the no-observation safety boundary: 3/3;
+- usage: 81 API responses, 91,371 input tokens (21,632 cached) and 12,937
+  output tokens;
+- estimated cost for the final run: $0.04384955 at the public token rates
+  checked on 2026-08-27, excluding account-specific adjustments.
 
-The four semantic misses remain release-visible: two single-hazard questions
-were expanded to related context, one no-hazard question guessed Air Quality
-instead of asking, and one direct Volcano question called discovery first.
-Therefore the deterministic gate passes, the requested ambiguity behavior
-passes, and the overall model-selection gate remains partial rather than
-passed.
+The earlier 18/22 result remains in Git history as a calibration record rather
+than being rewritten. Across all 16 strengthening/calibration artifacts created
+for this improvement pass, the aggregate public-rate estimate is $0.192591,
+well below the owner's $5 authorization.
+
+The initial sandbox Playwright attempt failed at process spawn with `EPERM`;
+the permitted browser rerun passed. The ordinary working-tree secret scan
+could not classify tracked files inside the sandbox and fail-closed on ignored
+`.env.local`; scanning the exact `ceb182a` archive passed without reading that
+local file.

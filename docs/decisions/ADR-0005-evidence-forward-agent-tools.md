@@ -3,6 +3,10 @@
 **Status:** Superseded in part by ADR-0006
 **Date:** 2026-08-27
 
+Current-name note: the historical `list_environmental_hazards` references
+below now correspond to `get_sky_to_porch_help_and_demos`; the selector-free
+catalog behavior is unchanged, while its missing-hazard/help role is explicit.
+
 ## Context
 
 The first WebMCP surface was safe and deterministic, but its output and visible

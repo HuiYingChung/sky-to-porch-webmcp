@@ -14,18 +14,18 @@
 - W3 WebMCP tools: three baseline tools plus two contextual tools implemented;
   production native discovery, analysis, no-observation, shared-UI, and
   contextual-tool journeys pass at `c6f3c8c`. Contextual inspection is now
-  production-conformant at 2,219 characters. Local candidate `b3859f9` fixes
-  the exposed primary-bundle cap and strengthens ambiguity handling with
-  label-only choices, no public coordinate bypass, required time intent, and a
-  tested selected-label continuation; publication and production
+  production-conformant at 2,219 characters. Local candidate `ceb182a` fixes
+  the exposed primary-bundle cap, strengthens ambiguity handling with
+  label-only choices and a tested selected-label continuation, and separates
+  missing-hazard help from concrete analysis; publication and production
   re-verification remain pending
 - W4 provider cleanup: complete; deterministic-only application runtime
 - W5 verification: the published `c6f3c8c` candidate passed exact remote CI at
-  run `33105415851`; exact local candidate `b3859f9` passes typecheck, lint,
-  1,294 unit tests, 132 integration tests, a 14-page production build, a clean
-  230-journey desktop/mobile Playwright run, and a tracked-snapshot secret
-  scan. The final-schema `gpt-5-mini` run is a truthful partial model pass:
-  18/22 selection/argument semantics and 2/2 ambiguity wait/resume cases
+  run `33105415851`; exact local candidate `ceb182a` passes typecheck, lint,
+  1,309 unit tests, 132 integration tests, a 14-page production build, a clean
+  230-journey desktop/mobile Playwright run, and a tracked-archive secret scan.
+  Final-schema `gpt-5-mini` with low reasoning passes three independent runs:
+  66/66 semantic selection/argument cases and 6/6 ambiguity wait/resume cases
 - W5a shared-view UX: complete; full deterministic and browser regression pass
 - W5b Canadian Flood ground evidence: complete; bounded ECCC GeoMet live smoke
   and the full 220-journey browser regression passed
@@ -41,8 +41,8 @@
 - W6 release and submission: private release preparation in progress; the repo
   remains private; published commit `c6f3c8c` passed its mechanical
   reachable-history preflight, and Devpost/video drafts are prepared. The new
-  local corrections are committed at `f42cc37` and still need a final
-  clean-candidate preflight after the evidence-record commit.
+  local corrections are committed through `ceb182a`; exact remote CI remains
+  pending until this PR update is pushed.
   Visibility, deployment, push, video publication, and submission still require
   explicit authorization
 
@@ -253,14 +253,15 @@ Technical WebMCP details remain Codex's responsibility.
 - WebMCP tools are discoverable in the supported production in-app browser.
   Production discovery, primary execution, shared UI, ambiguity,
   no-observation, and contextual registration pass at `c6f3c8c`; contextual
-  output is within its limit. Candidate `b3859f9` fixes the primary limit and
-  passes local deterministic, browser, and ambiguity model checks; it still
+  output is within its limit. Candidate `ceb182a` fixes the primary limit and
+  passes local deterministic, browser, and three-run model checks; it still
   awaits publication and production native-Agent re-verification.
 - Human and agent interactions share one evidence pipeline and UI state.
 - The deterministic safety model is unchanged or stronger.
 - Tool descriptions and outputs stay within current implementation guidance.
-- All deterministic tests and exact-candidate checks pass locally. Model
-  selection remains a separate partial gate at 18/22; exact remote CI still
+- All deterministic tests and exact-candidate checks pass locally. The
+  separate model gate passes 66/66 semantic selection/argument cases and 6/6
+  ambiguity wait/resume journeys across three runs. Exact remote CI still
   applies only to published `c6f3c8c` until the owner pushes this candidate.
 - Prior work and new work are unambiguous.
 - The repository is publicly reproducible under a recognized open-source

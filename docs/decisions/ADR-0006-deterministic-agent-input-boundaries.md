@@ -31,9 +31,10 @@ them instead of using the returned catalog.
   `latest_completed`, one `YYYY-MM-DD`, or a bounded
   `YYYY-MM-DD/YYYY-MM-DD` range. Deterministic code still rejects invalid,
   future, unordered, or hazard-incompatible ranges.
-- Keep `list_environmental_hazards` selector-free and return compact ready
-  inputs for all three curated demos. Keep source coverage hazard-wide and
-  selector-free.
+- Keep `get_sky_to_porch_help_and_demos` selector-free and return compact ready
+  inputs for all three curated demos. Its name and description make it a
+  missing-hazard/help surface rather than a preflight for concrete analysis.
+  Keep source coverage hazard-wide and selector-free.
 - Evaluate the pre-choice wait and post-choice continuation separately from
   deterministic tool execution. A model score is not a substitute for the
   browser test that proves the selected label reaches the shared controller

@@ -85,7 +85,7 @@ proceeds without forcing the person to use demo-shaped language.
 | Tool | Natural trigger | Human-page effect |
 | --- | --- | --- |
 | `analyze_environmental_hazard` | A concrete place-and-hazard question | Updates the map, Meaning, Evidence, and Agent receipt |
-| `list_environmental_hazards` | Capability discovery or explicit demo selection | None; read-only catalog |
+| `get_sky_to_porch_help_and_demos` | Missing-hazard clarification, capability discovery, or explicit demo selection | None; read-only help catalog |
 | `get_environmental_source_coverage` | Source, region, or date eligibility | None; read-only coverage, not an observation |
 | `inspect_current_environmental_evidence` | A completed analysis needs exact values or citations | Reads the active result without a new query |
 | `prepare_storm_claim_discussion` | A completed Home + Wind analysis | Opens an evidence and property-document checklist |
@@ -142,11 +142,11 @@ that assessment.
 
 | Layer | Current evidence |
 | --- | --- |
-| Deterministic product | Exact local `b3859f9`: typecheck, lint, 1,294 unit tests, 132 integration tests, 14-page production build, tracked-snapshot secret scan, and 230/230 desktop/mobile Playwright journeys pass |
-| Native WebMCP | Exact `c6f3c8c` production discovery, analysis, shared UI, no-observation, and contextual tools pass. Local `b3859f9` adds the bounded primary output and selected-label ambiguity continuation; publication and production recheck remain separate |
+| Deterministic product | Exact local `ceb182a`: typecheck, lint, 1,309 unit tests, 132 integration tests, 14-page production build, tracked-archive secret scan, and 230/230 desktop/mobile Playwright journeys pass |
+| Native WebMCP | Exact `c6f3c8c` production discovery, analysis, shared UI, no-observation, and contextual tools pass. Local `ceb182a` adds bounded primary output, selected-label ambiguity continuation, and the clarified help/analysis contract; publication and production recheck remain separate |
 | Historical official sources | All six primary and related chains in the three curated demos returned observations |
 | Generic product path | Albuquerque non-demo browser journey plus selection cases across all seven hazards |
-| Tool selection | Final-schema `gpt-5-mini`: 18/22 semantic selection/arguments; both ambiguity wait and post-choice resume cases pass. Four misses remain documented rather than being counted as a passed model gate |
+| Tool selection | Final-schema `gpt-5-mini`, low reasoning, three runs: 66/66 semantic selection/argument cases and 6/6 ambiguity wait/resume journeys pass. Resume scoring executes the selected-place tool and checks the final no-observation safety boundary |
 
 Evidence records:
 
@@ -195,7 +195,7 @@ use `OPENAI_API_KEY` from the gitignored `.env.local`, but that key is never
 needed by the application or its deployed WebMCP tools:
 
 ```bash
-npm run eval:webmcp:model -- --runs 3 --include-post-tool
+npm run eval:webmcp:model -- --runs 3 --reasoning low --include-post-tool
 ```
 
 ## Attribution and license

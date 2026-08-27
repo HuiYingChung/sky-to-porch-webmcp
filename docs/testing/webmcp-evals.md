@@ -54,7 +54,7 @@ Before release, run the dataset repeatedly with the challenge agent and record:
 6. whether `single_hazard_only` appears only for an explicitly restricted ask;
 7. whether named or strongly implied extra hazards are included without
    exceeding the bounded related-chain limit.
-8. whether capability questions select `list_environmental_hazards` without
+8. whether capability questions select `get_sky_to_porch_help_and_demos` without
    running evidence retrieval;
 9. whether source eligibility questions select
    `get_environmental_source_coverage` and preserve the distinction between
@@ -93,24 +93,36 @@ discovery surface, label-only place choices, removal of public coordinate
 fields, required `time` intent, and semantic continuation scoring in
 ADR-0006. Failed calibration scores are not release evidence.
 
-The final-schema one-run baseline used `gpt-5-mini` with minimal reasoning and
-low text verbosity. Raw artifact:
-`2026-08-27T20-36-49.746Z-gpt-5-mini.json`.
+The final candidate used `gpt-5-mini` with low reasoning and low text verbosity
+for three complete, independent runs. Raw artifact:
+`2026-08-27T21-43-45.875Z-gpt-5-mini.json`.
 
-- tool selection and argument semantics: **18/22**;
-- exact calls: **6/22**;
-- expected-argument subset: **10/22**;
-- ambiguous result asks and waits: **pass**;
-- selected Springfield label resumes the unfinished analysis with
-  `time=latest_completed`: **pass**;
-- API usage: 25 responses; token totals are retained in the raw artifact.
+- semantic tool selection and arguments: **66/66** (22 cases x 3 runs);
+- exact calls: **18/66**;
+- expected-argument subset: **51/66**;
+- ambiguity wait and selected-place resume journeys: **6/6**
+  (2 cases x 3 runs);
+- resumed analysis actually executed the selected Springfield label, received
+  a deterministic no-observation result, produced a final answer, and retained
+  the boundary that missing observations do not prove safety;
+- API usage: 81 responses, 91,371 input tokens (21,632 cached) and 12,937
+  output tokens;
+- estimated API cost at the public `gpt-5-mini` token rates checked on
+  2026-08-27: **$0.04384955**; account-specific billing adjustments are not
+  included.
 
-This is a truthful partial model pass, not a passed 22-case gate. The remaining
-semantic misses were two single-hazard questions expanded to related context,
-one broad no-hazard question that should have asked for clarification, and one
-Volcano question that selected the list tool as an unnecessary preflight.
-Application-owned schema, execution, and browser tests remain separate from
-these model-selection outcomes.
+Exact-string and expected-subset counts remain diagnostics rather than the
+release score: the semantic scorer permits harmless place qualifiers, natural
+question wording, and additional optional arguments while still rejecting
+invented coordinates/dates, wrong hazards/scopes, extra tool calls, unsafe
+missing-data conclusions, or a failure to ask and wait. The semantic scorer
+has 14 deterministic unit tests.
+
+The earlier 18/22 artifact remains a retained calibration record. Its four
+misses led to sharper single-versus-related hazard descriptions, a dedicated
+missing-hazard help contract, contextual place extraction, and explicit
+concern mapping. Application-owned schema, execution, and browser tests remain
+separate from these now-passing model-selection outcomes.
 
 ## Full journeys
 
