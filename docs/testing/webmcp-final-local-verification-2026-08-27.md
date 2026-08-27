@@ -4,8 +4,12 @@
 
 - Branch: `fix/webmcp-place-choice-evaluation`
 - Product commit: `ceb182a`
-- This record establishes local exact-product evidence. PR CI, merge,
-  deployment, visibility, and production-native behavior remain separate.
+- Verified PR #5 head: `e00e7c4`
+- Exact PR-head CI run `33120305386` passed classification,
+  lint/typecheck/unit/integration/secret, production build, and Chromium E2E;
+  the Vercel preview status also passed.
+- Merge, production deployment, visibility, and production-native behavior
+  remain separate and were not inferred from PR or preview checks.
 - Production-native evidence remains attached to published commit `c6f3c8c`;
   this record does not transfer that evidence to `ceb182a`.
 

@@ -41,8 +41,9 @@
 - W6 release and submission: private release preparation in progress; the repo
   remains private; published commit `c6f3c8c` passed its mechanical
   reachable-history preflight, and Devpost/video drafts are prepared. The new
-  local corrections are committed through `ceb182a`; exact remote CI remains
-  pending until this PR update is pushed.
+  product corrections are committed at `ceb182a`; PR #5 head `e00e7c4` passed
+  exact remote CI run `33120305386` and its Vercel preview check. Production
+  deployment and native-Agent re-verification remain pending.
   Visibility, deployment, push, video publication, and submission still require
   explicit authorization
 
@@ -261,8 +262,9 @@ Technical WebMCP details remain Codex's responsibility.
 - Tool descriptions and outputs stay within current implementation guidance.
 - All deterministic tests and exact-candidate checks pass locally. The
   separate model gate passes 66/66 semantic selection/argument cases and 6/6
-  ambiguity wait/resume journeys across three runs. Exact remote CI still
-  applies only to published `c6f3c8c` until the owner pushes this candidate.
+  ambiguity wait/resume journeys across three runs. PR #5 exact-head CI passes
+  at `e00e7c4`; production-native evidence still applies only to published
+  `c6f3c8c` until this candidate is merged and deployed.
 - Prior work and new work are unambiguous.
 - The repository is publicly reproducible under a recognized open-source
   license.
