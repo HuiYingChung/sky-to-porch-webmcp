@@ -1,6 +1,28 @@
 import { expect, test } from "@playwright/test";
 import { gotoHydrated } from "./helpers";
 
+test("shows a neutral waiting status while WebMCP tools are still registering", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: () => new Promise<void>(() => {}),
+      },
+    });
+  });
+
+  await gotoHydrated(page, "/");
+  const agentStatus = page.locator('[data-testid="webmcp-status"]:visible');
+  await expect(agentStatus).toHaveText("Waiting for Agent");
+  await expect(agentStatus).toHaveAttribute("data-status", "registering");
+  await expect(agentStatus).toHaveCSS("color", "rgb(139, 148, 158)");
+  await expect(agentStatus).toHaveCSS("border-width", "0px");
+  await expect(agentStatus).toHaveCSS("border-radius", "0px");
+  await expect(agentStatus).toHaveCSS("padding", "0px");
+});
+
 test("registers WebMCP and shares an agent analysis with the visible product", async ({
   page,
 }, testInfo) => {
@@ -36,8 +58,13 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
   });
 
   await gotoHydrated(page, "/");
-  await expect(page.locator('[data-testid="webmcp-ready-badge"]:visible'))
-    .toHaveText("Agent-ready");
+  const agentStatus = page.locator('[data-testid="webmcp-status"]:visible');
+  await expect(agentStatus).toHaveText("Agent ready");
+  await expect(agentStatus).toHaveAttribute("data-status", "ready");
+  await expect(agentStatus).toHaveCSS("color", "rgb(63, 185, 80)");
+  await expect(agentStatus).toHaveCSS("border-width", "0px");
+  await expect(agentStatus).toHaveCSS("border-radius", "0px");
+  await expect(agentStatus).toHaveCSS("padding", "0px");
 
   const registered = await page.evaluate(async () => {
     const state = globalThis as typeof globalThis & {
@@ -220,8 +247,8 @@ test("related-context scope automatically checks heat and drought as separate vi
   });
 
   await gotoHydrated(page, "/");
-  await expect(page.locator('[data-testid="webmcp-ready-badge"]:visible'))
-    .toHaveText("Agent-ready");
+  await expect(page.locator('[data-testid="webmcp-status"]:visible'))
+    .toHaveText("Agent ready");
 
   const output = await page.evaluate(async () => {
     const state = globalThis as typeof globalThis & {
