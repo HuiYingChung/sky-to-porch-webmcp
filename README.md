@@ -143,7 +143,8 @@ that assessment.
 | Layer | Current evidence |
 | --- | --- |
 | Deterministic product | Exact local product commit `72f3a36`: typecheck, lint, 1,321 unit tests, 132 integration tests, 14-page production build, secret gate, and 230/230 desktop/mobile Playwright journeys pass |
-| Native WebMCP | A production Houston transcript exposed a same-label ambiguity loop. Local `72f3a36` adds distinguishable locality/type labels, stable upstream place IDs, original-query continuation, exact retry arguments, and stale-ID rejection; publication and production recheck remain separate |
+| Native WebMCP | Production merge `90b8236`: an initial `Houston` call returns distinguishable city/county choices and stable IDs with no UI update; retrying the original query with the selected ID completes the Beryl Wind + Flood bundle, stays below the output cap, and synchronizes the shared UI without another ambiguity loop |
+| Remote release | PR #6 exact-head CI run `33127306578` passed; post-merge main CI run `33128144825` passed; Vercel production deployment `dpl_DnNkQ5i91s8hEXsWvqr1JvSZNy4x` is `READY` and mapped to `90b8236` |
 | Historical official sources | All six primary and related chains in the three curated demos returned observations |
 | Generic product path | Albuquerque non-demo browser journey plus selection cases across all seven hazards |
 | Tool selection | Final-schema `gpt-5-mini`, low reasoning, three runs: 66/66 semantic selection/argument cases and 12/12 ambiguity wait/resume journeys pass. Resume scoring executes the stable-ID selection and checks the final no-observation safety boundary |

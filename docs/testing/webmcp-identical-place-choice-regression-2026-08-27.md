@@ -85,13 +85,64 @@ permits harmless optional arguments and natural wording while still rejecting
 wrong tools, hazards, scope, time, invented coordinates or IDs, premature place
 selection, extra calls before the person replies, and unsafe no-data answers.
 
-## Remaining release evidence
+## Release evidence
 
-This local record does not claim PR CI, a deployed commit, or native production
-success. After merge and deployment, production must be checked separately for:
+The local candidate was published through a separate reviewed path. Each layer
+below was checked independently:
 
-1. discovery of the nullable `place_choice_id` schema;
-2. distinguishable Houston city/county labels and stable IDs;
-3. wait after ambiguity with no UI update;
-4. original `Houston` plus the chosen ID completing the Beryl analysis;
-5. shared map/evidence UI update and a final Agent answer.
+- PR: [#6](https://github.com/HuiYingChung/sky-to-porch-webmcp/pull/6).
+- Exact PR head: `d53d9bbb6ad7a367f444adb7907180410ca640d7`.
+- PR-head CI: run `33127306578`; classification, lint/typecheck/unit/
+  integration/secret check, production build, and Chromium E2E all passed.
+- Vercel preview status: success.
+- Merge commit: `90b8236eb74ea2366905d34d46ce2432b77511b7`.
+- Post-merge `main` CI: run `33128144825`; all jobs passed for the exact merge
+  commit.
+- Vercel production deployment: `dpl_DnNkQ5i91s8hEXsWvqr1JvSZNy4x`, `READY`.
+- Immutable deployment URL:
+  `https://sky-to-porch-webmcp-jxl18q5y5-huiyingchungs-projects.vercel.app`.
+- GitHub deployment `6133096474` and its success status map that production
+  deployment to the exact merge SHA.
+- The production alias and `/api/health` returned HTTP 200; health reported
+  `ai: false`.
+- A deployment-scoped error-log query after the live journey returned no error
+  logs.
+- Repository visibility remained private by owner direction.
+
+## Production native stable-ID journey
+
+The supported in-app browser was reloaded on the production alias before
+discovery. The baseline analysis tool exposed nullable `place_choice_id` with
+the instruction to use `null` initially and copy only a returned ID after a
+person chooses.
+
+The first named call used the original query `Houston`,
+`place_choice_id: null`, Wind & Storm, related context, Home, and
+`2024-07-08`. It returned:
+
+- `status: needs_place_choice`;
+- `ui_updated: false`;
+- `requires_user_input: true` and `must_not_retry_before_user_reply: true`;
+- `Houston (city), Harris, Texas, United States` with
+  `place-osm-r-2688911`;
+- `Houston (county), Texas, United States` with
+  `place-osm-r-1840945`;
+- a separate Houston County, Georgia option.
+
+The continuation kept `place: Houston`, preserved every other argument, and
+set `place_choice_id` to `place-osm-r-2688911`. It did not return another
+ambiguity. It returned `related_environmental_evidence_bundle`, included the
+separate Flood & Heavy Rain and Wind & Storm chains, and set
+`ui_updated: true`. The serialized result was 2,110 characters, below the
+2,400-character cap.
+
+The visible shared view then showed `Agent updated this view`, the selected
+Houston city, July 8, 2024, primary Wind evidence, and separately labelled
+Flood evidence. Contextual evidence inspection and claim-discussion tools were
+registered after the result.
+
+This production check proves native discovery, stable-ID execution, and shared
+UI synchronization with named tool calls. The independent model-selection
+claim remains the retained three-run development gate: 66/66 semantic
+selection/argument cases and 12/12 ambiguity wait/resume journeys. It is not
+misreported as a new judge-side conversational transcript.

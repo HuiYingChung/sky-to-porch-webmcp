@@ -12,10 +12,12 @@
 - W1 shared analysis application layer: complete for the vertical slice
 - W2 shared client controller and state: complete with renderer compatibility
 - W3 WebMCP tools: three baseline tools plus two contextual tools implemented;
-  local product commit `72f3a36` fixes the production-reported Houston
+  product commit `72f3a36` fixes the production-reported Houston
   ambiguity loop with distinguishable locality/type labels, stable upstream
   place IDs, original-query continuation, exact retry arguments, and stale-ID
-  rejection. Publication and production-native re-verification remain pending
+  rejection. It is published in merge commit `90b8236`; the production native
+  tool journey now waits with no UI update, resumes by selected ID, completes
+  both Beryl evidence chains, and updates the shared UI
 - W4 provider cleanup: complete; deterministic-only application runtime
 - W5 verification: exact local product commit `72f3a36` passes typecheck, lint,
   1,321 unit tests, 132 integration tests, a 14-page production build, a clean
@@ -28,17 +30,17 @@
 - W5c Wind & Storm evidence: the supported in-app browser locally verified the
   Beryl related-context bundle, separate Wind and Flood chains, synchronized
   shared UI, conditional claim guide, and narrow single-hazard boundary;
-  those journeys now also pass in production at `c6f3c8c`; contextual inspection
-  is within its cap, while the newly found primary-bundle cap correction remains
-  local and awaits publication/recheck
+  those journeys now also pass in production. The current production stable-ID
+  continuation returns a 2,110-character primary bundle, below the 2,400
+  character cap
 - W5d compound environmental context: locally verified for Heat–Drought,
   Fire/Smoke–Air Quality, and Volcano–Air Quality–Heat, including one parallel
   shared-view transaction; supported-browser Agent verification pending
 - W6 release and submission: private release preparation remains in progress;
   the repo stays private by owner direction. Stable-place product commit
-  `72f3a36` is locally verified; PR CI, merge, deployment, and production-native
-  re-verification are still pending. Public visibility, video publication, and
-  submission remain separate owner decisions
+  `72f3a36` passed local, PR-head, post-merge main, deployment, and production
+  native tool-level verification through merge `90b8236`. Public visibility,
+  video publication, and submission remain separate owner decisions
 
 The production/local/native evidence split for the current acceptance package
 is recorded in
@@ -246,15 +248,17 @@ Technical WebMCP details remain Codex's responsibility.
 
 - WebMCP tools are discoverable in the supported production in-app browser.
   Product commit `72f3a36` fixes the reported same-label ambiguity loop and
-  passes local deterministic, browser, and three-run model checks; it still
-  awaits publication and production-native re-verification.
+  passes local deterministic, browser, three-run model, PR-head, post-merge,
+  deployment, and production native tool-level checks at merge `90b8236`.
 - Human and agent interactions share one evidence pipeline and UI state.
 - The deterministic safety model is unchanged or stronger.
 - Tool descriptions and outputs stay within current implementation guidance.
 - All deterministic tests and exact-candidate checks pass locally. The
   separate model gate passes 66/66 semantic selection/argument cases and 12/12
-  ambiguity wait/resume journeys across three runs. PR-head, post-merge main,
-  deployment, and production-native evidence remain pending and separate.
+  ambiguity wait/resume journeys across three runs. PR-head CI run
+  `33127306578`, post-merge main CI run `33128144825`, Vercel deployment
+  `dpl_DnNkQ5i91s8hEXsWvqr1JvSZNy4x`, and the production native tool journey
+  are recorded as separate evidence.
 - Prior work and new work are unambiguous.
 - The repository is publicly reproducible under a recognized open-source
   license.
