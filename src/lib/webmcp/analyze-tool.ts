@@ -25,6 +25,15 @@ export const ANSWER_ORDER = [
 ] as const;
 const ANALYSIS_SCOPES = ["single_hazard_only", "related_context"] as const;
 type AnalysisScope = (typeof ANALYSIS_SCOPES)[number];
+const HAZARD_NAMES: Record<HazardId, string> = {
+  fire_smoke: "Fire & Smoke",
+  flood_storm: "Flood & Heavy Rain",
+  wind_storm: "Wind & Storm",
+  extreme_heat: "Extreme Heat",
+  drought_land: "Drought & Land",
+  air_quality: "Air Quality",
+  earth_volcanoes: "Earth & Volcanoes",
+};
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/;
 const COORDINATE_PLACE_RE = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/;
@@ -191,8 +200,9 @@ type EvidenceScope = ToolSuccess["evidence_scope"];
 
 interface CompactEvidenceChain {
   hazard: HazardId;
+  name: string;
   evidence_scope: EvidenceScope;
-  status: string;
+  status_summary: string;
   observation: CompactObservation | null;
   citation: CompactCitation | null;
   confidence: EvidenceObject["confidence"]["level"] | "insufficient";
@@ -217,7 +227,19 @@ interface ToolEvidenceBundle {
     source_count: number;
   };
   inference_guidance: "state_strongest_supported_inference_and_confidence";
-  answer_order: typeof ANSWER_ORDER;
+  answer_order?: typeof ANSWER_ORDER;
+  overall_summary: string;
+  must_report_every_chain: true;
+  required_chain_reporting: "report_each_included_chain";
+  agent_response_contract: {
+    style: "plain_english";
+    avoid_internal_names: true;
+    use_chain_name: true;
+    use_status_summary: true;
+    use_overall_summary: true;
+    summary_first: true;
+    per_chain_fields: "status_strongest_evidence_time_source_limitation";
+  };
   use_decision: "person_decides_how_to_use_related_evidence";
   request: {
     place: string;
@@ -262,7 +284,7 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     analysis_scope: {
       type: "string",
       enum: ANALYSIS_SCOPES,
-      description: "Use related_context for unqualified storm/thunderstorm/severe weather so separate wind and water chains run. Use single_hazard_only for explicit narrow asks: wind/gust, rain/flood/gage, heat, fire/smoke, or air quality.",
+      description: "For generic storm/severe weather, use related_context so separate wind and water chains run at any radius. Use single_hazard_only only for explicit wind/gust or rain/flood/gage asks; Wind without question widens.",
     },
     concern: {
       type: "string",
@@ -390,9 +412,20 @@ function shouldUseRelatedStormContext(
   analysisScope: AnalysisScope,
   question: string | undefined
 ): boolean {
-  return hazard === "wind_storm" &&
-    analysisScope === "single_hazard_only" &&
-    question !== undefined &&
+  if (analysisScope !== "single_hazard_only") return false;
+
+  // Agent adherence must never be the only thing preserving storm evidence.
+  // Wind is the primary hazard for an unqualified storm question. A narrow
+  // Wind or Flood call with no preserved question therefore fails open to
+  // both chains. Explicit wind/gust/hail/tornado and rain/flood/gage questions
+  // remain narrow. Radius is deliberately irrelevant: the same rule applies
+  // throughout the complete validated 1–250 km input range.
+  if (
+    (hazard === "wind_storm" || hazard === "flood_storm") &&
+    question === undefined
+  ) return true;
+  if (hazard !== "wind_storm" && hazard !== "flood_storm") return false;
+  return question !== undefined &&
     GENERIC_STORM_QUESTION_RE.test(question) &&
     !EXPLICIT_STORM_CHAIN_RE.test(question);
 }
@@ -815,8 +848,16 @@ function compactEvidenceChain(analysis: ActiveAnalysis): CompactEvidenceChain {
   const limitation = details.rejectionReason ?? details.limitations[0] ?? null;
   return {
     hazard: analysis.request.hazardId,
+    name: HAZARD_NAMES[analysis.request.hazardId],
     evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
-    status: details.kind,
+    status_summary: ({
+      success: "observations returned",
+      no_observation: "no matching observation returned",
+      unsupported_coverage: "not supported for this area",
+      source_failure: "source retrieval failed",
+      invalid_request: "invalid request",
+      not_applicable: "not applicable",
+    } as Record<string, string>)[details.kind] ?? details.kind.replaceAll("_", " "),
     observation: observation ? compactObservation(observation) : null,
     citation: observation ? compactCitation(observation) : null,
     confidence: evidence?.confidence.level ?? "insufficient",
@@ -830,6 +871,7 @@ function compactEvidenceBundle(
   timeDisplay: string
 ): ToolEvidenceBundle {
   const includedChains = analyses.map((analysis) => analysis.request.hazardId);
+  const compactChains = analyses.map(compactEvidenceChain);
   const chainEvidence = analyses.map(resultDetails).map((details) => details.evidence);
   const chainsWithObservations = chainEvidence.filter(
     (evidence) => (evidence?.observations.length ?? 0) > 0
@@ -868,6 +910,20 @@ function compactEvidenceBundle(
     },
     inference_guidance: "state_strongest_supported_inference_and_confidence",
     answer_order: ANSWER_ORDER,
+    overall_summary: compactChains
+      .map((chain) => `${chain.name}: ${chain.status_summary}`)
+      .join("; "),
+    must_report_every_chain: true,
+    required_chain_reporting: "report_each_included_chain",
+    agent_response_contract: {
+      style: "plain_english",
+      avoid_internal_names: true,
+      use_chain_name: true,
+      use_status_summary: true,
+      use_overall_summary: true,
+      summary_first: true,
+      per_chain_fields: "status_strongest_evidence_time_source_limitation",
+    },
     use_decision: "person_decides_how_to_use_related_evidence",
     request: {
       place: truncate(primary.request.placeSelection.label, 100),
@@ -878,7 +934,7 @@ function compactEvidenceBundle(
       time: timeDisplay,
     },
     included_chains: includedChains,
-    chains: analyses.map(compactEvidenceChain),
+    chains: compactChains,
     claim_discussion_available:
       primary.outcome.hazardId === "wind_storm" && Boolean(primary.outcome.result.claimDiscussion),
     related_evidence_visible_in_shared_view: true,
@@ -924,17 +980,19 @@ function compactEvidenceBundle(
   };
   if (JSON.stringify(primaryUrlOnly).length <= MAX_OUTPUT_CHARACTERS) return primaryUrlOnly;
 
+  const { answer_order: omittedAnswerOrder, ...withoutAnswerOrder } = primaryUrlOnly;
+  void omittedAnswerOrder;
   return {
-    ...primaryUrlOnly,
-    analysis_id: truncate(primaryUrlOnly.analysis_id, 60),
+    ...withoutAnswerOrder,
+    analysis_id: truncate(primaryUrlOnly.analysis_id, 24),
     request: {
       ...primaryUrlOnly.request,
-      place: truncate(primaryUrlOnly.request.place, 60),
+      place: truncate(primaryUrlOnly.request.place, 40),
     },
     chains: primaryUrlOnly.chains.map((chain) => ({
       ...chain,
       citation: chain.citation
-        ? { ...chain.citation, product: truncate(chain.citation.product, 30), url: null }
+        ? { ...chain.citation, product: truncate(chain.citation.product, 20), url: null }
         : null,
       limitation: null,
     })),
@@ -1069,7 +1127,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Analyze place+hazard. Call help first for demo requests. If hazard is unclear, ask and wait; season/place/goal alone implies none. First named-place call: pass as stated if ambiguous; set place_choice_id=null; never pre-qualify place or infer coordinates. Use latest_completed unless dates given; never today. If needs_place_choice, ask and wait. After the reply, keep original place, copy selected choice_id to place_choice_id, preserve inputs, execute and finish. For unqualified storm/thunderstorm/severe weather, use wind_storm+related_context and copy question so separate wind and water chains run. Use single_hazard_only only for an explicit narrow chain. Infer concern if clear; else general.",
+      "Analyze place+hazard. Call help first for demos. If unclear, ask and wait; season/place/goal alone implies none. First named-place call: pass as stated; set place_choice_id=null; never pre-qualify place. Use latest_completed unless dates given; never today. After the reply, copy selected choice_id to place_choice_id, preserve inputs, execute and finish. For unqualified storm/thunderstorm/severe weather: use wind_storm+related_context and copy question; single_hazard_only needs explicit wind/water. For related_context, plain English: overall summary; every chain's status, strongest evidence, time, source, limitation; no field/enum names. Infer concern; else general.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

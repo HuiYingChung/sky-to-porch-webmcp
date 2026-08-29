@@ -315,5 +315,104 @@
       "assistantMustFinishAfterToolResult": true,
       "assistantMustPreserveNoObservationBoundary": true
     }
+  },
+  {
+    "id": "generic-storm-reports-both-chains-plain-english",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Use this site's MCP tools to check storm information for Greater Houston on August 28, 2026."
+      },
+      {
+        "role": "assistant",
+        "functionCall": {
+          "functionName": "analyze_environmental_hazard",
+          "arguments": {
+            "latitude": 29.748,
+            "longitude": -95.384,
+            "hazard": "wind_storm",
+            "concern": "general",
+            "radius_km": 50,
+            "time": "2026-08-28",
+            "analysis_scope": "related_context",
+            "question": "storm information for Greater Houston"
+          }
+        }
+      },
+      {
+        "role": "tool",
+        "functionName": "analyze_environmental_hazard",
+        "content": {
+          "status": "related_environmental_evidence_bundle",
+          "ui_updated": true,
+          "message": "Two separate evidence chains were checked. Report both. Do not replace this mixed result with a single no-data conclusion.",
+          "request": {
+            "place": "29.7480, -95.3840",
+            "radius_km": 50,
+            "start": "2026-08-28T00:00:00.000Z",
+            "end": "2026-08-28T23:59:59.999Z"
+          },
+          "included_chains": [
+            "wind_storm",
+            "flood_storm"
+          ],
+          "must_report_every_chain": true,
+          "required_chain_reporting": "report_each_included_chain",
+          "agent_response_contract": {
+            "style": "plain_english",
+            "avoid_internal_names": true,
+            "use_chain_name": true,
+            "use_status_summary": true,
+            "use_overall_summary": true,
+            "summary_first": true,
+            "per_chain_fields": "status_strongest_evidence_time_source_limitation"
+          },
+          "support": {
+            "level": "partial",
+            "supported_chain_count": 1,
+            "chain_count": 2
+          },
+          "overall_summary": "Wind & Storm: no matching observation returned; Flood & Heavy Rain: observations returned",
+          "chains": [
+            {
+              "hazard": "wind_storm",
+              "name": "Wind & Storm",
+              "status_summary": "no matching observation returned",
+              "strongest_evidence": null,
+              "observed_at": null,
+              "source": "NOAA and Iowa Environmental Mesonet wind/event sources",
+              "limitation": "No matching validated wind or severe-event observation was returned for this area and date. Missing wind data does not prove that no hazardous weather occurred."
+            },
+            {
+              "hazard": "flood_storm",
+              "name": "Flood & Heavy Rain",
+              "status_summary": "observations returned",
+              "strongest_evidence": "NASA GIBS IMERG returned a regional precipitation visualization for the selected area.",
+              "observed_at": "2026-08-28T00:00:00.000Z",
+              "source": "NASA GIBS IMERG",
+              "limitation": "The image supports regional precipitation evidence but does not establish rainfall depth, street flooding, property damage, or exact timing within the day."
+            }
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "toolCallsAfterUserReply": [],
+      "assistantMustContinueTask": true,
+      "assistantMustReportEveryChain": [
+        "wind_storm",
+        "flood_storm"
+      ],
+      "assistantMustUsePlainEnglish": true,
+      "assistantMustLeadWithOverallSummary": true,
+      "assistantMustIncludeEvidenceDetails": {
+        "requiredTime": "2026-08-28",
+        "sourceTermGroups": [
+          ["NASA", "IMERG"],
+          ["NOAA", "Iowa Environmental Mesonet", "IEM"]
+        ],
+        "requireLimitation": true
+      }
+    }
   }
 ]

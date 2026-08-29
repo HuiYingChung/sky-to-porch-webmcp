@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { gotoHydrated } from "./helpers";
 import fireSuccessFixture from "../../src/data/fixtures/wp02/fire-success.json";
+import floodSuccessFixture from "../../src/data/fixtures/wp02/flood-success.json";
 
 const WEBMCP_TEST_GEOCODES: Record<string, { label: string; lon: number; lat: number }> = {
   "Albuquerque, New Mexico": { label: "Albuquerque, New Mexico", lon: -106.6504, lat: 35.0844 },
@@ -542,6 +543,16 @@ test("related-context scope automatically checks heat and drought as separate vi
   expect(output).toMatchObject({
     status: "related_environmental_evidence_bundle",
     relationship: "related_evidence_for_assessment",
+    must_report_every_chain: true,
+    required_chain_reporting: "report_each_included_chain",
+    agent_response_contract: {
+      style: "plain_english",
+      avoid_internal_names: true,
+      use_chain_name: true,
+      use_status_summary: true,
+      use_overall_summary: true,
+      summary_first: true,
+    },
     included_chains: ["drought_land", "extreme_heat"],
   });
   expect(JSON.stringify(output).length).toBeLessThanOrEqual(2_400);
@@ -553,12 +564,168 @@ test("related-context scope automatically checks heat and drought as separate vi
     .toContainText("Drought & Land");
   await expect(visibleReceipt.getByTestId("agent-related-context-receipt"))
     .toContainText("timing, strength, and confidence");
+  await expect(visibleReceipt.getByTestId("agent-chain-result-summary"))
+    .toContainText("do not have to rerun the interface one hazard at a time");
+  await expect(visibleReceipt.getByTestId("agent-extreme_heat-result-summary"))
+    .toContainText("Extreme Heat");
+  await expect(visibleReceipt.getByTestId("agent-drought_land-result-summary"))
+    .toContainText("Drought & Land");
+  await visibleReceipt.getByTestId("agent-view-drought_land-result").click();
+  await expect(page.locator('[data-testid="tab-evidence"]:visible'))
+    .toHaveAttribute("aria-selected", "true");
+  await expect(page.locator('[data-testid="related-drought_land-evidence-chain"]:visible'))
+    .toBeFocused();
 
-  const visibleInsight = page.locator('[data-testid="insight-navigation"]:visible');
-  await expect(visibleInsight.getByTestId("related-drought_land-evidence-chain"))
+  const visibleDroughtChain = page.locator(
+    '[data-testid="related-drought_land-evidence-chain"]:visible'
+  );
+  await expect(visibleDroughtChain)
     .toContainText("Collected automatically for the same place and time");
-  await expect(visibleInsight.getByTestId("related-drought_land-evidence-chain"))
+  await expect(visibleDroughtChain)
     .toContainText("reinforces the concern");
+});
+
+test("a generic storm call cannot collapse to wind-only when water evidence exists", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    state.__skyToPorchWebMcpTools = {};
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: async (tool: WebMCP.ModelContextTool) => {
+          state.__skyToPorchWebMcpTools![tool.name] = tool;
+        },
+      },
+    });
+  });
+
+  const floodEvidence = JSON.parse(
+    JSON.stringify(floodSuccessFixture)
+      .replaceAll("2024-07-08", "2026-08-28")
+      .replaceAll("20240708", "20260828")
+  ) as typeof floodSuccessFixture;
+  floodEvidence._fixtureId = "webmcp-generic-storm-water-evidence-browser-test";
+  floodEvidence._fixtureDescription =
+    "Synthetic browser wiring evidence for the Houston generic-storm regression; not live evidence.";
+
+  const floodRequests: Array<Record<string, unknown>> = [];
+  const windRequests: Array<Record<string, unknown>> = [];
+  await page.route("**/api/flood/query", async (route) => {
+    floodRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        result: {
+          kind: "success",
+          evidence: floodEvidence,
+        },
+      }),
+    });
+  });
+  await page.route("**/api/storm/query", async (route) => {
+    windRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        result: {
+          kind: "no_observation",
+          sourceOutcomes: {
+            ghcnhWind: "no_observation",
+            officialEventContext: "not_applicable",
+          },
+          rejectionReason:
+            "No requested-date wind row was returned; the separate water chain still contains evidence.",
+        },
+      }),
+    });
+  });
+
+  await gotoHydrated(page, "/");
+  const output = await page.evaluate(async () => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    const tool = state.__skyToPorchWebMcpTools?.analyze_environmental_hazard;
+    if (!tool) throw new Error("WebMCP analysis tool was not registered");
+    return tool.execute(
+      {
+        place: "29.748, -95.384",
+        hazard: "wind_storm",
+        analysis_scope: "single_hazard_only",
+        concern: "general",
+        radius_km: 50,
+        time: "2026-08-28",
+      },
+      { signal: new AbortController().signal }
+    );
+  }) as Record<string, unknown>;
+
+  expect(floodRequests).toHaveLength(1);
+  expect(windRequests).toHaveLength(1);
+  expect(floodRequests[0]).toMatchObject({
+    startDate: "2026-08-28",
+    endDate: "2026-08-28",
+    mode: "live",
+  });
+  expect(windRequests[0]).toMatchObject({ date: "2026-08-28", mode: "live" });
+  expect(floodRequests[0].area).toEqual(windRequests[0].area);
+  expect(output).toMatchObject({
+    status: "related_environmental_evidence_bundle",
+    must_report_every_chain: true,
+    required_chain_reporting: "report_each_included_chain",
+    agent_response_contract: {
+      style: "plain_english",
+      avoid_internal_names: true,
+      use_chain_name: true,
+      use_status_summary: true,
+      use_overall_summary: true,
+      summary_first: true,
+      per_chain_fields: "status_strongest_evidence_time_source_limitation",
+    },
+    request: { radius_km: 50, analysis_scope: "related_context" },
+    overall_summary: "Flood & Heavy Rain: observations returned; Wind & Storm: no matching observation returned",
+    support: {
+      level: "partial_official_context",
+      chains_with_observations: 1,
+      total_chains: 2,
+    },
+    included_chains: ["flood_storm", "wind_storm"],
+    chains: [
+      {
+        hazard: "flood_storm",
+        status_summary: "observations returned",
+        citation: { source: "nasa_gibs_imerg" },
+      },
+      { hazard: "wind_storm", status_summary: "no matching observation returned" },
+    ],
+  });
+  expect(output).not.toHaveProperty("required_final_answer_sentence");
+
+  const receipt = page.locator('[data-testid="agent-analysis-notice"]:visible');
+  await expect(receipt.getByTestId("agent-analysis-receipt"))
+    .toContainText("Wind & Storm");
+  await expect(receipt.getByTestId("agent-related-context-receipt"))
+    .toContainText("Flood & Heavy Rain");
+  await expect(receipt.getByTestId("agent-wind_storm-result-summary"))
+    .toContainText("No matching observation returned · 0 sources");
+  await expect(receipt.getByTestId("agent-flood_storm-result-summary"))
+    .toContainText("Observations returned · 2 sources");
+  const relatedFlood = page.locator('[data-testid="related-flood-evidence-chain"]:visible');
+  await expect(relatedFlood).toContainText("Related Flood & Heavy Rain evidence");
+  await receipt.getByTestId("agent-view-flood_storm-result").click();
+  await expect(relatedFlood).toBeFocused();
+  await expect(relatedFlood).toContainText("2 validated observations are available");
+  await receipt.getByTestId("agent-view-wind_storm-result").click();
+  await expect(page.locator('[data-testid="primary-wind_storm-evidence-chain"]:visible'))
+    .toBeFocused();
 });
 
 test("volcano related context automatically adds separate air-quality and heat chains", async ({

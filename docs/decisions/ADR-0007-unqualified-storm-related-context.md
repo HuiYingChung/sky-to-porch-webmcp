@@ -16,7 +16,7 @@ whether there was a "storm" could therefore be routed to Wind alone, even
 though ordinary storm evidence may include both wind and water context. This
 was reproduced for Houston on 2026-08-28: the wind station-year lookup had no
 usable row for the requested date, while the separate water chain returned
-rain and gage evidence.
+rain and flood-imagery evidence.
 
 The Wind adapter also classified an in-area station-year lookup with no matching
 requested-date row as `unsupported_coverage`. That wording incorrectly implied
@@ -40,6 +40,13 @@ or reporting lag.
   request. If an Agent nevertheless supplies `single_hazard_only` with that
   preserved generic wording, deterministic parsing upgrades it to
   `related_context`.
+- A `wind_storm` or `flood_storm` request that combines
+  `single_hazard_only` with no preserved question also fails open to
+  `related_context`. This prevents an Agent omission from discarding either
+  chain. An explicit narrow wind or water question still retains one chain.
+- The expansion rule is independent of radius and preserves the selected
+  geometry unchanged across the complete validated 1–250 km range. It does
+  not promise that every official source has an observation at every radius.
 - When in-area GHCNh station-year files were retrieved but no usable wind row
   matched the requested UTC date, the Wind result and mission attribution use
   `no_observation`. `unsupported_coverage` remains reserved for cases such as no
