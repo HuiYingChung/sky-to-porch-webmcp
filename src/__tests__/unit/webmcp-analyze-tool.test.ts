@@ -126,6 +126,7 @@ describe("WebMCP environmental hazard tool", () => {
       analysis_scope: "single_hazard_only",
       concern: "home",
       time: "2024-07-08",
+      question: "What official wind observations were recorded?",
     });
 
     expect(runAnalysis).toHaveBeenCalledTimes(1);
@@ -342,6 +343,7 @@ describe("WebMCP environmental hazard tool", () => {
         concern: "home",
         time: "2024-07-08",
         analysis_scope: "single_hazard_only",
+        question: "What official wind observations were recorded?",
       },
       toolOptions(),
       { runAnalysis, fetchImpl, now: () => NOW }
@@ -364,6 +366,7 @@ describe("WebMCP environmental hazard tool", () => {
         concern: "home",
         time: "2024-07-08",
         analysis_scope: "single_hazard_only",
+        question: "What official wind observations were recorded?",
       },
       toolOptions(),
       { runAnalysis, fetchImpl, now: () => NOW }
@@ -536,6 +539,9 @@ describe("WebMCP environmental hazard tool", () => {
         hazard: hazardId,
         analysis_scope: "single_hazard_only",
         time: "2024-07-08",
+        question: hazardId === "wind_storm"
+          ? "What official wind observations were recorded?"
+          : "What official rainfall and gage observations were recorded?",
       },
       toolOptions(),
       { runAnalysis, now: () => NOW }
@@ -578,25 +584,134 @@ describe("WebMCP environmental hazard tool", () => {
       evidence_scope: "separate_related_hazard_chains",
       relationship: "related_evidence_for_assessment",
       inference_guidance: "state_strongest_supported_inference_and_confidence",
+      must_report_every_chain: true,
+      required_chain_reporting: "report_each_included_chain",
+      agent_response_contract: {
+        style: "plain_english",
+        avoid_internal_names: true,
+        use_chain_name: true,
+        use_status_summary: true,
+        use_overall_summary: true,
+        summary_first: true,
+        per_chain_fields: "status_strongest_evidence_time_source_limitation",
+      },
       answer_order: [
         "strongest_supported_assessment",
         "observation_values_times_and_official_citations",
         "direct_observation_then_labelled_inference",
         "confidence_and_evidence_that_would_change_it",
       ],
+      overall_summary: "Flood & Heavy Rain: not supported for this area; Wind & Storm: not supported for this area",
       included_chains: ["flood_storm", "wind_storm"],
       chains: [
         {
           hazard: "flood_storm",
+          name: "Flood & Heavy Rain",
+          status_summary: "not supported for this area",
           evidence_scope: "regional_water_and_rain_observations",
         },
         {
           hazard: "wind_storm",
+          name: "Wind & Storm",
+          status_summary: "not supported for this area",
           evidence_scope: "regional_wind_observations",
         },
       ],
     });
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
+  });
+
+  it.each([
+    ["wind_storm", 1],
+    ["wind_storm", 25],
+    ["wind_storm", 50],
+    ["wind_storm", 250],
+    ["flood_storm", 1],
+    ["flood_storm", 25],
+    ["flood_storm", 50],
+    ["flood_storm", 250],
+  ] as const)(
+    "fails open from %s to both storm chains at %i km when the Agent omits the person's question",
+    async (primaryHazard, radiusKm) => {
+      const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
+        analysisId: `analysis-${radiusKm}-${request.hazardId}`,
+        origin: "agent",
+        request,
+        outcome: {
+          hazardId: request.hazardId,
+          result: { kind: "no_observation", rejectionReason: `No ${request.hazardId} observation.` },
+        } as ActiveAnalysis["outcome"],
+        completedAt: "2026-08-29T12:00:01.000Z",
+      }));
+
+      const output = await executeAnalyzeHazardTool(
+        {
+          place: "29.7604, -95.3698",
+          hazard: primaryHazard,
+          analysis_scope: "single_hazard_only",
+          concern: "general",
+          radius_km: radiusKm,
+          time: "2026-08-28",
+        },
+        toolOptions(),
+        { runAnalysis, now: () => new Date("2026-08-29T12:00:00.000Z") }
+      );
+
+      const expectedHazards = primaryHazard === "wind_storm"
+        ? ["flood_storm", "wind_storm"]
+        : ["wind_storm", "flood_storm"];
+      expect(runAnalysis.mock.calls.map(([request]) => request.hazardId))
+        .toEqual(expectedHazards);
+      expect(runAnalysis.mock.calls.every(([request]) =>
+        request.placeSelection.analysisArea.radiusKm === radiusKm
+      )).toBe(true);
+      expect(output).toMatchObject({
+        status: "related_environmental_evidence_bundle",
+        must_report_every_chain: true,
+        required_chain_reporting: "report_each_included_chain",
+        agent_response_contract: {
+          style: "plain_english",
+          avoid_internal_names: true,
+          use_chain_name: true,
+          use_status_summary: true,
+          use_overall_summary: true,
+          summary_first: true,
+        },
+        request: { radius_km: radiusKm, analysis_scope: "related_context" },
+        included_chains: expectedHazards,
+      });
+    }
+  );
+
+  it("widens generic storm wording even when the Agent selects the water enum", async () => {
+    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
+      analysisId: `analysis-water-primary-${request.hazardId}`,
+      origin: "agent",
+      request,
+      outcome: {
+        hazardId: request.hazardId,
+        result: { kind: "no_observation", rejectionReason: "Bounded test result." },
+      } as ActiveAnalysis["outcome"],
+      completedAt: "2026-08-29T12:00:01.000Z",
+    }));
+
+    await executeAnalyzeHazardTool(
+      {
+        place: "29.7604, -95.3698",
+        hazard: "flood_storm",
+        analysis_scope: "single_hazard_only",
+        radius_km: 75,
+        time: "2026-08-28",
+        question: "Was there a storm around Houston on August 28, 2026?",
+      },
+      toolOptions(),
+      { runAnalysis, now: () => new Date("2026-08-29T12:00:00.000Z") }
+    );
+
+    expect(runAnalysis.mock.calls.map(([request]) => request.hazardId)).toEqual([
+      "wind_storm",
+      "flood_storm",
+    ]);
   });
 
   it("keeps an explicit wind-gust storm question on the single wind chain", async () => {

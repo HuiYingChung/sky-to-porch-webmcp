@@ -34,13 +34,18 @@ whether there was a storm; it must preserve the original question and select
 `wind_storm` with `related_context`, causing separate wind and water retrievals.
 
 `tests/webmcp/post-tool-behavior-evals.json` separately captures four multi-turn
-cases: wait and resume for ordinary Springfield choices, plus wait and stable-ID
-resume when Houston candidates can share a display label. After an ambiguous
+place cases plus a generic-storm final-response case. The place cases cover wait
+and resume for ordinary Springfield choices, plus wait and stable-ID resume when
+Houston candidates can share a display label. After an ambiguous
 tool result, the model must ask the person to choose, make no second tool call,
 select no candidate, and wait for the next user message. On reply it must keep
 the original place query, copy the selected `choice_id`, preserve the exact
 retry arguments, execute the analysis, and finish the answer. Its deterministic
-test only validates the retained scenarios and contract; it is not a model pass.
+test validates the retained scenarios and contract. The storm case requires an
+overall plain-English summary followed by both Wind & Storm and Flood & Heavy
+Rain, each with status, strongest evidence, time, source, and limitation. It
+also rejects internal hazard IDs, result field names, and enum values in the
+person-facing response.
 
 The dataset also includes post-analysis availability context for
 `inspect_current_environmental_evidence` and the Home + Wind-only
@@ -80,6 +85,9 @@ Before release, run the dataset repeatedly with the challenge agent and record:
     produces no second tool call until a new user message arrives.
 17. whether an unqualified storm, thunderstorm, or severe-weather question runs
     separate Wind and Flood context chains instead of narrowing to Wind alone.
+18. whether every related-context final answer reports every included chain in
+    plain English, beginning with an overall summary and preserving each
+    chain's evidence and limitation.
 
 Do not call this dataset "passed" until the model-backed runs and raw outcomes
 have been retained for the exact tool definition under review.
@@ -95,8 +103,47 @@ tool metadata, and writes raw responses under ignored
 
 On 2026-08-29, the Houston generic-storm regression increased the selection
 dataset to 23 cases. Its deterministic contract test is part of the local gate;
-no new model-backed pass is claimed until that exact 23-case tool definition is
-run and its raw outcome is retained.
+the full 23-case model-selection suite has not been rerun, so no new full-suite
+selection score is claimed for this change.
+
+The new post-tool storm-summary case was run independently three times against
+the exact final result contract using `gpt-5-mini`, low reasoning, and low text
+verbosity. Raw artifact:
+`2026-08-29T23-29-29.572Z-gpt-5-mini.json`.
+
+- complete two-chain reporting: **3/3**;
+- plain-English wording without internal hazard IDs or status enums: **3/3**;
+- overall summary first: **3/3**;
+- evidence time, official source, and limitation included: **3/3**;
+- API usage: 3 responses, 4,911 input tokens (3,072 cached) and 973 output
+  tokens;
+- estimated cost: **$0.00248255** at the retained public-rate basis.
+
+Six earlier calibration artifacts exposed that the first scorer accepted
+internal status codes and that a human-readable chain name alone did not
+reliably prevent those codes from appearing. Later runs distinguished actual
+summary omissions from harmless ISO-date and short request-lead-in phrasing.
+The final contract therefore supplies human-readable chain names,
+plain-English status summaries, and a deterministic overall summary. All seven
+targeted runs together used an estimated **$0.01475285**, below the
+owner-authorized $3 limit. Calibration artifacts remain diagnostic evidence,
+not release passes.
+
+A separate bounded live-source smoke used the local product routes for the
+Houston 2026-08-28 regression at the known 50 km selected area. This is live
+adapter evidence, not a native WebMCP browser proof or deployment claim.
+
+- Flood & Heavy Rain returned `inconclusive_evidence` with two validated live
+  observations: NASA GIBS IMERG and NASA LANCE flood extent;
+- the source outcomes were IMERG `success`, flood extent `success`, USGS
+  `no_observation`, and Canada `not_attempted`;
+- Wind & Storm returned `no_observation` with zero observations;
+- both local route calls returned HTTP 200 and no fixture fallback was used.
+
+The mixed result is the intended regression boundary: available water-chain
+evidence must remain visible even when the independent wind chain is empty.
+It does not turn the satellite products into measured rainfall depth or a
+street/property flooding claim.
 
 Several calibration runs were deliberately retained. They exposed guessed
 coordinates, optional-date invention, discovery-selector guessing, and one
@@ -129,7 +176,7 @@ release score: the semantic scorer permits harmless place qualifiers, natural
 question wording, and additional optional arguments while still rejecting
 invented coordinates/dates, wrong hazards/scopes, extra tool calls, unsafe
 missing-data conclusions, or a failure to ask and wait. The semantic scorer
-has 20 deterministic unit tests.
+has 25 deterministic unit tests.
 
 The earlier 18/22 artifact remains a retained calibration record. Its four
 misses led to sharper single-versus-related hazard descriptions, a dedicated
@@ -146,6 +193,12 @@ complete journeys:
 - Houston 2026-08-28 generic storm query → one related-context transaction with
   separate Wind and Flood chains; an attempted wind lookup with no matching
   requested-date row is labelled `no_observation`, not unsupported geography;
+- generic Wind calls that omit the person's question → fail open to the same
+  separate Wind and Flood chains at 1, 25, 50, and 250 km without changing the
+  requested geometry;
+- every multi-chain Agent receipt → visible summary for every completed chain
+  plus a button that opens and focuses that exact chain; the Agent conversation
+  reports the same complete bundle in plain English;
 - ambiguous place → user choice → stable-ID follow-up → evidence;
 - applicable official-source paths exhausted → strongest available evidence;
   only an actually empty result uses the explicit missing-data state;

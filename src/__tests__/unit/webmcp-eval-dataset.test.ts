@@ -48,6 +48,14 @@ interface PostToolBehaviorCase {
     assistantMustContinueTask?: boolean;
     assistantMustFinishAfterToolResult?: boolean;
     assistantMustPreserveNoObservationBoundary?: boolean;
+    assistantMustReportEveryChain?: string[];
+    assistantMustUsePlainEnglish?: boolean;
+    assistantMustLeadWithOverallSummary?: boolean;
+    assistantMustIncludeEvidenceDetails?: {
+      requiredTime: string;
+      sourceTermGroups: string[][];
+      requireLimitation: boolean;
+    };
   };
 }
 
@@ -69,7 +77,7 @@ describe("WebMCP tool-selection eval dataset", () => {
   });
 
   it("locks the ambiguous-place stop-and-wait behavior for model-backed runs", () => {
-    expect(postToolDataset).toHaveLength(4);
+    expect(postToolDataset).toHaveLength(5);
     const item = postToolDataset.find(
       (candidate) => candidate.id === "ambiguous-place-must-wait-for-person"
     );
@@ -102,6 +110,49 @@ describe("WebMCP tool-selection eval dataset", () => {
       assistantMustAskUserToChoose: true,
       assistantMustNotChooseCandidate: true,
       assistantMustWaitForNextUserMessage: true,
+    });
+  });
+
+  it("locks the generic-storm final answer to both chains in plain English", () => {
+    const item = postToolDataset.find(
+      (candidate) => candidate.id === "generic-storm-reports-both-chains-plain-english"
+    );
+    expect(item).toBeDefined();
+    if (!item) throw new Error("Missing generic storm summary eval case");
+
+    expect(item.messages[2]).toMatchObject({
+      functionName: ANALYZE_HAZARD_TOOL_NAME,
+      content: {
+        status: "related_environmental_evidence_bundle",
+        included_chains: ["wind_storm", "flood_storm"],
+        must_report_every_chain: true,
+        required_chain_reporting: "report_each_included_chain",
+        agent_response_contract: {
+          style: "plain_english",
+          avoid_internal_names: true,
+          use_chain_name: true,
+          use_status_summary: true,
+          use_overall_summary: true,
+          summary_first: true,
+          per_chain_fields: "status_strongest_evidence_time_source_limitation",
+        },
+        overall_summary: "Wind & Storm: no matching observation returned; Flood & Heavy Rain: observations returned",
+      },
+    });
+    expect(item.expected).toEqual({
+      toolCallsAfterUserReply: [],
+      assistantMustContinueTask: true,
+      assistantMustReportEveryChain: ["wind_storm", "flood_storm"],
+      assistantMustUsePlainEnglish: true,
+      assistantMustLeadWithOverallSummary: true,
+      assistantMustIncludeEvidenceDetails: {
+        requiredTime: "2026-08-28",
+        sourceTermGroups: [
+          ["NASA", "IMERG"],
+          ["NOAA", "Iowa Environmental Mesonet", "IEM"],
+        ],
+        requireLimitation: true,
+      },
     });
   });
 

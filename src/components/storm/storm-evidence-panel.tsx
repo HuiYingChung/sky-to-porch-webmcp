@@ -254,6 +254,7 @@ export function StormEvidenceInsightPanel({
         <section
           aria-label="Related Flood and Heavy Rain evidence chain"
           data-testid="related-flood-evidence-chain"
+          tabIndex={-1}
           style={{
             marginTop: "18px",
             paddingTop: "14px",

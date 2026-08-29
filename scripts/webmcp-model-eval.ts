@@ -18,6 +18,8 @@ import {
   asksUserToChooseHazard,
   normalizeEvalPlace,
   preservesNoObservationBoundary,
+  scoreMultiChainPlainEnglishSummary,
+  type EvidenceDetailRequirements,
 } from "./webmcp-model-eval-scoring";
 
 interface EvalCall {
@@ -49,6 +51,10 @@ interface PostToolEvalCase {
     assistantMustContinueTask?: boolean;
     assistantMustFinishAfterToolResult?: boolean;
     assistantMustPreserveNoObservationBoundary?: boolean;
+    assistantMustReportEveryChain?: string[];
+    assistantMustUsePlainEnglish?: boolean;
+    assistantMustLeadWithOverallSummary?: boolean;
+    assistantMustIncludeEvidenceDetails?: EvidenceDetailRequirements;
   };
 }
 
@@ -99,6 +105,10 @@ interface PostToolRunOutcome {
   appears_to_choose_candidate: boolean;
   finishes_after_tool_result: boolean;
   preserves_no_observation_boundary: boolean;
+  reports_every_chain: boolean;
+  uses_plain_english: boolean;
+  leads_with_overall_summary: boolean;
+  includes_evidence_details: boolean;
   passed: boolean;
   response_ids: string[];
   usage: Array<Record<string, unknown> | undefined>;
@@ -583,8 +593,23 @@ async function runPostToolCase(
   const preservesNoObservationBoundaryResult =
     !item.expected.assistantMustPreserveNoObservationBoundary ||
     preservesNoObservationBoundary(finalResponseText);
+  const summaryText = finalResponseText.trim().length > 0 ? finalResponseText : text;
+  const multiChainScore = scoreMultiChainPlainEnglishSummary(
+    summaryText,
+    item.expected.assistantMustReportEveryChain ?? [],
+    item.expected.assistantMustIncludeEvidenceDetails
+  );
+  const reportsEveryChain = !item.expected.assistantMustReportEveryChain ||
+    multiChainScore.reportsEveryChain;
+  const usesPlainEnglish = !item.expected.assistantMustUsePlainEnglish ||
+    multiChainScore.usesPlainEnglish;
+  const leadsWithOverallSummary = !item.expected.assistantMustLeadWithOverallSummary ||
+    multiChainScore.leadsWithOverallSummary;
+  const includesEvidenceDetails = item.expected.assistantMustIncludeEvidenceDetails === undefined ||
+    multiChainScore.includesEvidenceDetails;
   const passed = item.expected.assistantMustContinueTask
-    ? expectedCallsMatch && finishesAfterToolResult && preservesNoObservationBoundaryResult
+    ? expectedCallsMatch && finishesAfterToolResult && preservesNoObservationBoundaryResult &&
+      reportsEveryChain && usesPlainEnglish && leadsWithOverallSummary && includesEvidenceDetails
     : expectedCallsMatch && asksUserToChoose && waitsForNextMessage && !appearsToChooseCandidate;
   return {
     case_id: item.id,
@@ -599,6 +624,10 @@ async function runPostToolCase(
     appears_to_choose_candidate: appearsToChooseCandidate,
     finishes_after_tool_result: finishesAfterToolResult,
     preserves_no_observation_boundary: preservesNoObservationBoundaryResult,
+    reports_every_chain: reportsEveryChain,
+    uses_plain_english: usesPlainEnglish,
+    leads_with_overall_summary: leadsWithOverallSummary,
+    includes_evidence_details: includesEvidenceDetails,
     passed,
     response_ids: responses.map((response) => response.id),
     usage: responses.map((response) => response.usage),

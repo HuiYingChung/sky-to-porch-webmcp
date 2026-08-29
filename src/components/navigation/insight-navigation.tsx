@@ -66,11 +66,31 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
   // `hidden` attribute), so disclosure state survives tab switches. Panels
   // stay lazy before first visit because the Missions panel loads imagery.
   const [visited, setVisited] = useState<ReadonlySet<InsightTab>>(() => new Set([active]));
+  const [pendingChainTarget, setPendingChainTarget] = useState<string | null>(null);
   useEffect(() => {
     setVisited((current) =>
       current.has(active) ? current : new Set(current).add(active)
     );
   }, [active]);
+
+  useEffect(() => {
+    if (
+      active !== "evidence" ||
+      pendingChainTarget === null ||
+      !visited.has("evidence")
+    ) return;
+    const frame = window.requestAnimationFrame(() => {
+      const panel = document.getElementById(`${idPrefix}panel-evidence`);
+      const target = panel?.querySelector<HTMLElement>(
+        `[data-testid="${pendingChainTarget}"]`
+      );
+      if (!target) return;
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      setPendingChainTarget(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, idPrefix, pendingChainTarget, visited]);
 
   // A new query result must reset the panels (old expansion positions are
   // meaningless against new content). The per-hazard generation counters in
@@ -85,6 +105,7 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
     coverageGapResult,
     placeSelection,
     activeAnalysis,
+    relatedAnalyses,
     previousAnalysis,
     restorePreviousAnalysis,
   } = useQueryDraft();
@@ -137,6 +158,22 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
     if (restorePreviousAnalysis()) handleTabClick("meaning");
   }
 
+  const agentBundleAnalyses = activeAnalysis?.request.evidenceBundle?.role === "primary"
+    ? [activeAnalysis, ...relatedAnalyses]
+    : [];
+
+  function handleAgentChainResult(analysis: ActiveAnalysis) {
+    const isPrimary = analysis.analysisId === activeAnalysis?.analysisId;
+    const targetTestId = isPrimary
+      ? `primary-${analysis.outcome.hazardId}-evidence-chain`
+      : activeAnalysis?.outcome.hazardId === "wind_storm" &&
+          analysis.outcome.hazardId === "flood_storm"
+        ? "related-flood-evidence-chain"
+        : `related-${analysis.outcome.hazardId}-evidence-chain`;
+    setPendingChainTarget(targetTestId);
+    handleTabClick("evidence");
+  }
+
   return (
     <div data-testid="insight-navigation">
       {activeAnalysis?.origin === "agent" && (
@@ -172,25 +209,81 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
                 .join(", ")}. Compare their timing, strength, and confidence to see how much they reinforce the concern.
             </p>
           )}
-          <p style={{ margin: "3px 0 0" }}>
-            The map and Insight now share this result. The strongest evidence and citations are ready to review.
-          </p>
+          {agentBundleAnalyses.length > 0 ? (
+            <div data-testid="agent-chain-result-summary" style={{ marginTop: "8px" }}>
+              <p style={{ margin: "0 0 7px" }}>
+                Agent checked {agentBundleAnalyses.length} separate evidence chains together, so you do not have
+                to rerun the interface one hazard at a time. Every result remains separate.
+              </p>
+              <ul style={{ display: "grid", gap: "7px", margin: 0, padding: 0, listStyle: "none" }}>
+                {agentBundleAnalyses.map((analysis) => {
+                  const summary = summarizeAnalysisTrust(analysis);
+                  return (
+                    <li
+                      key={analysis.analysisId}
+                      data-testid={`agent-${analysis.outcome.hazardId}-result-summary`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: "6px",
+                        padding: "7px 8px",
+                        border: "1px solid var(--border-default)",
+                        borderRadius: "6px",
+                        background: "var(--surface-1)",
+                      }}
+                    >
+                      <span>
+                        <strong style={{ color: "var(--text-primary)" }}>
+                          {HAZARD_LABELS[analysis.outcome.hazardId]}
+                        </strong>{" "}
+                        · {summary.stateLabel} · {summary.sourceCount}{" "}
+                        {summary.sourceCount === 1 ? "source" : "sources"}
+                      </span>
+                      <button
+                        type="button"
+                        data-testid={`agent-view-${analysis.outcome.hazardId}-result`}
+                        onClick={() => handleAgentChainResult(analysis)}
+                        style={{
+                          padding: "5px 8px",
+                          border: "1px solid var(--border-default)",
+                          borderRadius: "6px",
+                          background: "var(--surface-2)",
+                          color: "var(--text-link)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        View {HAZARD_LABELS[analysis.outcome.hazardId]} result
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : (
+            <p style={{ margin: "3px 0 0" }}>
+              The map and Insight now share this result. The strongest evidence and citations are ready to review.
+            </p>
+          )}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", marginTop: "8px" }}>
-            <button
-              type="button"
-              data-testid="agent-view-evidence"
-              onClick={() => handleTabClick("evidence")}
-              style={{
-                padding: "5px 8px",
-                border: "1px solid var(--border-default)",
-                borderRadius: "6px",
-                background: "var(--surface-1)",
-                color: "var(--text-link)",
-                cursor: "pointer",
-              }}
-            >
-              View evidence
-            </button>
+            {agentBundleAnalyses.length === 0 && (
+              <button
+                type="button"
+                data-testid="agent-view-evidence"
+                onClick={() => handleTabClick("evidence")}
+                style={{
+                  padding: "5px 8px",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: "6px",
+                  background: "var(--surface-1)",
+                  color: "var(--text-link)",
+                  cursor: "pointer",
+                }}
+              >
+                View evidence
+              </button>
+            )}
             {previousAnalysis && (
               <button
                 type="button"
@@ -313,12 +406,19 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
                   </button>
                 </section>
               )}
-              <InsightPanelContent
-                key={resultEpoch}
-                tab={tab.id}
-                missionSelection={missionSelection}
-                onMissionSelectionChange={setMissionSelection}
-              />
+              <div
+                data-testid={activeAnalysis
+                  ? `primary-${activeAnalysis.outcome.hazardId}-evidence-chain`
+                  : undefined}
+                tabIndex={activeAnalysis ? -1 : undefined}
+              >
+                <InsightPanelContent
+                  key={resultEpoch}
+                  tab={tab.id}
+                  missionSelection={missionSelection}
+                  onMissionSelectionChange={setMissionSelection}
+                />
+              </div>
               {tab.id === "meaning" && (
                 <RadiusScopeNote
                   evidence={activeResult?.evidence}
@@ -594,6 +694,7 @@ function RelatedEvidenceChains({
             key={analysis.analysisId}
             aria-label={`Related ${HAZARD_LABELS[outcome.hazardId]} evidence chain`}
             data-testid={`related-${outcome.hazardId}-evidence-chain`}
+            tabIndex={-1}
             style={{
               marginTop: "18px",
               paddingTop: "14px",
