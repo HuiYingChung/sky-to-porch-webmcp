@@ -5,12 +5,14 @@ import type { DroughtQueryResult } from "@/lib/drought/types";
 import type { FireQueryResult } from "@/lib/fire/types";
 import type { FloodQueryResult } from "@/lib/flood/types";
 import type { HeatQueryResult } from "@/lib/heat/types";
+import type { StormQueryResult } from "@/lib/storm/types";
 
 export type FailureGapMappableResult =
   | FireQueryResult
   | FloodQueryResult
   | HeatQueryResult
   | DroughtQueryResult
+  | StormQueryResult
   | CoverageGapQueryResult;
 
 export interface FailureGapMapping {

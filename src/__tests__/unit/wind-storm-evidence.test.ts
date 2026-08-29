@@ -20,6 +20,10 @@ const WIND_PSV = [
   `${STATION_ID}|2024-07-08T02:00:00|190|1|18.0|1|35.0|1`,
   `${STATION_ID}|2024-07-09T00:00:00|200|1|40.0|1|50.0|1`,
 ].join("\n");
+const RECENT_WIND_PSV_WITHOUT_REQUESTED_DATE = [
+  "STATION|DATE|wind_direction|wind_direction_Quality_Code|wind_speed|wind_speed_Quality_Code|wind_gust|wind_gust_Quality_Code",
+  `${STATION_ID}|2026-08-27T23:30:00|170|1|8.0|1|12.0|1`,
+].join("\n");
 
 function response(text: string, contentType: string): Response {
   return new Response(text, { status: 200, headers: { "content-type": contentType } });
@@ -99,6 +103,49 @@ describe("Wind & Storm evidence chain", () => {
     expect(final.claimDiscussion?.notEstablished.join(" ")).toMatch(/policy covers|insurer/i);
     expect(final.claimDiscussion?.documentationChecklist.length).toBeGreaterThanOrEqual(5);
     expect(final.explanation?.notSupported.join(" ")).toMatch(/insurance-claim outcome/i);
+  });
+
+  it("reports Houston 2026-08-28 as a completed lookup with no matching wind row, not unsupported coverage", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      return url.includes("ghcnh-station-list.csv")
+        ? response(STATION_LIST, "text/csv")
+        : response(RECENT_WIND_PSV_WITHOUT_REQUESTED_DATE, "text/plain");
+    }) as unknown as typeof fetch;
+
+    const adapter = await queryLiveStormEvidence(
+      { placeId: "custom-area", date: "2026-08-28", mode: "live", area: AREA },
+      { fetchImpl, now: () => new Date("2026-08-29T12:00:00.000Z") }
+    );
+
+    expect(adapter.kind).toBe("no_observation");
+    expect(adapter.kind).not.toBe("unsupported_coverage");
+    expect(adapter.sourceOutcomes).toEqual({
+      ghcnhWind: "no_observation",
+      officialEventContext: "not_applicable",
+    });
+    expect(adapter.evidence).toMatchObject({
+      hazardId: "wind_storm",
+      evidenceState: "no_observation",
+      observations: [],
+      derivedMetrics: [],
+      confidence: { level: "insufficient" },
+      missionAttributions: [
+        { retrievalStatus: "no_observation", contributedObservationIds: [] },
+        { retrievalStatus: "not_attempted", contributedObservationIds: [] },
+      ],
+    });
+    expect(adapter.evidence?.limitations.map((item) => item.description).join(" "))
+      .toMatch(/station-year retrievals.*no usable wind rows.*publication lag/iu);
+    expect(() => validateEvidenceObject(adapter.evidence)).not.toThrow();
+
+    const final = await finalizeStormQueryResult(
+      adapter,
+      "general",
+      "Was there a storm around Houston on August 28, 2026?"
+    );
+    expect(final.explanation?.observed).toMatch(/nothing was recorded|no matching observation/iu);
+    expect(final.explanation?.observed).not.toMatch(/outside validated source coverage/iu);
   });
 
   it("does not attach the Beryl report outside its governed area", async () => {

@@ -131,6 +131,27 @@
     ]
   },
   {
+    "id": "generic-recent-storm-related-context",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Was there a storm around Houston yesterday, August 28, 2026?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Houston",
+          "hazard": "wind_storm",
+          "time": "2026-08-28",
+          "analysis_scope": "related_context",
+          "question": "Was there a storm around Houston yesterday, August 28, 2026?"
+        }
+      }
+    ]
+  },
+  {
     "id": "beryl-specific-wind-gust",
     "messages": [
       {

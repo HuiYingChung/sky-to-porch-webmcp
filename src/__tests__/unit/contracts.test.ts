@@ -43,6 +43,7 @@ import {
   validateFreshness,
   validateConfidence,
   validateLimitation,
+  validateMissionAttribution,
   validateExplanation,
   validateEvidenceObject,
 } from "@/contracts/evidence";
@@ -644,6 +645,21 @@ describe("validateConfidence", () => {
 
   it("rejects fabricated percentage level", () => {
     expect(() => validateConfidence({ level: "85%", rationale: "test" })).toThrow(ValidationError);
+  });
+});
+
+describe("validateMissionAttribution", () => {
+  it("accepts a completed retrieval with no matching observation", () => {
+    expect(() => validateMissionAttribution({
+      missionName: "NOAA NCEI GHCNh",
+      agency: "NOAA / NCEI",
+      purpose: "Retrieve in-area station wind observations.",
+      selectionReason: "The station-year file was retrieved for the requested date.",
+      contributedObservationIds: [],
+      retrievalStatus: "no_observation",
+      keyLimitation: "Publication or reporting gaps may apply.",
+      datasetId: "NOAA NCEI GHCNh v1",
+    })).not.toThrow();
   });
 });
 

@@ -28,6 +28,8 @@ type AnalysisScope = (typeof ANALYSIS_SCOPES)[number];
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/;
 const COORDINATE_PLACE_RE = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/;
+const GENERIC_STORM_QUESTION_RE = /\b(?:hurricane|severe weather|storms?|stormy|thunderstorms?|tropical storm)\b|(?:暴風雨|风暴|風暴|雷暴|雷雨|惡劣天氣|恶劣天气)/iu;
+const EXPLICIT_STORM_CHAIN_RE = /\b(?:flood|flooding|gage|gauge|gust|hail|inundation|rain|rainfall|river|stream|tornado|water|wind)\b|(?:強風|强风|陣風|阵风|冰雹|龍捲風|龙卷风|降雨|雨量|淹水|洪水|水位|河川)/iu;
 
 /**
  * Product-owned default relationships. These are retrieval companions. Any
@@ -260,7 +262,7 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     analysis_scope: {
       type: "string",
       enum: ANALYSIS_SCOPES,
-      description: "MUST use single_hazard_only when all terms fit one enum; flood_storm includes rain, flood, inundation and gages together. Concern never broadens scope. related_context only for 2+ hazard enums or related/all evidence.",
+      description: "Use related_context for unqualified storm/thunderstorm/severe weather so separate wind and water chains run. Use single_hazard_only for explicit narrow asks: wind/gust, rain/flood/gage, heat, fire/smoke, or air quality.",
     },
     concern: {
       type: "string",
@@ -282,7 +284,7 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
     question: {
       type: "string",
       maxLength: 500,
-      description: "Optional. Preserve the person's wording when possible; shorten only to 500 characters. Never invent evidence.",
+      description: "Optional, except MUST copy the person's wording for unqualified storm/thunderstorm/severe weather so deterministic routing can include separate wind and water chains. Shorten only to 500 characters.",
     },
   },
 } as const;
@@ -383,6 +385,18 @@ function explicitCoordinate(place: string): GeocodeCandidate | ToolFailure | nul
   return { label: place, lat, lon };
 }
 
+function shouldUseRelatedStormContext(
+  hazard: HazardId,
+  analysisScope: AnalysisScope,
+  question: string | undefined
+): boolean {
+  return hazard === "wind_storm" &&
+    analysisScope === "single_hazard_only" &&
+    question !== undefined &&
+    GENERIC_STORM_QUESTION_RE.test(question) &&
+    !EXPLICIT_STORM_CHAIN_RE.test(question);
+}
+
 function parseInput(
   raw: Record<string, unknown>,
   now: Date
@@ -427,6 +441,23 @@ function parseInput(
   ) {
     return failure("invalid_input", `analysis_scope must be one of: ${ANALYSIS_SCOPES.join(", ")}.`);
   }
+  if (
+    raw.question !== undefined &&
+    (typeof raw.question !== "string" ||
+      raw.question.trim().length === 0 ||
+      raw.question.trim().length > 500 ||
+      CONTROL_CHAR_RE.test(raw.question))
+  ) {
+    return failure("invalid_input", "question must be 1–500 characters without control characters.");
+  }
+  const question = typeof raw.question === "string" ? raw.question.trim() : undefined;
+  const effectiveAnalysisScope = shouldUseRelatedStormContext(
+    raw.hazard as HazardId,
+    analysisScope as AnalysisScope,
+    question
+  )
+    ? "related_context"
+    : analysisScope as AnalysisScope;
   const concern = raw.concern ?? "general";
   if (
     typeof concern !== "string" ||
@@ -471,26 +502,16 @@ function parseInput(
   if (
     startDate !== undefined &&
     endDate !== undefined &&
-    (analysisScope === "related_context" ||
+    (effectiveAnalysisScope === "related_context" ||
       (raw.hazard !== "fire_smoke" && raw.hazard !== "flood_storm")) &&
     startDate !== endDate
   ) {
     return failure(
       "invalid_input",
-      analysisScope === "related_context"
+      effectiveAnalysisScope === "related_context"
         ? "related_context accepts one completed UTC date so every evidence chain has the same temporal anchor."
         : `${raw.hazard} accepts exactly one completed UTC date.`
     );
-  }
-
-  if (
-    raw.question !== undefined &&
-    (typeof raw.question !== "string" ||
-      raw.question.trim().length === 0 ||
-      raw.question.trim().length > 500 ||
-      CONTROL_CHAR_RE.test(raw.question))
-  ) {
-    return failure("invalid_input", "question must be 1–500 characters without control characters.");
   }
 
   return {
@@ -499,14 +520,14 @@ function parseInput(
       ? { placeChoiceId: raw.place_choice_id }
       : {}),
     hazard: raw.hazard as HazardId,
-    analysisScope: analysisScope as AnalysisScope,
+    analysisScope: effectiveAnalysisScope,
     concern: concern as ConcernType,
     ...(coordinate ? { latitude: coordinate.lat, longitude: coordinate.lon } : {}),
     radiusKm,
     ...(startDate !== undefined && endDate !== undefined
       ? { startDate, endDate }
       : {}),
-    ...(typeof raw.question === "string" ? { question: raw.question.trim() } : {}),
+    ...(question ? { question } : {}),
   };
 }
 
@@ -1048,7 +1069,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Analyze place+hazard. Call help first only for demo requests. If no hazard is clear, ask and wait; season/place/goal alone implies none. First named-place call: pass as stated if ambiguous; set place_choice_id=null; never pre-qualify place or infer coordinates. Use latest_completed unless dates given; never today. If needs_place_choice, ask and wait. After the reply, keep original place, copy selected choice_id to place_choice_id, preserve inputs, execute and finish. Use single_hazard_only when all terms fit one enum, including fire+smoke or rain+flood+inundation+gages; concern does not broaden scope. Use related_context for multiple/related hazards. Infer concern if clear; else general.",
+      "Analyze place+hazard. Call help first for demo requests. If hazard is unclear, ask and wait; season/place/goal alone implies none. First named-place call: pass as stated if ambiguous; set place_choice_id=null; never pre-qualify place or infer coordinates. Use latest_completed unless dates given; never today. If needs_place_choice, ask and wait. After the reply, keep original place, copy selected choice_id to place_choice_id, preserve inputs, execute and finish. For unqualified storm/thunderstorm/severe weather, use wind_storm+related_context and copy question so separate wind and water chains run. Use single_hazard_only only for an explicit narrow chain. Infer concern if clear; else general.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

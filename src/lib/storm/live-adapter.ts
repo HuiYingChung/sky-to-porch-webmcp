@@ -50,6 +50,14 @@ const NO_DATA_LIMITATION: Limitation = {
   required: true,
 };
 
+const STATION_DATE_NO_OBSERVATION_LIMITATION: Limitation = {
+  limitationId: "lim-wind-station-date-no-observation",
+  source: "noaa_ncei_global_hourly",
+  description:
+    "In-area GHCNh station-year retrievals contained no usable wind rows for the requested UTC date. Publication lag or reporting gaps may apply; this is not evidence that no storm occurred.",
+  required: true,
+};
+
 function intersects(left: BoundingBox, right: BoundingBox): boolean {
   return !(
     left.east < right.west ||
@@ -167,11 +175,15 @@ export async function queryLiveStormEvidence(
   }
 
   const hasStation = stationObservations.length > 0;
+  const stationDateReturnedNoObservation = ghcnh.kind === "no_observation" &&
+    ghcnh.stage === "station_year";
   const evidenceState = hasStation
     ? "observations_returned" as const
     : eventObservation
       ? "inconclusive_evidence" as const
-      : "unsupported_coverage" as const;
+      : stationDateReturnedNoObservation
+        ? "no_observation" as const
+        : "unsupported_coverage" as const;
   const latestObservationMs = Math.max(
     ...observations
       .map((observation) => Date.parse(observation.provenance.observedAt))
@@ -190,14 +202,20 @@ export async function queryLiveStormEvidence(
         missionName: "NOAA NCEI Global Historical Climatology Network-hourly",
         agency: "NOAA / NCEI",
         purpose: "Provide named outdoor station wind-speed and wind-gust observations.",
-        selectionReason: "Nearest usable station whose coordinate lies inside the selected geometry.",
+        selectionReason: stationDateReturnedNoObservation
+          ? "In-area station-year files were retrieved, but no usable wind row matched the requested UTC date."
+          : ghcnh.kind === "no_observation"
+            ? "Bounded station discovery found no station whose coordinate lies inside the selected geometry."
+            : "Nearest usable station whose coordinate lies inside the selected geometry.",
         contributedObservationIds: stationObservations.map((item) => item.observationId),
         retrievalStatus: ghcnh.kind === "observations"
           ? "success"
           : ghcnh.kind === "source_failure"
             ? "failed"
-            : "not_attempted",
-        keyLimitation: STATION_LIMITATION.description,
+            : "no_observation",
+        keyLimitation: stationDateReturnedNoObservation
+          ? STATION_DATE_NO_OBSERVATION_LIMITATION.description
+          : STATION_LIMITATION.description,
         datasetId: "NOAA NCEI GHCNh v1",
       },
       {
@@ -234,13 +252,25 @@ export async function queryLiveStormEvidence(
         ? "A named in-area outdoor station is available, but no roof-level measurement, inspection, or property-damage evidence is present."
         : "Only regional context or no usable observation is available; property-level inference is not supported.",
     },
-    limitations: [STATION_LIMITATION, EVENT_LIMITATION, CLAIM_LIMITATION, NO_DATA_LIMITATION],
+    limitations: [
+      STATION_LIMITATION,
+      ...(stationDateReturnedNoObservation ? [STATION_DATE_NO_OBSERVATION_LIMITATION] : []),
+      EVENT_LIMITATION,
+      CLAIM_LIMITATION,
+      NO_DATA_LIMITATION,
+    ],
     explanations: [],
     assembledAt: retrievedAt,
   };
   validateEvidenceObject(evidence);
   return {
-    kind: hasStation ? "success" : eventObservation ? "inconclusive_evidence" : "unsupported_coverage",
+    kind: hasStation
+      ? "success"
+      : eventObservation
+        ? "inconclusive_evidence"
+        : stationDateReturnedNoObservation
+          ? "no_observation"
+          : "unsupported_coverage",
     sourceOutcomes: {
       ghcnhWind: ghcnh.kind === "observations"
         ? "success"
