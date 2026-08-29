@@ -10,7 +10,7 @@
  */
 
 import React from "react";
-import type { EvidenceObject, Observation } from "@/contracts/evidence";
+import type { EvidenceObject, MissionAttribution, Observation } from "@/contracts/evidence";
 import { missionAttributionKey } from "@/components/missions/mission-selection";
 
 // ---------------------------------------------------------------------------
@@ -272,13 +272,15 @@ function resolveLatestObservedAt(
  * Convert a MissionAttribution retrievalStatus to a human-readable string.
  */
 function formatRetrievalStatus(
-  status: "success" | "partial" | "failed" | "not_attempted"
+  status: MissionAttribution["retrievalStatus"]
 ): string {
   switch (status) {
     case "success":
       return "Success";
     case "partial":
       return "Partial";
+    case "no_observation":
+      return "No matching observation";
     case "failed":
       return "Failed";
     case "not_attempted":

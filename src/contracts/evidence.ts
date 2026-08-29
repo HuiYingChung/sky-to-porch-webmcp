@@ -275,8 +275,8 @@ export interface MissionAttribution {
   selectionReason: string;
   /** IDs of the observations contributed by this mission. */
   contributedObservationIds: string[];
-  /** Retrieval success or failure for this mission. */
-  retrievalStatus: "success" | "partial" | "failed" | "not_attempted";
+  /** Retrieval outcome for this mission. */
+  retrievalStatus: "success" | "partial" | "no_observation" | "failed" | "not_attempted";
   /** Key limitation relevant to this mission's evidence. */
   keyLimitation: string;
   /** Dataset or product ID, e.g. "GPM_3IMERGHH_v07". */
@@ -307,7 +307,7 @@ export function validateMissionAttribution(v: unknown): asserts v is MissionAttr
   assertStringArray(obj.contributedObservationIds, "contributedObservationIds", {
     unique: true,
   });
-  const validStatuses = ["success", "partial", "failed", "not_attempted"];
+  const validStatuses = ["success", "partial", "no_observation", "failed", "not_attempted"];
   assert(
     typeof obj.retrievalStatus === "string" && validStatuses.includes(obj.retrievalStatus),
     `retrievalStatus must be one of [${validStatuses.join(", ")}], got "${obj.retrievalStatus}"`

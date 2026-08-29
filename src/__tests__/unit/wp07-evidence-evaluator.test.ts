@@ -541,6 +541,12 @@ describe("4. Required source gaps", () => {
     expect(conflicts.some((c) => c.code === "required_source_gap")).toBe(true);
   });
 
+  it("produces required_source_gap for a mission that returned no matching observation", () => {
+    const input = makeGapInput("no_observation");
+    const { conflicts } = evaluateEvidence(input, makeAgeThresholdsPolicy());
+    expect(conflicts.some((conflict) => conflict.code === "required_source_gap")).toBe(true);
+  });
+
   it("produces required_source_gap for failed mission (with obs)", () => {
     const obs = makeObs();
     const input = makeBaseEvidence({

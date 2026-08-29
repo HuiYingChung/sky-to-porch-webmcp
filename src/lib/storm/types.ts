@@ -40,6 +40,7 @@ export interface StormClaimDiscussion {
 
 export type StormQueryResultKind =
   | "success"
+  | "no_observation"
   | "inconclusive_evidence"
   | "unsupported_coverage"
   | "source_failure"

@@ -29,7 +29,9 @@ broad question leaves the default `related_context` in force. Broad examples
 cover Wind with Flood, Heat with Drought, Fire/Smoke with Air Quality, and
 Volcanoes with Air Quality and Heat. The tool then runs the governed
 combination and reports how strongly official observations across the chains
-support an inference.
+support an inference. A dedicated Houston 2026-08-28 regression asks only
+whether there was a storm; it must preserve the original question and select
+`wind_storm` with `related_context`, causing separate wind and water retrievals.
 
 `tests/webmcp/post-tool-behavior-evals.json` separately captures four multi-turn
 cases: wait and resume for ordinary Springfield choices, plus wait and stable-ID
@@ -76,18 +78,25 @@ Before release, run the dataset repeatedly with the challenge agent and record:
     answer order and shared UI update as curated demos.
 16. after `needs_place_choice`, whether the model asks the person to choose and
     produces no second tool call until a new user message arrives.
+17. whether an unqualified storm, thunderstorm, or severe-weather question runs
+    separate Wind and Flood context chains instead of narrowing to Wind alone.
 
 Do not call this dataset "passed" until the model-backed runs and raw outcomes
 have been retained for the exact tool definition under review.
 
-## Execution status — 2026-08-27
+## Execution status
 
-The full 22-case dataset and four multi-turn ambiguity cases remain checked in;
-their deterministic structure tests pass. The owner authorized paid OpenAI
+The retained 2026-08-27 model-backed result covers the prior 22-case dataset
+and four multi-turn ambiguity cases. The owner authorized paid OpenAI
 evaluation with a key stored only in gitignored `.env.local`. The runner loads
 the key without logging or retaining it, sends only public eval prompts and
 tool metadata, and writes raw responses under ignored
 `artifacts/webmcp-evals/`.
+
+On 2026-08-29, the Houston generic-storm regression increased the selection
+dataset to 23 cases. Its deterministic contract test is part of the local gate;
+no new model-backed pass is claimed until that exact 23-case tool definition is
+run and its raw outcome is retained.
 
 Several calibration runs were deliberately retained. They exposed guessed
 coordinates, optional-date invention, discovery-selector guessing, and one
@@ -134,6 +143,9 @@ The release candidate must also be tested in a supported browser for these
 complete journeys:
 
 - direct place query → evidence → visible map and Insight update;
+- Houston 2026-08-28 generic storm query → one related-context transaction with
+  separate Wind and Flood chains; an attempted wind lookup with no matching
+  requested-date row is labelled `no_observation`, not unsupported geography;
 - ambiguous place → user choice → stable-ID follow-up → evidence;
 - applicable official-source paths exhausted → strongest available evidence;
   only an actually empty result uses the explicit missing-data state;

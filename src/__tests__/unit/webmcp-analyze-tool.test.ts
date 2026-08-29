@@ -220,10 +220,12 @@ describe("WebMCP environmental hazard tool", () => {
     expect(tool.description).toContain("After the reply");
     expect(tool.description).toContain("copy selected choice_id to place_choice_id");
     expect(tool.description).toContain("execute and finish");
-    expect(tool.description).toContain("including fire+smoke or rain+flood+inundation+gages");
+    expect(tool.description).toContain("unqualified storm/thunderstorm/severe weather");
     expect(tool.description).toContain("season/place/goal alone implies none");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.analysis_scope.description)
-      .toContain("MUST use single_hazard_only when all terms fit one enum");
+      .toContain("separate wind and water chains run");
+    expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.question.description)
+      .toContain("MUST copy the person's wording for unqualified storm");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.hazard.description)
       .toContain("never infer from season/place/concern/generic conditions");
     expect(ANALYZE_HAZARD_INPUT_SCHEMA.properties.hazard.description)
@@ -542,7 +544,7 @@ describe("WebMCP environmental hazard tool", () => {
     expect(output).toMatchObject({ evidence_scope: evidenceScope });
   });
 
-  it("automatically gathers separate wind and water chains for a broad storm-impact question", async () => {
+  it("overrides a narrow Agent scope and gathers both chains for the Houston 2026-08-28 generic storm regression", async () => {
     const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
       analysisId: `analysis-${request.hazardId}`,
       origin: "agent",
@@ -558,12 +560,13 @@ describe("WebMCP environmental hazard tool", () => {
       {
         place: "29.7604, -95.3698",
         hazard: "wind_storm",
+        analysis_scope: "single_hazard_only",
         concern: "home",
-        time: "2024-07-08",
-        question: "Could this storm have damaged my home, and what can I discuss with my insurer?",
+        time: "2026-08-28",
+        question: "Was there a storm around Houston on August 28, 2026?",
       },
       toolOptions(),
-      { runAnalysis, now: () => NOW }
+      { runAnalysis, now: () => new Date("2026-08-29T12:00:00.000Z") }
     );
 
     expect(runAnalysis.mock.calls.map(([request]) => request.hazardId)).toEqual([
@@ -594,6 +597,34 @@ describe("WebMCP environmental hazard tool", () => {
       ],
     });
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
+  });
+
+  it("keeps an explicit wind-gust storm question on the single wind chain", async () => {
+    const runAnalysis = vi.fn(async (request: AnalysisRequest): Promise<ActiveAnalysis> => ({
+      analysisId: "analysis-explicit-wind",
+      origin: "agent",
+      request,
+      outcome: {
+        hazardId: "wind_storm",
+        result: { kind: "unsupported_coverage", rejectionReason: "Bounded test result." },
+      },
+      completedAt: "2026-08-29T12:00:01.000Z",
+    }));
+
+    await executeAnalyzeHazardTool(
+      {
+        place: "29.7604, -95.3698",
+        hazard: "wind_storm",
+        analysis_scope: "single_hazard_only",
+        time: "2026-08-28",
+        question: "What maximum wind gust was recorded during the storm in Houston?",
+      },
+      toolOptions(),
+      { runAnalysis, now: () => new Date("2026-08-29T12:00:00.000Z") }
+    );
+
+    expect(runAnalysis).toHaveBeenCalledTimes(1);
+    expect(runAnalysis.mock.calls[0][0].hazardId).toBe("wind_storm");
   });
 
   it("keeps a production-sized Beryl evidence bundle inside the primary output limit", async () => {

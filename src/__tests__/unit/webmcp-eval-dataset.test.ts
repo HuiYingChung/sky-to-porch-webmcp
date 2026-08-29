@@ -287,6 +287,7 @@ describe("WebMCP tool-selection eval dataset", () => {
     const gust = dataset.find((item) => item.id === "beryl-specific-wind-gust");
     const water = dataset.find((item) => item.id === "completed-flood-date");
     const broad = dataset.find((item) => item.id === "beryl-broad-home-damage-auto-bundle");
+    const genericStorm = dataset.find((item) => item.id === "generic-recent-storm-related-context");
     const heatDrought = dataset.find((item) => item.id === "broad-heat-drought-context");
     const smokeAir = dataset.find((item) => item.id === "broad-smoke-air-context");
     const volcanoAirHeat = dataset.find((item) => item.id === "broad-volcano-air-heat-context");
@@ -296,6 +297,12 @@ describe("WebMCP tool-selection eval dataset", () => {
     expect(water?.expectedCall[0].arguments.analysis_scope).toBe("single_hazard_only");
     expect(broad?.expectedCall.map((call) => call.arguments.hazard)).toEqual(["wind_storm"]);
     expect(broad?.expectedCall[0].arguments.analysis_scope).toBeUndefined();
+    expect(genericStorm?.expectedCall[0].arguments).toMatchObject({
+      hazard: "wind_storm",
+      time: "2026-08-28",
+      analysis_scope: "related_context",
+    });
+    expect(genericStorm?.expectedCall[0].arguments.question).toContain("Was there a storm");
     expect(heatDrought?.expectedCall[0].arguments.hazard).toBe("extreme_heat");
     expect(smokeAir?.expectedCall[0].arguments.hazard).toBe("fire_smoke");
     expect(volcanoAirHeat?.expectedCall[0].arguments.hazard).toBe("earth_volcanoes");

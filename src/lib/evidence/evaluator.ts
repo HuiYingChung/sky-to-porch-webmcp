@@ -251,11 +251,11 @@ function detectSourceDisagreements(input: EvidenceObject): EvidenceConflict[] {
 }
 
 /**
- * Detect required source gaps: any partial/failed/not_attempted mission
+ * Detect required source gaps: any partial/no_observation/failed/not_attempted mission
  * attribution alongside returned observations produces one gap.
  *
  * For partial attributions the contributed observation IDs are known.
- * For failed/not_attempted, no contributed IDs are available; the gap
+ * For no_observation/failed/not_attempted, no contributed IDs are available; the gap
  * record lists all observation IDs as the affected set.
  */
 function detectSourceGaps(input: EvidenceObject): EvidenceConflict[] {
@@ -270,6 +270,7 @@ function detectSourceGaps(input: EvidenceObject): EvidenceConflict[] {
       }
     } else if (
       ma.retrievalStatus === "failed" ||
+      ma.retrievalStatus === "no_observation" ||
       ma.retrievalStatus === "not_attempted"
     ) {
       // No contributed IDs exist; mark all observations as affected
