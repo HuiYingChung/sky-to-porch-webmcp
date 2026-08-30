@@ -25,6 +25,11 @@ in browsers without WebMCP; only the Agent tools require a compatible browser.
    should then resume the unfinished task, call the analysis tool with that
    selected candidate, and continue through the evidence result and shared UI
    update.
+4. Ask: **“Use this site's MCP tools to check storm information for Greater
+   Houston on August 28, 2026.”** Because “storm” is broad, the Agent must run
+   and report both the Wind & Storm and Flood & Heavy Rain chains. The Flood
+   chain can surface the in-area NWS flash-flood report; a missing Wind
+   observation remains a separate result and does not erase the Flood evidence.
 
 The Agent is supplied by the judge's compatible browser. Sky to Porch does not
 send judge prompts to an internal model provider and the Vercel deployment does
@@ -48,9 +53,37 @@ functionality and new challenge work remain separated in
   values, times, official citations, labelled inference, and confidence.
 - See the Agent update the same map, Meaning panel, and Evidence panel used by
   the human workflow.
+- Watch the Agent retrieve and synthesize every requested evidence chain, then
+  open any individual result from the Agent receipt.
+- Compare two places or time windows while preserving each user-specified
+  radius and keeping all scenario/hazard results visible.
 - Inspect related environmental evidence without merging unlike observations
   into one measurement.
-- Continue with contextual tools only when the current result makes them useful.
+- Ask natural follow-ups about direct observations, source failures,
+  limitations, or evidence still needed without rerunning the investigation.
+
+## Why the Agent-assisted interface is better
+
+A manual map workflow makes a person choose each hazard, rerun the form, and
+compare panels themselves. The Agent-assisted workflow turns one broad request
+into a visible investigation without hiding the underlying evidence:
+
+- generic **storm** runs separate Wind & Storm and Flood & Heavy Rain chains;
+- every multi-chain or comparison result remains available through its own
+  button instead of being collapsed into one answer;
+- direct, geolocated event and ground observations are summarized before
+  regional visualizations;
+- deterministic synthesis separates what was observed, what the sources
+  support, what remains unknown, which checks failed, and what new evidence
+  could change the conclusion;
+- the Agent's final response is summary-first plain English, while the same
+  citations and limitations remain inspectable in the human interface.
+
+For recent completed U.S. dates, the official-source pipeline also checks
+bounded NWS Preliminary Local Storm Reports. Reports are accepted only when
+their event type matches the independent Wind or Flood chain, their report date
+matches the request, and their coordinate lies inside the exact selected area.
+They provide regional event context, not address-level damage or safety claims.
 
 ## Curated demo entrances
 
@@ -146,9 +179,10 @@ that assessment.
 
 | Layer | Current evidence |
 | --- | --- |
-| Deterministic product | Exact local product commit `72f3a36`: typecheck, lint, 1,321 unit tests, 132 integration tests, 14-page production build, secret gate, and 230/230 desktop/mobile Playwright journeys pass |
+| Agent investigation upgrade | Typecheck, lint, 1,353 unit tests, 133 integration tests, a 14-page production build, secret gate, and 234/234 desktop/mobile Playwright journeys pass. A direct live NWS check for Houston on 2026-08-28 returned the Harris County flash-flood report with no failed source request |
+| Focused Agent evaluation | `gpt-5-mini`, low reasoning: 3/3 generic-storm, focused-source-follow-up, and comparison selection cases pass; 1/1 final-answer case reports both Houston chains in summary-first plain English. Total focused evaluation cost was approximately $0.0044 |
 | Native WebMCP | Production merge `90b8236`: an initial `Houston` call returns distinguishable city/county choices and stable IDs with no UI update; retrying the original query with the selected ID completes the Beryl Wind + Flood bundle, stays below the output cap, and synchronizes the shared UI without another ambiguity loop |
-| Remote release | PR #6 exact-head CI run `33127306578` passed; post-merge main CI run `33128144825` passed; Vercel production deployment `dpl_DnNkQ5i91s8hEXsWvqr1JvSZNy4x` is `READY` and mapped to `90b8236` |
+| Previous remote release | PR #6 exact-head CI run `33127306578` passed; post-merge main CI run `33128144825` passed; Vercel production deployment `dpl_DnNkQ5i91s8hEXsWvqr1JvSZNy4x` was `READY` and mapped to `90b8236` |
 | Historical official sources | All six primary and related chains in the three curated demos returned observations |
 | Generic product path | Albuquerque non-demo browser journey plus selection cases across all seven hazards |
 | Tool selection | Final-schema `gpt-5-mini`, low reasoning, three runs: 66/66 semantic selection/argument cases and 12/12 ambiguity wait/resume journeys pass. Resume scoring executes the stable-ID selection and checks the final no-observation safety boundary |
