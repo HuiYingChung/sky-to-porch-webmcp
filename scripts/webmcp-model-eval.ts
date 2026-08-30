@@ -4,6 +4,7 @@ import { loadEnvConfig } from "@next/env";
 import type { ActiveAnalysis, AnalysisRequest } from "@/lib/analysis/types";
 import {
   createAnalyzeHazardTool,
+  createCompareHazardTool,
   DEFAULT_RELATED_HAZARDS,
 } from "@/lib/webmcp/analyze-tool";
 import {
@@ -220,6 +221,14 @@ function availableTools(item?: EvalCase, executeAnalysis = false) {
           now: () => new Date("2026-08-27T12:00:00.000Z"),
         }
       : { runAnalysis: async () => null }),
+    createCompareHazardTool(executeAnalysis
+      ? {
+          runAnalysis: async (request) => modelEvalAnalysis(request),
+          runAnalysisBundle: async (requests) => requests.map(modelEvalAnalysis),
+          fetchImpl: modelEvalGeocoder,
+          now: () => new Date("2026-08-27T12:00:00.000Z"),
+        }
+      : { runAnalysis: async () => null }),
     createEnvironmentalCapabilitiesTool(),
     createGetEnvironmentalSourceCoverageTool(),
   ];
@@ -322,6 +331,14 @@ function semanticArgumentsMatch(actual: EvalCall, expected: EvalCall): boolean {
   const actualArgs = actual.arguments;
   const expectedArgs = expected.arguments;
   if (actual.functionName !== expected.functionName) return false;
+  if (
+    actual.functionName === "compare_environmental_evidence" ||
+    actual.functionName === "inspect_current_environmental_evidence"
+  ) {
+    // These tools have safe optional fields. A model may explicitly send their
+    // schema defaults or narrow an inspection to the active hazard.
+    return sameValue(actualArgs, expectedArgs);
+  }
   if (actual.functionName !== "analyze_environmental_hazard") {
     return sameValue(actualArgs, expectedArgs) &&
       Object.keys(actualArgs).length === Object.keys(expectedArgs).length;

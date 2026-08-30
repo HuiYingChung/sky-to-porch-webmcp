@@ -318,7 +318,7 @@ describe("validateSourceId", () => {
 
 describe("DATASET_REGISTRY", () => {
   it("contains all registered source entries", () => {
-    expect(DATASET_REGISTRY).toHaveLength(35);
+    expect(DATASET_REGISTRY).toHaveLength(36);
   });
 
   it("allows the live-gated credential-free AirNow daily file as supporting evidence", () => {

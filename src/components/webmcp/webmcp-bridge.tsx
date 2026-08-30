@@ -4,7 +4,10 @@
 
 import { useEffect, useMemo } from "react";
 import type { ActiveAnalysis, AnalysisRequest } from "@/lib/analysis/types";
-import { createAnalyzeHazardTool } from "@/lib/webmcp/analyze-tool";
+import {
+  createAnalyzeHazardTool,
+  createCompareHazardTool,
+} from "@/lib/webmcp/analyze-tool";
 import {
   createInspectEvidenceTool,
   createStormClaimDiscussionTool,
@@ -52,6 +55,10 @@ export function WebMcpBridge({
   const baselineTools = useMemo(
     () => [
       createAnalyzeHazardTool({
+        runAnalysis,
+        ...(runAnalysisBundle ? { runAnalysisBundle } : {}),
+      }),
+      createCompareHazardTool({
         runAnalysis,
         ...(runAnalysisBundle ? { runAnalysisBundle } : {}),
       }),

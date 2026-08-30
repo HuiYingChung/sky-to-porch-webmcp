@@ -22,6 +22,11 @@ const LIVE_INPUT = {
   mode: "live" as const,
 };
 const VANCOUVER_LIVE_INPUT = { ...LIVE_INPUT, area: VANCOUVER_AREA };
+const HOUSTON_STORM_INPUT = {
+  ...LIVE_INPUT,
+  startDate: "2026-08-28",
+  endDate: "2026-08-28",
+};
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
@@ -126,10 +131,41 @@ async function mockFloodFetch(options: {
   continuous?: Record<string, unknown>;
   canadaStatus?: number;
   canadaHydrometric?: Record<string, unknown>;
+  nwsLsr?: boolean;
 } = {}): Promise<typeof fetch> {
   const tile = await png(options.alpha ?? 255);
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
+    if (options.nwsLsr && url.hostname === "api.weather.gov") {
+      if (url.pathname.startsWith("/points/")) {
+        return jsonResponse({ properties: { gridId: "HGX" } });
+      }
+      if (url.pathname === "/products/types/LSR/locations/HGX") {
+        return jsonResponse({
+          "@graph": [{
+            id: "0db5fc44-5569-4343-9774-9a371bc1593e",
+            productCode: "LSR",
+            issuanceTime: "2026-08-28T19:58:00-05:00",
+            issuingOffice: "KHGX",
+          }],
+        });
+      }
+      if (url.pathname === "/products/0db5fc44-5569-4343-9774-9a371bc1593e") {
+        return jsonResponse({
+          id: "0db5fc44-5569-4343-9774-9a371bc1593e",
+          productCode: "LSR",
+          issuanceTime: "2026-08-28T19:58:00-05:00",
+          productText: [
+            "PRELIMINARY LOCAL STORM REPORT",
+            "0600 PM     FLASH FLOOD      8 N JERSEY VILLAGE     30.00N 95.54W",
+            "08/28/2026  HARRIS             TX   LAW ENFORCEMENT",
+            "",
+            "MULTIPLE VEHICLES STRANDED.",
+            "&&",
+          ].join("\n"),
+        });
+      }
+    }
     if (url.hostname === "gibs.earthdata.nasa.gov") {
       const body: BodyInit = options.gibsStatus === 429
         ? "rate limited"
@@ -255,6 +291,31 @@ describe("WP-08 live adapter with mocked official-source responses", () => {
     expect(result.kind).toBe("inconclusive_evidence");
     expect(result.evidence?.evidenceState).toBe("inconclusive_evidence");
     expect(result.evidence?.observations[0].textValue).toMatch(/not zero precipitation/i);
+  });
+
+  it("adds the official Houston 2026-08-28 flash-flood report to the shared Flood chain", async () => {
+    const result = await queryLiveFloodEvidence(HOUSTON_STORM_INPUT, {
+      fetchImpl: await mockFloodFetch({ nwsLsr: true }),
+      now: () => new Date("2026-08-29T18:00:00.000Z"),
+    });
+
+    expect(result.kind).toBe("inconclusive_evidence");
+    expect(result.sourceOutcomes?.localStormReports).toBe("success");
+    expect(result.evidence?.observations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        variableName: "NWS Local Storm Report: Flash flood",
+        textValue: expect.stringContaining("MULTIPLE VEHICLES STRANDED"),
+        provenance: expect.objectContaining({ sourceId: "nws_local_storm_reports" }),
+      }),
+    ]));
+    expect(result.evidence?.missionAttributions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        missionName: "NWS Preliminary Local Storm Reports",
+        retrievalStatus: "success",
+      }),
+    ]));
+    expect(result.evidence?.confidence.rationale).toMatch(/official in-area event report/iu);
+    validateEvidenceObject(result.evidence);
   });
 
   it("keeps missing ground observations inconclusive", async () => {

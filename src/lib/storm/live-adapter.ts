@@ -5,6 +5,7 @@ import { validateEvidenceObject } from "@/contracts/evidence";
 import { CUSTOM_AREA_PLACE_ID } from "@/lib/location/query-area";
 import { validateQueryArea } from "@/lib/location/query-area";
 import { queryGhcnhWindEvidence } from "@/lib/heat/ground-live-adapter";
+import { queryNwsLocalStormReports } from "./nws-lsr-live-adapter";
 import type { StormLiveQueryInput, StormQueryResult } from "./types";
 
 const WIND_EARLIEST_DATE = "1901-01-01";
@@ -31,6 +32,22 @@ const EVENT_LIMITATION: Limitation = {
   source: "nws_tropical_cyclone_report",
   description:
     "The official event report establishes regional storm context only. It does not prove that the selected property experienced the reported winds or suffered damage.",
+  required: true,
+};
+
+const LOCAL_STORM_REPORT_LIMITATION: Limitation = {
+  limitationId: "lim-wind-nws-lsr-preliminary",
+  source: "nws_local_storm_reports",
+  description:
+    "NWS Local Storm Reports are preliminary event reports and may be corrected or replaced. An in-area report establishes reported regional event context, not wind at an address, property damage, or causation.",
+  required: true,
+};
+
+const LOCAL_STORM_REPORT_FAILURE_LIMITATION: Limitation = {
+  limitationId: "lim-wind-nws-lsr-source-failure",
+  source: "nws_local_storm_reports",
+  description:
+    "The recent NWS Local Storm Report request failed or was only partially completed. Other returned evidence does not replace the missing event-report check, and the failure is not evidence that no storm occurred.",
   required: true,
 };
 
@@ -143,15 +160,25 @@ export async function queryLiveStormEvidence(
 
   const retrievedAt = now.toISOString();
   const eventObservation = berylEventObservation(area, input.date, retrievedAt);
-  const ghcnh = await queryGhcnhWindEvidence(input.date, area, {
-    fetchImpl: dependencies.fetchImpl,
-    now: () => now,
-  });
+  const [ghcnh, localStormReports] = await Promise.all([
+    queryGhcnhWindEvidence(input.date, area, {
+      fetchImpl: dependencies.fetchImpl,
+      now: () => now,
+    }),
+    queryNwsLocalStormReports(area, input.date, input.date, "wind_storm", {
+      fetchImpl: dependencies.fetchImpl,
+      now: () => now,
+    }),
+  ]);
   const stationObservations: Observation[] = ghcnh.kind === "observations"
     ? ghcnh.observations.map((observation) => ({ ...observation, dataMode: "historical" as const }))
     : [];
+  const localReportObservations = localStormReports.kind === "observations"
+    ? localStormReports.observations
+    : [];
   const observations: Observation[] = [
     ...stationObservations,
+    ...localReportObservations,
     ...(eventObservation ? [eventObservation] : []),
   ];
   const derivedMetrics = stationObservations.flatMap((observation) =>
@@ -168,18 +195,23 @@ export async function queryLiveStormEvidence(
         }]
   );
 
-  if (observations.length === 0 && ghcnh.kind === "source_failure") {
+  if (
+    observations.length === 0 &&
+    ghcnh.kind === "source_failure" &&
+    localStormReports.kind === "source_failure"
+  ) {
     return sourceFailureResult(
-      "The bounded NOAA GHCNh wind request failed. No rain, flood, fixture, or out-of-area station data was substituted."
+      "The bounded NOAA GHCNh wind and recent NWS Local Storm Report requests both failed. No rain, flood, fixture, or out-of-area data was substituted."
     );
   }
 
   const hasStation = stationObservations.length > 0;
+  const hasOfficialEvent = localReportObservations.length > 0 || eventObservation !== null;
   const stationDateReturnedNoObservation = ghcnh.kind === "no_observation" &&
     ghcnh.stage === "station_year";
   const evidenceState = hasStation
     ? "observations_returned" as const
-    : eventObservation
+    : hasOfficialEvent
       ? "inconclusive_evidence" as const
       : stationDateReturnedNoObservation
         ? "no_observation" as const
@@ -218,6 +250,20 @@ export async function queryLiveStormEvidence(
           : STATION_LIMITATION.description,
         datasetId: "NOAA NCEI GHCNh v1",
       },
+      ...(localStormReports.kind === "observations"
+        ? [{
+            missionName: "NWS Preliminary Local Storm Reports",
+            agency: "NOAA / National Weather Service",
+            purpose: "Provide recent official, geolocated reports of wind, hail, tornado, and related storm events.",
+            selectionReason: "Recent NWS reports were accepted only when their event type matched Wind & Storm, their report date matched the request, and their coordinate was inside the exact selected geometry.",
+            contributedObservationIds: localReportObservations.map((item) => item.observationId),
+            retrievalStatus: localStormReports.failedRequestCount > 0
+              ? "partial" as const
+              : "success" as const,
+            keyLimitation: LOCAL_STORM_REPORT_LIMITATION.description,
+            datasetId: "NWS LSR",
+          }]
+        : []),
       {
         missionName: "NWS Houston/Galveston Hurricane Beryl report",
         agency: "NOAA / National Weather Service",
@@ -255,6 +301,11 @@ export async function queryLiveStormEvidence(
     limitations: [
       STATION_LIMITATION,
       ...(stationDateReturnedNoObservation ? [STATION_DATE_NO_OBSERVATION_LIMITATION] : []),
+      LOCAL_STORM_REPORT_LIMITATION,
+      ...(localStormReports.kind === "source_failure" ||
+        ("failedRequestCount" in localStormReports && localStormReports.failedRequestCount > 0)
+        ? [LOCAL_STORM_REPORT_FAILURE_LIMITATION]
+        : []),
       EVENT_LIMITATION,
       CLAIM_LIMITATION,
       NO_DATA_LIMITATION,
@@ -266,7 +317,7 @@ export async function queryLiveStormEvidence(
   return {
     kind: hasStation
       ? "success"
-      : eventObservation
+      : hasOfficialEvent
         ? "inconclusive_evidence"
         : stationDateReturnedNoObservation
           ? "no_observation"
@@ -277,6 +328,13 @@ export async function queryLiveStormEvidence(
         : ghcnh.kind === "source_failure"
           ? "failed"
           : "no_observation",
+      localStormReports: localStormReports.kind === "observations"
+        ? "success"
+        : localStormReports.kind === "source_failure"
+          ? "failed"
+          : localStormReports.kind === "not_applicable"
+            ? "not_applicable"
+            : "no_observation",
       officialEventContext: eventObservation ? "success" : "not_applicable",
     },
     evidence,

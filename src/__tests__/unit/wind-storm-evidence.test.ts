@@ -25,8 +25,8 @@ const RECENT_WIND_PSV_WITHOUT_REQUESTED_DATE = [
   `${STATION_ID}|2026-08-27T23:30:00|170|1|8.0|1|12.0|1`,
 ].join("\n");
 
-function response(text: string, contentType: string): Response {
-  return new Response(text, { status: 200, headers: { "content-type": contentType } });
+function response(text: string, contentType: string, status = 200): Response {
+  return new Response(text, { status, headers: { "content-type": contentType } });
 }
 
 function ghcnhFetch() {
@@ -79,6 +79,7 @@ describe("Wind & Storm evidence chain", () => {
     expect(adapter.kind).toBe("success");
     expect(adapter.sourceOutcomes).toEqual({
       ghcnhWind: "success",
+      localStormReports: "not_applicable",
       officialEventContext: "success",
     });
     expect(adapter.evidence?.hazardId).toBe("wind_storm");
@@ -108,6 +109,9 @@ describe("Wind & Storm evidence chain", () => {
   it("reports Houston 2026-08-28 as a completed lookup with no matching wind row, not unsupported coverage", async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes("api.weather.gov/points/")) {
+        return response("{}", "application/geo+json", 404);
+      }
       return url.includes("ghcnh-station-list.csv")
         ? response(STATION_LIST, "text/csv")
         : response(RECENT_WIND_PSV_WITHOUT_REQUESTED_DATE, "text/plain");
@@ -122,6 +126,7 @@ describe("Wind & Storm evidence chain", () => {
     expect(adapter.kind).not.toBe("unsupported_coverage");
     expect(adapter.sourceOutcomes).toEqual({
       ghcnhWind: "no_observation",
+      localStormReports: "not_applicable",
       officialEventContext: "not_applicable",
     });
     expect(adapter.evidence).toMatchObject({

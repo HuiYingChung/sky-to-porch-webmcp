@@ -85,9 +85,10 @@ proceeds without forcing the person to use demo-shaped language.
 | Tool | Natural trigger | Human-page effect |
 | --- | --- | --- |
 | `analyze_environmental_hazard` | A concrete place-and-hazard question | Updates the map, Meaning, Evidence, and Agent receipt |
+| `compare_environmental_evidence` | Compare two places or time windows | Runs every requested chain for both scenarios and links every result in the Agent receipt |
 | `get_sky_to_porch_help_and_demos` | Missing-hazard clarification, capability discovery, or explicit demo selection | None; read-only help catalog |
 | `get_environmental_source_coverage` | Source, region, or date eligibility | None; read-only coverage, not an observation |
-| `inspect_current_environmental_evidence` | A completed analysis needs exact values or citations | Reads the active result without a new query |
+| `inspect_current_environmental_evidence` | A completed analysis needs a summary, exact observations, source status, limitations, or evidence gaps | Reads the active result without a new query |
 | `prepare_storm_claim_discussion` | A completed Home + Wind analysis | Opens an evidence and property-document checklist |
 
 Concrete questions go directly to analysis. Discovery tools are not mandatory
@@ -95,6 +96,9 @@ preflight calls. Contextual tools appear only when their required result exists.
 Analysis requires an explicit `time`: `latest_completed`, one completed UTC
 date, or a bounded date range. Named places are geocoded by deterministic
 application code; the Agent cannot supply guessed latitude/longitude fields.
+For a broad storm request, the Agent runs separate Wind & Storm and Flood &
+Heavy Rain chains and reports both. An explicitly wind-only or rain/flood-only
+request stays narrow. Every supplied analysis radius remains authoritative.
 
 The browser registration entry point is
 [`src/components/webmcp/webmcp-bridge.tsx`](src/components/webmcp/webmcp-bridge.tsx).

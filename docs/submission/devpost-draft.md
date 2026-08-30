@@ -64,8 +64,8 @@ the page the person is already inspecting. The Agent and human workflow share
 one controller, evidence contract, map state, and evidence panels, so each can
 see and continue from the other's work.
 
-The page initially registers three baseline tools: analysis, capability
-discovery, and source-coverage discovery. After a valid result exists, it
+The page initially registers four baseline tools: analysis, two-scenario
+comparison, capability discovery, and source-coverage discovery. After a valid result exists, it
 dynamically registers an inspection tool. The storm discussion tool is even
 more contextual: it exists only for a completed Home + Wind result. Inapplicable
 actions therefore do not clutter the Agent's tool set.
@@ -87,6 +87,7 @@ A representative registration excerpt is:
 ```tsx
 const baselineTools = [
   createAnalyzeHazardTool({ runAnalysis, runAnalysisBundle }),
+  createCompareEnvironmentalEvidenceTool({ runAnalysisBundle }),
   createListEnvironmentalHazardsTool(),
   createGetEnvironmentalSourceCoverageTool(),
 ];
@@ -107,13 +108,22 @@ or validate evidence.
 
 Without WebMCP, the person must translate a natural concern into form fields,
 manually inspect several panels, and decide which related hazard to query next.
-With WebMCP, the Agent can map the question to validated inputs, run the shared
-analysis, keep related evidence chains separate, and explain the visible result
-with the person. The UI stays inspectable and reversible instead of becoming a
-hidden agent-only transaction.
+With WebMCP, the Agent can map the question to validated inputs, run all
+relevant evidence chains together, compare two places or time windows, and
+explain the visible result in plain English. The page shows retrieval and
+synthesis progress and keeps a link to every chain, so Agent assistance makes
+the interface easier to use without turning the investigation into a hidden
+agent-only transaction. The UI stays inspectable and reversible.
 
 ## Verification
 
+- The current private Agent-investigation feature branch passes typecheck,
+  lint, 1,353 unit tests, 133 integration tests, a 14-page production build,
+  234 desktop/mobile browser journeys, and secret checking. A direct live NWS
+  check for Houston on August 28, 2026 returned the Harris County flash-flood
+  Local Storm Report. Focused `gpt-5-mini` evaluation passed 3/3 tool-selection
+  cases and 1/1 summary-first plain-English two-chain case. Deployment and
+  production re-verification remain separate pending actions.
 - Production native WebMCP discovery and the complete Beryl, narrow-wind,
   no-observation, inspection, and discussion journeys were exercised in the
   supported in-app browser at deployed commit `c6f3c8c`. Contextual inspection

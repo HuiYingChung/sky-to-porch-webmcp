@@ -210,6 +210,60 @@ describe("contextual WebMCP tools", () => {
     });
   });
 
+  it("answers natural source-failure and evidence-needed follow-ups without re-querying", async () => {
+    const wind = analysis("wind_storm", "home");
+    const evidence = evidenceFor(wind);
+    evidence.missionAttributions = [{
+      missionName: "NWS Preliminary Local Storm Reports",
+      agency: "NOAA / National Weather Service",
+      purpose: "Recent event reports",
+      selectionReason: "Selected-area event check",
+      contributedObservationIds: [],
+      retrievalStatus: "failed",
+      keyLimitation: "The request failed and missing data is not evidence of no storm.",
+      datasetId: "NWS LSR",
+    }];
+    evidence.limitations = [{
+      limitationId: "lim-lsr-failure",
+      source: "nws_local_storm_reports",
+      description: "The recent NWS report request failed; returned station evidence does not replace it.",
+      required: true,
+    }];
+    const tool = createInspectEvidenceTool(wind);
+    const sources = await tool.execute({ focus: "sources" }, options);
+    const needed = await tool.execute({ focus: "evidence_needed" }, options);
+
+    expect(sources).toMatchObject({
+      focus: "sources",
+      hazard: "wind_storm",
+      source_checks: expect.arrayContaining([
+        expect.objectContaining({ source: "NWS Preliminary Local Storm Reports", status: "failed" }),
+      ]),
+      agent_response_contract: { style: "plain_english", answer_the_follow_up_directly: true },
+    });
+    expect(needed).toMatchObject({
+      focus: "evidence_needed",
+      what_would_change_conclusion: expect.arrayContaining([
+        expect.stringMatching(/successful retry/iu),
+      ]),
+    });
+    expect(JSON.stringify(sources).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
+    expect(JSON.stringify(needed).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
+  });
+
+  it("can inspect only one chain from the current multi-chain result", async () => {
+    const output = await createInspectEvidenceTool(
+      analysis("wind_storm", "home"),
+      [analysis("flood_storm", "home")]
+    ).execute({ focus: "direct_observations", hazard: "flood_storm" }, options);
+
+    expect(output).toMatchObject({
+      focus: "direct_observations",
+      hazard: "flood_storm",
+      direct_observations: [{ name: "Gage height", value: 4.2 }],
+    });
+  });
+
   it("registers claim preparation only for a Home + Wind result and only updates local UI", async () => {
     const open = vi.fn();
     const windHome = analysis("wind_storm", "home");

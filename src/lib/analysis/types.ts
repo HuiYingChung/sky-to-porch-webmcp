@@ -17,6 +17,22 @@ export interface EvidenceBundleContext {
   includedHazardIds: HazardId[];
   /** Controls shared-view preservation while the bundle runs sequentially. */
   role: "start_context" | "context" | "primary";
+  /** Groups one Agent investigation without changing evidence semantics. */
+  investigationId?: string;
+  investigationKind?: "analysis" | "comparison";
+  /** Comparison-only scenario metadata used by the shared receipt and links. */
+  scenarioId?: string;
+  scenarioLabel?: string;
+  scenarioOrder?: number;
+}
+
+export interface AgentInvestigationState {
+  investigationId: string;
+  kind: "analysis" | "comparison";
+  phase: "planning" | "retrieving" | "synthesizing" | "complete";
+  totalChains: number;
+  completedChains: number;
+  scenarioLabels: string[];
 }
 
 export interface AnalysisRequest {

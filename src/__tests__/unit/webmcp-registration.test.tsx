@@ -56,7 +56,7 @@ afterEach(() => {
 });
 
 describe("WebMcpBridge", () => {
-  it("registers the three baseline tools and unregisters them through one lifecycle signal", async () => {
+  it("registers the four baseline tools and unregisters them through one lifecycle signal", async () => {
     const registerTool = vi.fn().mockResolvedValue(undefined);
     const onStatusChange = vi.fn();
     Object.defineProperty(document, "modelContext", {
@@ -79,6 +79,7 @@ describe("WebMcpBridge", () => {
 
     expect(registerTool.mock.calls.map(([tool]) => tool.name)).toEqual([
       "analyze_environmental_hazard",
+      "compare_environmental_evidence",
       "get_sky_to_porch_help_and_demos",
       "get_environmental_source_coverage",
     ]);
@@ -148,7 +149,7 @@ describe("WebMcpBridge", () => {
       "registering",
       "error",
     ]);
-    expect(signals).toHaveLength(3);
+    expect(signals).toHaveLength(4);
     expect(new Set(signals).size).toBe(1);
     expect(signals.every((signal) => signal.aborted)).toBe(true);
     expect(consoleError).toHaveBeenCalledWith(
@@ -180,12 +181,13 @@ describe("WebMcpBridge", () => {
 
     expect(registerTool.mock.calls.map(([tool]) => tool.name)).toEqual([
       "analyze_environmental_hazard",
+      "compare_environmental_evidence",
       "get_sky_to_porch_help_and_demos",
       "get_environmental_source_coverage",
       "inspect_current_environmental_evidence",
       "prepare_storm_claim_discussion",
     ]);
-    const contextualSignals = registerTool.mock.calls.slice(3).map(([, options]) => options.signal);
+    const contextualSignals = registerTool.mock.calls.slice(4).map(([, options]) => options.signal);
     expect(contextualSignals.every((signal) => signal.aborted === false)).toBe(true);
 
     act(() => root?.unmount());

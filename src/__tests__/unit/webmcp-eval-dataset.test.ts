@@ -5,6 +5,8 @@ import { HAZARD_IDS } from "@/contracts/common";
 import {
   ANALYZE_HAZARD_INPUT_SCHEMA,
   ANALYZE_HAZARD_TOOL_NAME,
+  COMPARE_HAZARD_INPUT_SCHEMA,
+  COMPARE_HAZARD_TOOL_NAME,
 } from "@/lib/webmcp/analyze-tool";
 import {
   GET_COVERAGE_INPUT_SCHEMA,
@@ -148,7 +150,7 @@ describe("WebMCP tool-selection eval dataset", () => {
       assistantMustIncludeEvidenceDetails: {
         requiredTime: "2026-08-28",
         sourceTermGroups: [
-          ["NASA", "IMERG"],
+          ["NWS", "National Weather Service", "Local Storm Report"],
           ["NOAA", "Iowa Environmental Mesonet", "IEM"],
         ],
         requireLimitation: true,
@@ -236,6 +238,7 @@ describe("WebMCP tool-selection eval dataset", () => {
   it("keeps expected calls aligned with the registered tool contract", () => {
     const schemas = {
       [ANALYZE_HAZARD_TOOL_NAME]: ANALYZE_HAZARD_INPUT_SCHEMA.properties,
+      [COMPARE_HAZARD_TOOL_NAME]: COMPARE_HAZARD_INPUT_SCHEMA.properties,
       [CAPABILITIES_TOOL_NAME]: CAPABILITIES_INPUT_SCHEMA.properties,
       [GET_COVERAGE_TOOL_NAME]: GET_COVERAGE_INPUT_SCHEMA.properties,
       [INSPECT_EVIDENCE_TOOL_NAME]: INSPECT_EVIDENCE_INPUT_SCHEMA.properties,
@@ -255,6 +258,11 @@ describe("WebMCP tool-selection eval dataset", () => {
           expect(call.arguments).toHaveProperty("hazard");
           expect(call.arguments).toHaveProperty("time");
         }
+        if (call.functionName === COMPARE_HAZARD_TOOL_NAME) {
+          expect(call.arguments).toHaveProperty("baseline");
+          expect(call.arguments).toHaveProperty("comparison");
+          expect(call.arguments).toHaveProperty("hazard");
+        }
         if (call.functionName === GET_COVERAGE_TOOL_NAME) {
           expect(call.arguments).toHaveProperty("hazard");
         }
@@ -268,6 +276,7 @@ describe("WebMCP tool-selection eval dataset", () => {
     ));
     expect(calledTools).toEqual(new Set([
       ANALYZE_HAZARD_TOOL_NAME,
+      COMPARE_HAZARD_TOOL_NAME,
       CAPABILITIES_TOOL_NAME,
       GET_COVERAGE_TOOL_NAME,
       INSPECT_EVIDENCE_TOOL_NAME,

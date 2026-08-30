@@ -11,7 +11,7 @@
 - W0 repository baseline: complete
 - W1 shared analysis application layer: complete for the vertical slice
 - W2 shared client controller and state: complete with renderer compatibility
-- W3 WebMCP tools: three baseline tools plus two contextual tools implemented;
+- W3 WebMCP tools: four baseline tools plus two contextual tools implemented;
   product commit `72f3a36` fixes the production-reported Houston
   ambiguity loop with distinguishable locality/type labels, stable upstream
   place IDs, original-query continuation, exact retry arguments, and stale-ID
@@ -36,6 +36,14 @@
 - W5d compound environmental context: locally verified for Heat–Drought,
   Fire/Smoke–Air Quality, and Volcano–Air Quality–Heat, including one parallel
   shared-view transaction; supported-browser Agent verification pending
+- W5e Agent investigation upgrade: complete; adds recent NWS
+  Local Storm Reports, two-scenario comparison, cross-source synthesis,
+  focused follow-up, visible all-chain progress, and links to every result.
+  The feature branch passes typecheck, lint, 1,353 unit tests, 133 integration
+  tests, a 14-page production build, 234 desktop/mobile browser journeys, and
+  the secret gate. A live Houston 2026-08-28 check returned the NWS flash-flood
+  report, and focused model evaluation passed 3/3 selection cases plus 1/1
+  plain-English two-chain summary case
 - W6 release and submission: private release preparation remains in progress;
   the repo stays private by owner direction. Stable-place product commit
   `72f3a36` passed local, PR-head, post-merge main, deployment, and production
@@ -145,9 +153,14 @@ place-and-hazard question straight to the analysis tool, so discovery is not a
 mandatory or fragile preflight sequence. Coverage output states that pipeline
 eligibility is not proof of an observation. Contextual tools expose the current
 validated evidence and, only after Home + Wind, the bounded claim-discussion
-guide. The existing no-input hazard-list tool exposes compact ready inputs for
-all three demos in one response; no selector, separate demo tool, or citation
-tool is added.
+guide. A fourth baseline tool compares two independently specified scenarios
+through the same shared analysis service. A generic storm comparison runs and
+returns both the Wind and Flood chains for both scenarios, preserves each
+scenario's supplied radius, and separates direct observation, supported
+inference, unknowns, failed checks, and evidence that would change the
+conclusion. The existing no-input hazard-list tool exposes compact ready inputs
+for all three demos in one response; no selector, separate demo tool, or
+citation tool is added.
 
 ### W4 — Provider cleanup
 
@@ -197,6 +210,22 @@ tool is added.
   result and keep it local, bounded, and non-adjudicative;
 - retain Home, Travel, Pets, Health, Power & Internet, and Community as the
   product's broader concern contexts.
+
+### W5e — Agent investigation upgrade
+
+- add recent, bounded NWS Preliminary Local Storm Reports to the independent
+  Wind and Flood evidence chains without treating a missing report as no storm;
+- rank direct geolocated event and ground observations ahead of regional
+  visualizations in compact Agent output;
+- add deterministic two-scenario comparison and cross-source synthesis while
+  preserving every user-specified place, time, and radius;
+- let the contextual inspection tool answer natural follow-ups about direct
+  observations, source status, limitations, and evidence still needed without
+  re-querying;
+- show retrieving and synthesizing progress in the shared UI and retain a
+  visible route to every completed chain;
+- require summary-first plain English that keeps direct observation, inference,
+  failure, and unknown state distinct.
 
 ### W6 — Release and submission
 
