@@ -203,6 +203,31 @@ const ENTRIES: DatasetRegistryEntry[] = [
     supportedDataModes: ["fixture", "historical"],
   },
   {
+    sourceId: "nws_local_storm_reports",
+    displayName: "NWS Preliminary Local Storm Reports",
+    agency: "NOAA / National Weather Service",
+    hazardIds: ["flood_storm", "wind_storm"],
+    decision: "go_supporting",
+    role:
+      "Recent official event reports issued by applicable National Weather Service forecast " +
+      "offices. Strict event-type and coordinate filtering keeps water reports in Flood & Heavy " +
+      "Rain and wind, hail, or tornado reports in Wind & Storm. Reports remain preliminary and " +
+      "regional; they do not establish property conditions, damage, or causation.",
+    endpointTemplate:
+      "https://api.weather.gov/products/types/LSR/locations/{office} and https://api.weather.gov/products/{productId}",
+    requiresCredential: false,
+    authNote:
+      "No authentication required. api.weather.gov requires an identifying User-Agent and applies reasonable rate limits.",
+    documentationUrl: "https://www.weather.gov/documentation/services-web-api",
+    requiredLimitations: [
+      "Local Storm Reports are preliminary event reports and may be corrected, consolidated, or superseded by certified Storm Data.",
+      "Only reports with parsed coordinates inside the exact selected area and dates inside the requested completed UTC window are used.",
+      "The live products index exposes a bounded recent window; an empty result does not establish that no storm occurred.",
+      "A regional report does not prove conditions, damage, or causation at a selected property, road, or person.",
+    ],
+    supportedDataModes: ["live", "historical"],
+  },
+  {
     sourceId: "nasa_gibs_modis_lst_day",
     displayName: "NASA GIBS MODIS Terra Daytime Land-Surface Temperature",
     agency: "NASA / ESDIS / MODIS Terra",

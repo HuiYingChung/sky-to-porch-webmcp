@@ -23,7 +23,7 @@ The service owns:
 
 ## Implemented tool surface
 
-Three baseline tools are registered whenever WebMCP is available. Two more
+Four baseline tools are registered whenever WebMCP is available. Two more
 tools are registered only while the necessary validated page state exists.
 
 ### get_sky_to_porch_help_and_demos
@@ -75,12 +75,28 @@ The output excludes raw source payloads and long prose.
 Its description tells the Agent to call it directly for a concrete
 place-and-hazard question rather than creating a discovery-tool waterfall.
 
+### compare_environmental_evidence
+
+Runs two independently specified scenarios through the same shared analysis
+controller. Each scenario owns its place, time, and optional radius. Generic
+storm comparison expands to separate Wind & Storm and Flood & Heavy Rain
+chains for both scenarios; explicit wind-only or rain/flood-only requests stay
+narrow. The compact result includes every scenario and chain, deterministic
+agreements and differences, direct observations, supported inference,
+unknowns, failed checks, and evidence that would change the conclusion.
+
+The shared UI commits the comparison as one Agent investigation, shows bounded
+retrieval and synthesis progress, and retains a visible link to every result.
+No scenario or chain can silently replace another in the Agent receipt.
+
 ### inspect_current_environmental_evidence
 
 Registered only while a completed result is active. It reads the strongest
-primary and related observations, confidence, structured citations, and the
-hazard-specific scope. It does not run another query and is not required
-before or after the primary tool.
+primary and related observations, confidence, structured citations, source
+status, limitations, and the hazard-specific scope. The Agent may focus the
+read on a summary, direct observations, sources, limitations, or evidence still
+needed, and may select one already completed chain. It does not run another
+query and is not required before or after the primary tool.
 
 ### prepare_storm_claim_discussion
 
@@ -131,7 +147,7 @@ when retrieval returns no usable observation.
 
 Register tools from a client component after feature detection. Tie
 registration to an AbortController so unmounting or replacement unregisters
-the tools. The three baseline tools share one registration lifecycle. Keep
+the tools. The four baseline tools share one registration lifecycle. Keep
 definitions stable and use the shared controller's current state through safe
 closures for the two contextual tools.
 

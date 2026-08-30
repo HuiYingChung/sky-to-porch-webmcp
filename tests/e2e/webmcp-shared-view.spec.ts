@@ -162,7 +162,7 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
   });
 
   const receipt = page.locator('[data-testid="agent-analysis-notice"]:visible');
-  await expect(receipt).toContainText("Agent updated this view");
+  await expect(receipt).toContainText("Agent made this view more useful");
   await expect(receipt.getByTestId("agent-analysis-receipt"))
     .toContainText("Fire & Smoke · Albuquerque, New Mexico · May 20, 2025");
   await receipt.getByTestId("agent-view-evidence").click();
@@ -368,6 +368,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
   expect(registered).toMatchObject({
     names: [
       "analyze_environmental_hazard",
+      "compare_environmental_evidence",
       "get_sky_to_porch_help_and_demos",
       "get_environmental_source_coverage",
     ],
@@ -426,7 +427,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
 
   const visibleReceipt = page.locator('[data-testid="agent-analysis-notice"]:visible');
   await expect(visibleReceipt)
-    .toContainText("Agent updated this view");
+    .toContainText("Agent made this view more useful");
   await expect(visibleReceipt.getByTestId("agent-analysis-receipt"))
     .toContainText("Fire & Smoke · Tucson, Arizona · Latest available data");
   await expect(visibleReceipt.getByTestId("agent-restore-previous")).toHaveCount(0);
@@ -565,7 +566,7 @@ test("related-context scope automatically checks heat and drought as separate vi
   await expect(visibleReceipt.getByTestId("agent-related-context-receipt"))
     .toContainText("timing, strength, and confidence");
   await expect(visibleReceipt.getByTestId("agent-chain-result-summary"))
-    .toContainText("do not have to rerun the interface one hazard at a time");
+    .toContainText("With Agent help, this interface checked");
   await expect(visibleReceipt.getByTestId("agent-extreme_heat-result-summary"))
     .toContainText("Extreme Heat");
   await expect(visibleReceipt.getByTestId("agent-drought_land-result-summary"))
@@ -702,7 +703,7 @@ test("a generic storm call cannot collapse to wind-only when water evidence exis
       {
         hazard: "flood_storm",
         status_summary: "observations returned",
-        citation: { source: "nasa_gibs_imerg" },
+        citation: { source: "usgs_instantaneous_values" },
       },
       { hazard: "wind_storm", status_summary: "no matching observation returned" },
     ],
@@ -726,6 +727,114 @@ test("a generic storm call cannot collapse to wind-only when water evidence exis
   await receipt.getByTestId("agent-view-wind_storm-result").click();
   await expect(page.locator('[data-testid="primary-wind_storm-evidence-chain"]:visible'))
     .toBeFocused();
+});
+
+test("Agent comparison keeps both storm chains visible for both user-sized scenarios", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    state.__skyToPorchWebMcpTools = {};
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: async (tool: WebMCP.ModelContextTool) => {
+          state.__skyToPorchWebMcpTools![tool.name] = tool;
+        },
+      },
+    });
+  });
+
+  const floodRequests: Array<Record<string, unknown>> = [];
+  const windRequests: Array<Record<string, unknown>> = [];
+  await page.route("**/api/flood/query", async (route) => {
+    floodRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        result: {
+          kind: "unsupported_coverage",
+          rejectionReason: "No direct Flood observation in this comparison fixture.",
+        },
+      }),
+    });
+  });
+  await page.route("**/api/storm/query", async (route) => {
+    windRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        result: {
+          kind: "unsupported_coverage",
+          rejectionReason: "No direct Wind observation in this comparison fixture.",
+        },
+      }),
+    });
+  });
+
+  await gotoHydrated(page, "/");
+  const output = await page.evaluate(async () => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    const tool = state.__skyToPorchWebMcpTools?.compare_environmental_evidence;
+    if (!tool) throw new Error("WebMCP comparison tool was not registered");
+    return tool.execute({
+      baseline: {
+        place: "29.7604, -95.3698",
+        radius_km: 50,
+        time: "2026-08-28",
+      },
+      comparison: {
+        place: "30.2672, -97.7431",
+        radius_km: 15,
+        time: "2026-08-27",
+      },
+      hazard: "wind_storm",
+      analysis_scope: "related_context",
+      question: "Compare the storm evidence for both scenarios.",
+    }, { signal: new AbortController().signal });
+  }) as Record<string, unknown>;
+
+  expect(floodRequests).toHaveLength(2);
+  expect(windRequests).toHaveLength(2);
+  expect(output).toMatchObject({
+    status: "environmental_evidence_comparison",
+    must_report_every_scenario_and_chain: true,
+    agent_response_contract: { style: "plain_english", summary_first: true },
+    scenarios: [
+      {
+        id: "baseline",
+        radius_km: 50,
+        chains: [{ hazard: "flood_storm" }, { hazard: "wind_storm" }],
+      },
+      {
+        id: "comparison",
+        radius_km: 15,
+        chains: [{ hazard: "flood_storm" }, { hazard: "wind_storm" }],
+      },
+    ],
+  });
+  expect(JSON.stringify(output).length).toBeLessThanOrEqual(2_400);
+
+  const receipt = page.locator('[data-testid="agent-analysis-notice"]:visible');
+  await expect(receipt).toContainText("Agent made this view more useful");
+  await expect(receipt.getByTestId("agent-analysis-receipt"))
+    .toContainText("Compared 2 scenarios across 4 separate evidence chains");
+  for (const id of [
+    "agent-view-baseline-flood_storm-result",
+    "agent-view-baseline-wind_storm-result",
+    "agent-view-comparison-flood_storm-result",
+    "agent-view-comparison-wind_storm-result",
+  ]) {
+    await expect(receipt.getByTestId(id)).toBeVisible();
+  }
 });
 
 test("volcano related context automatically adds separate air-quality and heat chains", async ({

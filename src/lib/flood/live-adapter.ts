@@ -28,6 +28,7 @@ import {
   areaCenter,
   validateQueryArea,
 } from "@/lib/location/query-area";
+import { queryNwsLocalStormReports } from "@/lib/storm/nws-lsr-live-adapter";
 
 const GIBS_LAYER = "IMERG_Precipitation_Rate";
 const GIBS_HOST = "gibs.earthdata.nasa.gov";
@@ -668,6 +669,22 @@ const FLOOD_EXTENT_FAILURE_LIMITATION: Limitation = {
   required: true,
 };
 
+const LOCAL_STORM_REPORT_LIMITATION: Limitation = {
+  limitationId: "lim-flood-nws-lsr-preliminary",
+  source: "nws_local_storm_reports",
+  description:
+    "NWS Local Storm Reports are preliminary reports and may be corrected or replaced. An in-area flood or heavy-rain report supports regional event context, not water depth at an address, property damage, route safety, or causation.",
+  required: true,
+};
+
+const LOCAL_STORM_REPORT_FAILURE_LIMITATION: Limitation = {
+  limitationId: "lim-flood-nws-lsr-source-failure",
+  source: "nws_local_storm_reports",
+  description:
+    "The recent NWS Local Storm Report check failed or was only partially completed. Other returned sources do not replace the missing event-report check, and the failure is not evidence that no flood or heavy-rain event occurred.",
+  required: true,
+};
+
 function floodExtentAttribution(result: FloodExtentResult): MissionAttribution {
   return {
     missionName: "VIIRS NOAA-20 / NOAA-21",
@@ -696,6 +713,33 @@ function gpmAttribution(observations: Observation[], anyTransparent: boolean): M
     keyLimitation:
       "The PNG is visualization evidence only; no numeric rainfall, surface-water, property, or route conclusion is derived from colors.",
     datasetId: GIBS_LAYER,
+  };
+}
+
+function localStormReportAttribution(
+  result: Awaited<ReturnType<typeof queryNwsLocalStormReports>>,
+  observations: Observation[]
+): MissionAttribution {
+  const hasPartialFailure = "failedRequestCount" in result && result.failedRequestCount > 0;
+  return {
+    missionName: "NWS Preliminary Local Storm Reports",
+    agency: "NOAA / National Weather Service",
+    purpose: "Provide recent official, geolocated reports of flash flood, flood, heavy rain, coastal flood, or debris flow.",
+    selectionReason: result.kind === "observations"
+      ? "Reports were accepted only when their event type matched Flood & Rain, their report date matched the request, and their coordinate was inside the exact selected geometry."
+      : result.kind === "not_applicable"
+        ? "The requested dates are outside the bounded recent report index or no applicable NWS office was found."
+        : "The bounded recent report index was checked for matching in-area water events.",
+    contributedObservationIds: observations.map((observation) => observation.observationId),
+    retrievalStatus: result.kind === "observations"
+      ? hasPartialFailure ? "partial" : "success"
+      : result.kind === "source_failure" || hasPartialFailure
+        ? "failed"
+        : result.kind === "not_applicable"
+          ? "not_attempted"
+          : "no_observation",
+    keyLimitation: LOCAL_STORM_REPORT_LIMITATION.description,
+    datasetId: "NWS LSR",
   };
 }
 
@@ -769,6 +813,7 @@ export async function queryLiveFloodEvidence(
     floodExtent: "not_attempted",
     usgs: "not_attempted",
     canadaGeomet: "not_attempted",
+    localStormReports: "not_attempted",
   };
   const now = dependencies.now?.() ?? new Date();
   const rejection = validateInput(input, now);
@@ -785,15 +830,31 @@ export async function queryLiveFloodEvidence(
   const box: BoundingBox = validateQueryArea(input.area);
   const areaTag = "custom-area";
   try {
-    const floodExtent = await queryFloodExtent(input.endDate, box, {
-      fetchImpl,
-      now: () => now,
-    });
+    const [floodExtent, localStormReports] = await Promise.all([
+      queryFloodExtent(input.endDate, box, {
+        fetchImpl,
+        now: () => now,
+      }),
+      queryNwsLocalStormReports(
+        box,
+        input.startDate,
+        input.endDate,
+        "flood_storm",
+        { fetchImpl, now: () => now }
+      ),
+    ]);
     sourceOutcomes.floodExtent = floodExtent.kind === "observation"
       ? "success"
       : floodExtent.kind === "no_observation"
         ? "no_observation"
         : "failed";
+    sourceOutcomes.localStormReports = localStormReports.kind === "observations"
+      ? "success"
+      : localStormReports.kind === "source_failure"
+        ? "failed"
+        : localStormReports.kind === "not_applicable"
+          ? "not_attempted"
+          : "no_observation";
 
     // UXFIX-02: one bounded GIBS observation per requested UTC day (max
     // FLOOD_MAX_RANGE_DAYS), fetched sequentially to stay a good citizen.
@@ -858,14 +919,23 @@ export async function queryLiveFloodEvidence(
       ...(usgs ? [usgs] : []),
       ...(canadaObservation ? [canadaObservation] : []),
     ];
+    const localReportObservations = localStormReports.kind === "observations"
+      ? localStormReports.observations.map((observation) => ({
+          ...observation,
+          dataMode: "live" as const,
+        }))
+      : [];
     const observations = [
       ...gibsObservations,
       ...(floodExtentObservation ? [floodExtentObservation] : []),
       ...groundObservations,
+      ...localReportObservations,
     ];
     const satelliteUnsupported =
       gibsDays.every((day) => day.transparent) && floodExtent.kind === "no_observation";
-    const unsupported = satelliteUnsupported && groundObservations.length === 0;
+    const unsupported = satelliteUnsupported &&
+      groundObservations.length === 0 &&
+      localReportObservations.length === 0;
     const inconclusive = !unsupported && (
       groundObservations.length === 0 ||
       floodExtent.kind === "source_failure" ||
@@ -886,6 +956,9 @@ export async function queryLiveFloodEvidence(
       missionAttributions: [
         gpmAttribution(gibsObservations, gibsDays.some((day) => day.transparent)),
         floodExtentAttribution(floodExtent),
+        ...(localStormReports.kind === "observations"
+          ? [localStormReportAttribution(localStormReports, localReportObservations)]
+          : []),
         ...(canadaHydrometric.kind === "observation" || canadaHydrometric.kind === "source_failure"
           ? [canadaHydrometricAttribution(canadaHydrometric)]
           : []),
@@ -899,8 +972,12 @@ export async function queryLiveFloodEvidence(
             ? floodExtent.kind === "source_failure"
               ? "The returned precipitation or gage context cannot replace the failed flood-extent source."
               : satelliteUnsupported
-                ? "A ground gage observation is available, but both satellite roles returned no usable regional observation."
-                : "The regional visualization was retrieved but no applicable USGS or ECCC gage in the selected area returned an observation for these dates."
+                ? localReportObservations.length > 0
+                  ? "An official in-area event report is available, but both satellite roles returned no usable regional observation and no ground gage established water conditions."
+                  : "A ground gage observation is available, but both satellite roles returned no usable regional observation."
+                : localReportObservations.length > 0
+                  ? "An official in-area event report and regional visualization are available, but no applicable USGS or ECCC gage established water conditions for these dates."
+                  : "The regional visualization was retrieved but no applicable USGS or ECCC gage in the selected area returned an observation for these dates."
             : "Regional visualization and in-area station evidence are available but do not establish property or route conditions.",
       },
       limitations: [
@@ -920,6 +997,11 @@ export async function queryLiveFloodEvidence(
               ? [CANADA_GEOMET_FAILURE_LIMITATION]
               : []),
         ...(groundObservations.length === 0 ? [NO_GAGE_LIMITATION] : []),
+        LOCAL_STORM_REPORT_LIMITATION,
+        ...(localStormReports.kind === "source_failure" ||
+          ("failedRequestCount" in localStormReports && localStormReports.failedRequestCount > 0)
+          ? [LOCAL_STORM_REPORT_FAILURE_LIMITATION]
+          : []),
       ],
       explanations: [],
       assembledAt,

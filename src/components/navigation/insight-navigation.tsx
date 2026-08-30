@@ -107,6 +107,7 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
     activeAnalysis,
     relatedAnalyses,
     previousAnalysis,
+    agentInvestigation,
     restorePreviousAnalysis,
   } = useQueryDraft();
   const trustSummary = useMemo(
@@ -159,24 +160,36 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
   }
 
   const agentBundleAnalyses = activeAnalysis?.request.evidenceBundle?.role === "primary"
-    ? [activeAnalysis, ...relatedAnalyses]
+    ? [activeAnalysis, ...relatedAnalyses].sort((left, right) =>
+        (left.request.evidenceBundle?.scenarioOrder ?? 0) -
+          (right.request.evidenceBundle?.scenarioOrder ?? 0) ||
+        left.analysisId.localeCompare(right.analysisId)
+      )
     : [];
+  const isComparison = activeAnalysis?.request.evidenceBundle?.investigationKind === "comparison";
 
-  function handleAgentChainResult(analysis: ActiveAnalysis) {
-    const isPrimary = analysis.analysisId === activeAnalysis?.analysisId;
-    const targetTestId = isPrimary
+  function chainTargetTestId(analysis: ActiveAnalysis, isPrimary: boolean): string {
+    if (analysis.request.evidenceBundle?.investigationKind === "comparison") {
+      return `agent-chain-${analysis.analysisId}`;
+    }
+    return isPrimary
       ? `primary-${analysis.outcome.hazardId}-evidence-chain`
       : activeAnalysis?.outcome.hazardId === "wind_storm" &&
           analysis.outcome.hazardId === "flood_storm"
         ? "related-flood-evidence-chain"
         : `related-${analysis.outcome.hazardId}-evidence-chain`;
+  }
+
+  function handleAgentChainResult(analysis: ActiveAnalysis) {
+    const isPrimary = analysis.analysisId === activeAnalysis?.analysisId;
+    const targetTestId = chainTargetTestId(analysis, isPrimary);
     setPendingChainTarget(targetTestId);
     handleTabClick("evidence");
   }
 
   return (
     <div data-testid="insight-navigation">
-      {activeAnalysis?.origin === "agent" && (
+      {(activeAnalysis?.origin === "agent" || agentInvestigation !== null) && (
         <section
           aria-label="Agent action"
           data-testid="agent-analysis-notice"
@@ -192,16 +205,40 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
           }}
         >
           <p role="status" style={{ margin: 0 }}>
-            <strong style={{ color: "var(--text-primary)" }}>Agent updated this view</strong>
+            <strong style={{ color: "var(--text-primary)" }}>
+              {agentInvestigation?.phase === "complete"
+                ? "Agent made this view more useful"
+                : "Agent is investigating for you"}
+            </strong>
           </p>
-          <p
-            data-testid="agent-analysis-receipt"
-            style={{ margin: "3px 0 0", color: "var(--text-primary)" }}
-          >
-            {HAZARD_LABELS[activeAnalysis.request.hazardId]} ·{" "}
-            {formatAnalysisPlace(activeAnalysis)} · {formatAnalysisTime(activeAnalysis)}
-          </p>
-          {activeAnalysis.request.evidenceBundle?.role === "primary" && (
+          {agentInvestigation && agentInvestigation.phase !== "complete" && (
+            <div data-testid="agent-investigation-progress" style={{ marginTop: "6px" }}>
+              <p style={{ margin: "0 0 4px" }}>
+                {agentInvestigation.phase === "planning"
+                  ? `Planning ${agentInvestigation.totalChains} evidence checks…`
+                  : agentInvestigation.phase === "synthesizing"
+                    ? "Comparing direct observations, source gaps, and limitations…"
+                    : `Checking official sources · ${agentInvestigation.completedChains}/${agentInvestigation.totalChains} evidence chains complete`}
+              </p>
+              <progress
+                aria-label="Agent investigation progress"
+                value={agentInvestigation.completedChains}
+                max={agentInvestigation.totalChains}
+                style={{ width: "100%" }}
+              />
+            </div>
+          )}
+          {activeAnalysis && (
+            <p
+              data-testid="agent-analysis-receipt"
+              style={{ margin: "3px 0 0", color: "var(--text-primary)" }}
+            >
+              {isComparison
+                ? `Compared ${agentInvestigation?.scenarioLabels.length || 2} scenarios across ${agentBundleAnalyses.length} separate evidence chains`
+                : `${HAZARD_LABELS[activeAnalysis.request.hazardId]} · ${formatAnalysisPlace(activeAnalysis)} · ${formatAnalysisTime(activeAnalysis)}`}
+            </p>
+          )}
+          {activeAnalysis?.request.evidenceBundle?.role === "primary" && !isComparison && (
             <p data-testid="agent-related-context-receipt" style={{ margin: "3px 0 0" }}>
               Related context also checked: {activeAnalysis.request.evidenceBundle.includedHazardIds
                 .filter((hazardId) => hazardId !== activeAnalysis.request.hazardId)
@@ -212,8 +249,8 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
           {agentBundleAnalyses.length > 0 ? (
             <div data-testid="agent-chain-result-summary" style={{ marginTop: "8px" }}>
               <p style={{ margin: "0 0 7px" }}>
-                Agent checked {agentBundleAnalyses.length} separate evidence chains together, so you do not have
-                to rerun the interface one hazard at a time. Every result remains separate.
+                With Agent help, this interface checked {agentBundleAnalyses.length} separate evidence chains
+                together, summarized the complete investigation, and kept every result available for review.
               </p>
               <ul style={{ display: "grid", gap: "7px", margin: 0, padding: 0, listStyle: "none" }}>
                 {agentBundleAnalyses.map((analysis) => {
@@ -221,7 +258,9 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
                   return (
                     <li
                       key={analysis.analysisId}
-                      data-testid={`agent-${analysis.outcome.hazardId}-result-summary`}
+                      data-testid={isComparison
+                        ? `agent-${analysis.request.evidenceBundle?.scenarioId}-${analysis.outcome.hazardId}-result-summary`
+                        : `agent-${analysis.outcome.hazardId}-result-summary`}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -235,6 +274,11 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
                       }}
                     >
                       <span>
+                        {isComparison && (
+                          <small style={{ display: "block", color: "var(--text-secondary)" }}>
+                            {analysis.request.evidenceBundle?.scenarioLabel}
+                          </small>
+                        )}
                         <strong style={{ color: "var(--text-primary)" }}>
                           {HAZARD_LABELS[analysis.outcome.hazardId]}
                         </strong>{" "}
@@ -243,7 +287,9 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
                       </span>
                       <button
                         type="button"
-                        data-testid={`agent-view-${analysis.outcome.hazardId}-result`}
+                        data-testid={isComparison
+                          ? `agent-view-${analysis.request.evidenceBundle?.scenarioId}-${analysis.outcome.hazardId}-result`
+                          : `agent-view-${analysis.outcome.hazardId}-result`}
                         onClick={() => handleAgentChainResult(analysis)}
                         style={{
                           padding: "5px 8px",
@@ -261,13 +307,13 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
                 })}
               </ul>
             </div>
-          ) : (
+          ) : activeAnalysis ? (
             <p style={{ margin: "3px 0 0" }}>
               The map and Insight now share this result. The strongest evidence and citations are ready to review.
             </p>
-          )}
+          ) : null}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", marginTop: "8px" }}>
-            {agentBundleAnalyses.length === 0 && (
+            {activeAnalysis && agentBundleAnalyses.length === 0 && (
               <button
                 type="button"
                 data-testid="agent-view-evidence"
@@ -408,7 +454,7 @@ export function InsightNavigation({ idPrefix, selectedTab, onTabChange }: Insigh
               )}
               <div
                 data-testid={activeAnalysis
-                  ? `primary-${activeAnalysis.outcome.hazardId}-evidence-chain`
+                  ? chainTargetTestId(activeAnalysis, true)
                   : undefined}
                 tabIndex={activeAnalysis ? -1 : undefined}
               >
@@ -465,7 +511,9 @@ function InsightPanelContent({
   const relatedPanels = (
     <RelatedEvidenceChains
       analyses={relatedAnalyses.filter(
-        (analysis) => !(windResult !== null && analysis.outcome.hazardId === "flood_storm")
+        (analysis) =>
+          analysis.request.evidenceBundle?.investigationKind === "comparison" ||
+          !(windResult !== null && analysis.outcome.hazardId === "flood_storm")
       )}
       tab={tab}
       missionSelection={missionSelection}
@@ -693,7 +741,9 @@ function RelatedEvidenceChains({
           <section
             key={analysis.analysisId}
             aria-label={`Related ${HAZARD_LABELS[outcome.hazardId]} evidence chain`}
-            data-testid={`related-${outcome.hazardId}-evidence-chain`}
+            data-testid={analysis.request.evidenceBundle?.investigationKind === "comparison"
+              ? `agent-chain-${analysis.analysisId}`
+              : `related-${outcome.hazardId}-evidence-chain`}
             tabIndex={-1}
             style={{
               marginTop: "18px",
@@ -702,11 +752,15 @@ function RelatedEvidenceChains({
             }}
           >
             <h3 style={{ margin: "0 0 5px", fontSize: "16px" }}>
-              Related {HAZARD_LABELS[outcome.hazardId]} evidence
+              {analysis.request.evidenceBundle?.scenarioLabel
+                ? `${analysis.request.evidenceBundle.scenarioLabel} — `
+                : "Related "}
+              {HAZARD_LABELS[outcome.hazardId]} evidence
             </h3>
             <p style={{ margin: "0 0 12px", color: "var(--text-secondary)", fontSize: "14px" }}>
-              Collected automatically for the same place and time. Compare its direct observations,
-              confidence, and citations with the primary result to judge how strongly it reinforces the concern.
+              {analysis.request.evidenceBundle?.investigationKind === "comparison"
+                ? "Kept as a separate scenario and hazard chain. Compare direct observations, source status, confidence, and limitations."
+                : "Collected automatically for the same place and time. Compare its direct observations, confidence, and citations with the primary result to judge how strongly it reinforces the concern."}
             </p>
             <ResultFailureGapBoundary result={outcome.result} tab={tab}>
               {outcome.hazardId === "fire_smoke" ? (

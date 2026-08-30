@@ -297,6 +297,52 @@
     ]
   },
   {
+    "id": "inspect-source-failure-follow-up",
+    "availableAfter": "completed_environmental_analysis",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Which official source checks failed or were incomplete in the current result? Do not run the query again."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "inspect_current_environmental_evidence",
+        "arguments": {
+          "focus": "sources"
+        }
+      }
+    ]
+  },
+  {
+    "id": "compare-generic-storm-scenarios",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Compare storm evidence within 50 km of Houston on August 28, 2026 with storm evidence within 15 km of Austin on August 27, 2026. Report both wind and water evidence for both scenarios."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "compare_environmental_evidence",
+        "arguments": {
+          "baseline": {
+            "place": "Houston",
+            "radius_km": 50,
+            "time": "2026-08-28"
+          },
+          "comparison": {
+            "place": "Austin",
+            "radius_km": 15,
+            "time": "2026-08-27"
+          },
+          "hazard": "wind_storm",
+          "analysis_scope": "related_context"
+        }
+      }
+    ]
+  },
+  {
     "id": "prepare-claim-after-home-wind",
     "availableAfter": "completed_home_wind_analysis",
     "messages": [

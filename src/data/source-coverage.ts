@@ -194,6 +194,24 @@ const PROFILES: SourceCoverageProfile[] = [
       "exists. Users are pointed at the official Storm Events search as a verification checker.",
   },
   {
+    sourceId: "nws_local_storm_reports",
+    hazardIds: ["flood_storm", "wind_storm"],
+    level: "national",
+    kind: "official_event",
+    integrationStatus: "live_integrated",
+    evidenceRole: "supporting",
+    regionLabel: "United States · applicable NWS forecast offices",
+    countryCodes: ["US"],
+    temporalCoverage: "Recent preliminary event reports in the bounded live products index",
+    updateCadence: "Event-driven and normally issued close to real time",
+    spatialResolution: "Reported event coordinates; never property-scale certainty",
+    coverageNote:
+      "Preliminary official event reports, separated by water versus wind/severe-weather type and filtered to the exact selected area.",
+    liveGateNote:
+      "The bounded points → office → LSR products path and the Houston 2026-08-28 Flash Flood report passed the live schema smoke. Empty recent indexes remain no observation, never no storm.",
+    lastVerifiedDate: "2026-08-29",
+  },
+  {
     sourceId: "canada_geomet",
     hazardIds: ["flood_storm"],
     level: "national",

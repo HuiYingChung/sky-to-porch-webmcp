@@ -57,6 +57,7 @@ import type { StormQueryResult } from "@/lib/storm/types";
 import { executeAnalysisRequest } from "@/lib/analysis/client";
 import type {
   ActiveAnalysis,
+  AgentInvestigationState,
   AnalysisOrigin,
   AnalysisRequest,
 } from "@/lib/analysis/types";
@@ -119,6 +120,8 @@ interface QueryContextValue {
   /** Single previous snapshot retained only for one-step Agent undo. */
   previousAnalysis: ActiveAnalysis | null;
   analysisLoading: boolean;
+  /** Visible progress for an Agent-run single, related, or comparison investigation. */
+  agentInvestigation: AgentInvestigationState | null;
   /** Current browser-native WebMCP discovery/registration state. */
   webMcpStatus: WebMcpStatus;
   /** Cancel any active request and clear all displayed analysis results. */
@@ -164,14 +167,19 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [activeAnalysis, setActiveAnalysis] = useState<ActiveAnalysis | null>(null);
   const [previousAnalysis, setPreviousAnalysis] = useState<ActiveAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [agentInvestigation, setAgentInvestigation] = useState<AgentInvestigationState | null>(null);
   const [webMcpStatus, setWebMcpStatus] = useState<WebMcpStatus>("checking");
   // Mutable ref for the unified query generation (never triggers render).
   const analysisQueryGenRef = useRef(0);
   const analysisAbortRef = useRef<AbortController | null>(null);
   const activeAnalysisRef = useRef<ActiveAnalysis | null>(null);
   const previousAnalysisRef = useRef<ActiveAnalysis | null>(null);
+  const activeScenarioId = activeAnalysis?.request.evidenceBundle?.scenarioId;
   const relatedStormFloodResult = relatedAnalyses
-    .find((analysis) => analysis.outcome.hazardId === "flood_storm")
+    .find((analysis) =>
+      analysis.outcome.hazardId === "flood_storm" &&
+      (activeScenarioId === undefined || analysis.request.evidenceBundle?.scenarioId === activeScenarioId)
+    )
     ?.outcome;
   const relatedStormFlood = relatedStormFloodResult?.hazardId === "flood_storm"
     ? relatedStormFloodResult.result
@@ -245,6 +253,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     commitActiveAnalysis(null);
     commitPreviousAnalysis(null);
     setAnalysisLoading(false);
+    setAgentInvestigation(null);
     clearResultState();
     setRelatedAnalyses([]);
     setFireLoadingState(false);
@@ -303,8 +312,19 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     const bundleContinuation = bundleRole === "context" || bundleRole === "primary";
     if (origin === "agent" && !bundleContinuation) {
       commitPreviousAnalysis(activeAnalysisRef.current);
+      setAgentInvestigation({
+        investigationId: request.evidenceBundle?.investigationId ?? `analysis-${generation}`,
+        kind: request.evidenceBundle?.investigationKind ?? "analysis",
+        phase: "retrieving",
+        totalChains: 1,
+        completedChains: 0,
+        scenarioLabels: request.evidenceBundle?.scenarioLabel
+          ? [request.evidenceBundle.scenarioLabel]
+          : [],
+      });
     } else if (origin === "human") {
       commitPreviousAnalysis(null);
+      setAgentInvestigation(null);
     }
 
     const controller = new AbortController();
@@ -355,14 +375,23 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         setRelatedAnalyses((current) => [...current, snapshot]);
       }
       commitActiveAnalysis(snapshot);
+      if (origin === "agent") {
+        setAgentInvestigation((current) => current ? {
+          ...current,
+          phase: "complete",
+          completedChains: 1,
+        } : current);
+      }
       return snapshot;
     } catch (error) {
       if (
         controller.signal.aborted ||
         (error instanceof DOMException && error.name === "AbortError")
       ) {
+        if (generation === analysisQueryGenRef.current) setAgentInvestigation(null);
         return null;
       }
+      if (generation === analysisQueryGenRef.current) setAgentInvestigation(null);
       throw error;
     } finally {
       if (externalSignal) {
@@ -399,6 +428,18 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     const generation = analysisQueryGenRef.current;
     analysisAbortRef.current?.abort();
     commitPreviousAnalysis(activeAnalysisRef.current);
+    const bundle = requests[requests.length - 1].evidenceBundle;
+    const scenarioLabels = [...new Set(requests.flatMap((request) =>
+      request.evidenceBundle?.scenarioLabel ? [request.evidenceBundle.scenarioLabel] : []
+    ))];
+    setAgentInvestigation({
+      investigationId: bundle?.investigationId ?? `bundle-${generation}`,
+      kind: bundle?.investigationKind ?? "analysis",
+      phase: "retrieving",
+      totalChains: requests.length,
+      completedChains: 0,
+      scenarioLabels,
+    });
 
     const controller = new AbortController();
     analysisAbortRef.current = controller;
@@ -427,10 +468,22 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     synchronizeRequestState(requests[requests.length - 1]);
 
     try {
-      const outcomes = await Promise.all(
-        requests.map((request) => executeAnalysisRequest(request, { signal: controller.signal }))
-      );
+      const outcomes = await Promise.all(requests.map(async (request) => {
+        const outcome = await executeAnalysisRequest(request, { signal: controller.signal });
+        if (generation === analysisQueryGenRef.current) {
+          setAgentInvestigation((current) => current ? {
+            ...current,
+            completedChains: Math.min(current.completedChains + 1, current.totalChains),
+          } : current);
+        }
+        return outcome;
+      }));
       if (generation !== analysisQueryGenRef.current) return null;
+      setAgentInvestigation((current) => current ? {
+        ...current,
+        phase: "synthesizing",
+        completedChains: current.totalChains,
+      } : current);
 
       const completedAt = new Date().toISOString();
       const snapshots = requests.map((request, index): ActiveAnalysis => ({
@@ -444,14 +497,21 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       setRelatedAnalyses(snapshots.slice(0, -1));
       commitOutcome(primary);
       commitActiveAnalysis(primary);
+      setAgentInvestigation((current) => current ? {
+        ...current,
+        phase: "complete",
+        completedChains: current.totalChains,
+      } : current);
       return snapshots;
     } catch (error) {
       if (
         controller.signal.aborted ||
         (error instanceof DOMException && error.name === "AbortError")
       ) {
+        if (generation === analysisQueryGenRef.current) setAgentInvestigation(null);
         return null;
       }
+      if (generation === analysisQueryGenRef.current) setAgentInvestigation(null);
       throw error;
     } finally {
       if (externalSignal) {
@@ -486,6 +546,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     analysisAbortRef.current?.abort();
     analysisAbortRef.current = null;
     setAnalysisLoading(false);
+    setAgentInvestigation(null);
     setFireLoadingState(false);
     setFloodLoadingState(false);
     setWindLoadingState(false);
@@ -541,6 +602,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         activeAnalysis,
         previousAnalysis,
         analysisLoading,
+        agentInvestigation,
         webMcpStatus,
         clearAnalysis: invalidateEvidenceQueries,
         restorePreviousAnalysis,

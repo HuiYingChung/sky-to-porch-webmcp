@@ -387,10 +387,10 @@
               "hazard": "flood_storm",
               "name": "Flood & Heavy Rain",
               "status_summary": "observations returned",
-              "strongest_evidence": "NASA GIBS IMERG returned a regional precipitation visualization for the selected area.",
-              "observed_at": "2026-08-28T00:00:00.000Z",
-              "source": "NASA GIBS IMERG",
-              "limitation": "The image supports regional precipitation evidence but does not establish rainfall depth, street flooding, property damage, or exact timing within the day."
+              "strongest_evidence": "An NWS Preliminary Local Storm Report recorded a flash flood near 8 N Jersey Village in Harris County, with multiple vehicles stranded.",
+              "observed_at": "2026-08-28T18:00:00.000Z",
+              "source": "NWS Houston/Galveston Preliminary Local Storm Report",
+              "limitation": "The preliminary regional report does not establish conditions at a specific address, water depth, property damage, or current road safety."
             }
           ]
         }
@@ -408,7 +408,7 @@
       "assistantMustIncludeEvidenceDetails": {
         "requiredTime": "2026-08-28",
         "sourceTermGroups": [
-          ["NASA", "IMERG"],
+          ["NWS", "National Weather Service", "Local Storm Report"],
           ["NOAA", "Iowa Environmental Mesonet", "IEM"]
         ],
         "requireLimitation": true

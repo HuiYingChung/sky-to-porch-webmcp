@@ -64,6 +64,7 @@ export interface FloodSourceOutcomes {
   floodExtent: FloodSourceOutcome;
   usgs: FloodSourceOutcome;
   canadaGeomet?: FloodSourceOutcome;
+  localStormReports?: FloodSourceOutcome;
 }
 
 export type FloodQueryResultKind =

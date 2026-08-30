@@ -1,9 +1,14 @@
 /// <reference types="webmcp-types" />
 
+import { HAZARD_IDS, type HazardId } from "@/contracts/common";
 import type { EvidenceObject, Observation } from "@/contracts/evidence";
 import type { ActiveAnalysis } from "@/lib/analysis/types";
 import type { StormQueryResult } from "@/lib/storm/types";
-import { ANSWER_ORDER, evidenceScopeForHazard } from "@/lib/webmcp/analyze-tool";
+import {
+  ANSWER_ORDER,
+  evidenceScopeForHazard,
+  orderedEvidenceObservations,
+} from "@/lib/webmcp/analyze-tool";
 
 export const INSPECT_EVIDENCE_TOOL_NAME = "inspect_current_environmental_evidence";
 export const PREPARE_STORM_CLAIM_TOOL_NAME = "prepare_storm_claim_discussion";
@@ -11,7 +16,19 @@ export const MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS = 2_400;
 export const INSPECT_EVIDENCE_INPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  properties: {},
+  properties: {
+    focus: {
+      type: "string",
+      enum: ["summary", "direct_observations", "sources", "limitations", "evidence_needed"],
+      default: "summary",
+      description: "Use a focused view for natural follow-ups such as what was observed, which source failed, why the result is inconclusive, or what evidence would change it.",
+    },
+    hazard: {
+      type: "string",
+      enum: HAZARD_IDS,
+      description: "Optional: inspect only one hazard chain already present in the current Agent result. This never re-runs a query.",
+    },
+  },
 } as const;
 export const PREPARE_STORM_CLAIM_INPUT_SCHEMA = {
   type: "object",
@@ -54,14 +71,94 @@ function compactCitation(item: Observation, hazard: ActiveAnalysis["request"]["h
 
 function citationsFor(analysis: ActiveAnalysis, maximum: number) {
   const evidence = evidenceFrom(analysis);
-  return evidence?.observations
+  return evidence ? orderedEvidenceObservations(evidence)
     .filter((item, index, observations) =>
       observations.findIndex((candidate) =>
         candidate.provenance.sourceId === item.provenance.sourceId
       ) === index
     )
     .slice(0, maximum)
-    .map((item) => compactCitation(item, analysis.request.hazardId)) ?? [];
+    .map((item) => compactCitation(item, analysis.request.hazardId)) : [];
+}
+
+function focusedInspection(
+  focus: Exclude<typeof INSPECT_EVIDENCE_INPUT_SCHEMA.properties.focus.enum[number], "summary">,
+  analysis: ActiveAnalysis
+) {
+  const evidence = evidenceFrom(analysis);
+  const observations = evidence ? orderedEvidenceObservations(evidence) : [];
+  const sourceChecks = evidence?.missionAttributions.map((attribution) => ({
+    source: compactText(attribution.missionName, 70),
+    status: attribution.retrievalStatus,
+    limitation: compactText(attribution.keyLimitation, 130),
+  })) ?? [];
+  const failedLimitations = evidence?.limitations
+    .filter((limitation) => /\b(?:failed|failure|partially completed)\b/iu.test(limitation.description))
+    .map((limitation) => ({
+      source: compactText(limitation.source, 60),
+      status: "failed_or_incomplete" as const,
+      limitation: compactText(limitation.description, 130),
+    })) ?? [];
+  const limitations = evidence?.limitations
+    .filter((limitation) => limitation.required)
+    .slice(0, 5)
+    .map((limitation) => compactText(limitation.description, 180)) ?? [];
+  const noObservations = observations.length === 0;
+  const output = {
+    status: evidence ? "ok" : "no_evidence",
+    focus,
+    hazard: analysis.request.hazardId,
+    evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
+    evidence_state: evidence?.evidenceState ?? "unavailable",
+    confidence: evidence?.confidence.level ?? "insufficient",
+    ...(focus === "direct_observations"
+      ? { direct_observations: observations.slice(0, 5).map(compactObservation) }
+      : focus === "sources"
+        ? {
+            source_checks: [...sourceChecks, ...failedLimitations].slice(0, 8),
+            citations: citationsFor(analysis, 5),
+          }
+        : focus === "limitations"
+          ? { limitations }
+          : {
+              what_would_change_conclusion: [
+                ...(noObservations
+                  ? ["A direct official observation for this place, time, and selected area."]
+                  : []),
+                ...(failedLimitations.length > 0
+                  ? ["A successful retry of the failed or incomplete official-source check."]
+                  : []),
+                "A local inspection or official route/property report for address-level conclusions.",
+              ].slice(0, 3),
+              still_unknown: noObservations
+                ? "No direct observation was returned; this does not prove safety or no danger."
+                : "Regional observations do not establish property-level impact, route safety, or causation.",
+            }),
+    agent_response_contract: {
+      style: "plain_english" as const,
+      answer_the_follow_up_directly: true,
+      distinguish_observation_inference_and_unknown: true,
+    },
+    ...(noObservations ? { no_data_is_not_no_danger: true as const } : {}),
+  };
+  if (JSON.stringify(output).length <= MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS) return output;
+  return {
+    ...output,
+    ...(focus === "sources"
+      ? {
+          source_checks: "source_checks" in output ? output.source_checks.slice(0, 3) : [],
+          citations: "citations" in output ? output.citations.slice(0, 2) : [],
+        }
+      : focus === "limitations"
+        ? { limitations: "limitations" in output ? output.limitations.slice(0, 3) : [] }
+        : focus === "direct_observations"
+          ? {
+              direct_observations: "direct_observations" in output
+                ? output.direct_observations.slice(0, 2)
+                : [],
+            }
+          : {}),
+  };
 }
 
 export function createInspectEvidenceTool(
@@ -76,11 +173,43 @@ export function createInspectEvidenceTool(
     inputSchema: INSPECT_EVIDENCE_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     execute: async (input) => {
-      if (Object.keys(input).length > 0) {
-        return { status: "invalid_input", message: "This tool takes no input." };
+      const unexpected = Object.keys(input).find((key) => key !== "focus" && key !== "hazard");
+      if (unexpected) {
+        return { status: "invalid_input", message: `Unexpected input field: ${unexpected}.` };
       }
-      const evidence = evidenceFrom(analysis);
-      const allAnalyses = [analysis, ...relatedAnalyses];
+      const focus = input.focus ?? "summary";
+      if (!INSPECT_EVIDENCE_INPUT_SCHEMA.properties.focus.enum.includes(focus as never)) {
+        return { status: "invalid_input", message: "focus is not supported." };
+      }
+      if (
+        input.hazard !== undefined &&
+        (typeof input.hazard !== "string" || !(HAZARD_IDS as readonly string[]).includes(input.hazard))
+      ) {
+        return { status: "invalid_input", message: "hazard is not supported." };
+      }
+      const availableAnalyses = [analysis, ...relatedAnalyses];
+      const selectedAnalysis = typeof input.hazard === "string"
+        ? availableAnalyses.find((item) => item.request.hazardId === input.hazard as HazardId)
+        : analysis;
+      if (!selectedAnalysis) {
+        return {
+          status: "invalid_input",
+          message: "That hazard chain is not present in the current Agent result; run a new analysis first.",
+        };
+      }
+      if (focus !== "summary") {
+        return focusedInspection(
+          focus as Exclude<typeof INSPECT_EVIDENCE_INPUT_SCHEMA.properties.focus.enum[number], "summary">,
+          selectedAnalysis
+        );
+      }
+      const evidence = evidenceFrom(selectedAnalysis);
+      const allAnalyses = typeof input.hazard === "string"
+        ? [selectedAnalysis]
+        : availableAnalyses;
+      const selectedRelatedAnalyses = allAnalyses.filter(
+        (item) => item.analysisId !== selectedAnalysis.analysisId
+      );
       const chainsWithObservations = allAnalyses.filter(
         (item) => (evidenceFrom(item)?.observations.length ?? 0) > 0
       ).length;
@@ -95,14 +224,14 @@ export function createInspectEvidenceTool(
           ? "low" as const
           : "insufficient" as const;
       const citations = [
-        ...citationsFor(analysis, 2),
-        ...relatedAnalyses.flatMap((related) => citationsFor(related, 1)),
+        ...citationsFor(selectedAnalysis, 2),
+        ...selectedRelatedAnalyses.flatMap((related) => citationsFor(related, 1)),
       ];
       const output = {
         status: evidence ? "ok" : "no_evidence",
-        analysis_id: analysis.analysisId,
-        hazard: analysis.request.hazardId,
-        evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
+        analysis_id: selectedAnalysis.analysisId,
+        hazard: selectedAnalysis.request.hazardId,
+        evidence_scope: evidenceScopeForHazard(selectedAnalysis.request.hazardId),
         support: {
           level: chainsWithObservations === allAnalyses.length
             ? "official_observations_in_every_chain"
@@ -116,11 +245,11 @@ export function createInspectEvidenceTool(
           source_count: sourceCount,
         },
         answer_order: ANSWER_ORDER,
-        ...(relatedAnalyses.length > 0
+        ...(selectedRelatedAnalyses.length > 0
           ? {
               relationship: "related_evidence_for_assessment" as const,
               inference_guidance: "state_strongest_supported_inference_and_confidence" as const,
-              related_chains: relatedAnalyses.map((related) => ({
+              related_chains: selectedRelatedAnalyses.map((related) => ({
                 hazard: related.request.hazardId,
                 status: (related.outcome.result as { kind: string }).kind,
                 evidence_scope: evidenceScopeForHazard(related.request.hazardId),
@@ -135,7 +264,7 @@ export function createInspectEvidenceTool(
         sources: evidence
           ? [...new Set(evidence.observations.map((item) => item.provenance.sourceId))]
           : [],
-        observations: evidence?.observations.slice(0, 3).map(compactObservation) ?? [],
+        observations: evidence ? orderedEvidenceObservations(evidence).slice(0, 3).map(compactObservation) : [],
         citations,
         limitations: evidence?.limitations
           .filter((item) => item.required)

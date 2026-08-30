@@ -15,6 +15,7 @@ import {
 } from "@/lib/location/selection";
 
 export const ANALYZE_HAZARD_TOOL_NAME = "analyze_environmental_hazard";
+export const COMPARE_HAZARD_TOOL_NAME = "compare_environmental_evidence";
 const DEFAULT_RADIUS_KM = 25;
 const MAX_OUTPUT_CHARACTERS = 2_400;
 export const ANSWER_ORDER = [
@@ -203,10 +204,21 @@ interface CompactEvidenceChain {
   name: string;
   evidence_scope: EvidenceScope;
   status_summary: string;
-  observation: CompactObservation | null;
-  citation: CompactCitation | null;
+  observation?: CompactObservation | null;
+  citation?: CompactCitation | null;
   confidence: EvidenceObject["confidence"]["level"] | "insufficient";
-  limitation: string | null;
+  limitation?: string | null;
+}
+
+interface CrossSourceSynthesis {
+  directly_observed: string[];
+  supported_inference: string;
+  still_unknown: string[];
+  source_status: {
+    official_sources_returned: number;
+    failed_or_incomplete_checks: string[];
+  };
+  what_would_change_conclusion: string[];
 }
 
 interface ToolEvidenceBundle {
@@ -229,18 +241,19 @@ interface ToolEvidenceBundle {
   inference_guidance: "state_strongest_supported_inference_and_confidence";
   answer_order?: typeof ANSWER_ORDER;
   overall_summary: string;
+  synthesis: CrossSourceSynthesis;
   must_report_every_chain: true;
   required_chain_reporting: "report_each_included_chain";
-  agent_response_contract: {
+  agent_response_contract?: {
     style: "plain_english";
-    avoid_internal_names: true;
-    use_chain_name: true;
-    use_status_summary: true;
-    use_overall_summary: true;
+    avoid_internal_names?: true;
+    use_chain_name?: true;
+    use_status_summary?: true;
+    use_overall_summary?: true;
     summary_first: true;
-    per_chain_fields: "status_strongest_evidence_time_source_limitation";
+    per_chain_fields?: "status_strongest_evidence_time_source_limitation";
   };
-  use_decision: "person_decides_how_to_use_related_evidence";
+  use_decision?: "person_decides_how_to_use_related_evidence";
   request: {
     place: string;
     hazard: HazardId;
@@ -251,8 +264,8 @@ interface ToolEvidenceBundle {
   };
   included_chains: HazardId[];
   chains: CompactEvidenceChain[];
-  claim_discussion_available: boolean;
-  related_evidence_visible_in_shared_view: true;
+  claim_discussion_available?: boolean;
+  related_evidence_visible_in_shared_view?: true;
   no_data_is_not_no_danger?: true;
   required_answer_boundary?: "no_observations_do_not_prove_safety";
   required_final_answer_sentence?: "No observations were returned; this does not prove safety or no danger.";
@@ -308,6 +321,38 @@ export const ANALYZE_HAZARD_INPUT_SCHEMA = {
       maxLength: 500,
       description: "Optional, except MUST copy the person's wording for unqualified storm/thunderstorm/severe weather so deterministic routing can include separate wind and water chains. Shorten only to 500 characters.",
     },
+  },
+} as const;
+
+const COMPARISON_SCENARIO_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["place", "time"],
+  properties: {
+    place: ANALYZE_HAZARD_INPUT_SCHEMA.properties.place,
+    place_choice_id: ANALYZE_HAZARD_INPUT_SCHEMA.properties.place_choice_id,
+    radius_km: ANALYZE_HAZARD_INPUT_SCHEMA.properties.radius_km,
+    time: ANALYZE_HAZARD_INPUT_SCHEMA.properties.time,
+  },
+} as const;
+
+export const COMPARE_HAZARD_INPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["baseline", "comparison", "hazard"],
+  properties: {
+    baseline: {
+      ...COMPARISON_SCENARIO_SCHEMA,
+      description: "The first place/time/radius scenario. Preserve any radius the person supplied.",
+    },
+    comparison: {
+      ...COMPARISON_SCENARIO_SCHEMA,
+      description: "The second place/time/radius scenario. It may differ by place, time, radius, or several of those.",
+    },
+    hazard: ANALYZE_HAZARD_INPUT_SCHEMA.properties.hazard,
+    analysis_scope: ANALYZE_HAZARD_INPUT_SCHEMA.properties.analysis_scope,
+    concern: ANALYZE_HAZARD_INPUT_SCHEMA.properties.concern,
+    question: ANALYZE_HAZARD_INPUT_SCHEMA.properties.question,
   },
 } as const;
 
@@ -703,6 +748,29 @@ function compactCitation(observation: Observation): CompactCitation {
   };
 }
 
+function observationPriority(observation: Observation): number {
+  const source = observation.provenance.sourceId;
+  if (source === "nws_local_storm_reports") return 0;
+  if (
+    source === "noaa_ncei_global_hourly" ||
+    source === "usgs_instantaneous_values" ||
+    source === "canada_geomet" ||
+    source === "noaa_uscrn_heat_exposure" ||
+    source === "nws_station_observations"
+  ) return 1;
+  if (source === "nws_tropical_cyclone_report") return 2;
+  if (source === "nasa_lance_flood_extent") return 3;
+  return 4;
+}
+
+export function orderedEvidenceObservations(evidence: EvidenceObject): Observation[] {
+  return [...evidence.observations].sort((left, right) =>
+    observationPriority(left) - observationPriority(right) ||
+    left.provenance.observedAt.localeCompare(right.provenance.observedAt) ||
+    left.observationId.localeCompare(right.observationId)
+  );
+}
+
 export function evidenceScopeForHazard(hazard: HazardId): EvidenceScope {
   switch (hazard) {
     case "wind_storm":
@@ -755,8 +823,9 @@ function compactSuccess(
     ...(details.rejectionReason ? [details.rejectionReason] : []),
     ...details.limitations,
   ];
+  const orderedObservations = evidence ? orderedEvidenceObservations(evidence) : [];
   const citations = evidence
-    ? evidence.observations
+    ? orderedObservations
         .filter((observation, index, observations) =>
           observations.findIndex((candidate) =>
             candidate.provenance.sourceId === observation.provenance.sourceId
@@ -793,7 +862,7 @@ function compactSuccess(
           mode: evidence.dataMode,
           confidence: evidence.confidence.level,
           freshness: evidence.freshness.status,
-          observations: evidence.observations.slice(0, 3).map(compactObservation),
+          observations: orderedObservations.slice(0, 3).map(compactObservation),
         }
       : null,
     support: {
@@ -844,7 +913,7 @@ function compactSuccess(
 function compactEvidenceChain(analysis: ActiveAnalysis): CompactEvidenceChain {
   const details = resultDetails(analysis);
   const evidence = details.evidence;
-  const observation = evidence?.observations[0];
+  const observation = evidence ? orderedEvidenceObservations(evidence)[0] : undefined;
   const limitation = details.rejectionReason ?? details.limitations[0] ?? null;
   return {
     hazard: analysis.request.hazardId,
@@ -862,6 +931,68 @@ function compactEvidenceChain(analysis: ActiveAnalysis): CompactEvidenceChain {
     citation: observation ? compactCitation(observation) : null,
     confidence: evidence?.confidence.level ?? "insufficient",
     limitation: limitation ? truncate(limitation, 130) : null,
+  };
+}
+
+function synthesizeAnalyses(analyses: ActiveAnalysis[]): CrossSourceSynthesis {
+  const chains = analyses.map((analysis) => ({
+    analysis,
+    details: resultDetails(analysis),
+  }));
+  const withObservations = chains.filter(
+    ({ details }) => (details.evidence?.observations.length ?? 0) > 0
+  );
+  const failedOrIncomplete = new Set<string>();
+  for (const { details } of chains) {
+    for (const attribution of details.evidence?.missionAttributions ?? []) {
+      if (attribution.retrievalStatus === "failed" || attribution.retrievalStatus === "partial") {
+        failedOrIncomplete.add(truncate(attribution.missionName, 55));
+      }
+    }
+    for (const limitation of details.evidence?.limitations ?? []) {
+      if (/\b(?:failed|failure|partially completed)\b/iu.test(limitation.description)) {
+        failedOrIncomplete.add(truncate(limitation.source, 55));
+      }
+    }
+  }
+  const directlyObserved = withObservations.slice(0, 3).map(({ analysis, details }) => {
+    const observation = orderedEvidenceObservations(details.evidence!)[0];
+    return truncate(
+      `${HAZARD_NAMES[analysis.request.hazardId]}: ${observation.variableName} from ${observation.provenance.sourceId} at ${observation.provenance.observedAt}`,
+      145
+    );
+  });
+  const missingChains = chains
+    .filter(({ details }) => (details.evidence?.observations.length ?? 0) === 0)
+    .map(({ analysis }) => HAZARD_NAMES[analysis.request.hazardId]);
+  return {
+    directly_observed: directlyObserved,
+    supported_inference: withObservations.length >= 2
+      ? "Independent official observations across multiple chains support combined regional context; they do not establish causation or property-level impact."
+      : withObservations.length === 1
+        ? "One chain has direct observations; cross-chain reinforcement is not established."
+        : "No cross-chain inference is supported because no direct observation was returned.",
+    still_unknown: [
+      ...(missingChains.length > 0
+        ? [`No direct observation returned for: ${missingChains.join(", ")}.`]
+        : []),
+      "Property-level impact, route safety, and causation remain unknown.",
+    ].slice(0, 2),
+    source_status: {
+      official_sources_returned: new Set(withObservations.flatMap(({ details }) =>
+        details.evidence?.observations.map((observation) => observation.provenance.sourceId) ?? []
+      )).size,
+      failed_or_incomplete_checks: [...failedOrIncomplete].slice(0, 3),
+    },
+    what_would_change_conclusion: [
+      ...(missingChains.length > 0
+        ? [`A direct official observation in the missing ${missingChains.join(" / ")} chain.`]
+        : []),
+      ...(failedOrIncomplete.size > 0
+        ? ["A successful retry of the failed or incomplete official-source checks."]
+        : []),
+      "A local inspection or official route/property report for address-level conclusions.",
+    ].slice(0, 2),
   };
 }
 
@@ -913,6 +1044,7 @@ function compactEvidenceBundle(
     overall_summary: compactChains
       .map((chain) => `${chain.name}: ${chain.status_summary}`)
       .join("; "),
+    synthesis: synthesizeAnalyses(analyses),
     must_report_every_chain: true,
     required_chain_reporting: "report_each_included_chain",
     agent_response_contract: {
@@ -980,22 +1112,70 @@ function compactEvidenceBundle(
   };
   if (JSON.stringify(primaryUrlOnly).length <= MAX_OUTPUT_CHARACTERS) return primaryUrlOnly;
 
-  const { answer_order: omittedAnswerOrder, ...withoutAnswerOrder } = primaryUrlOnly;
-  void omittedAnswerOrder;
-  return {
-    ...withoutAnswerOrder,
+  const finalBundle: ToolEvidenceBundle = {
+    ...primaryUrlOnly,
     analysis_id: truncate(primaryUrlOnly.analysis_id, 24),
     request: {
       ...primaryUrlOnly.request,
       place: truncate(primaryUrlOnly.request.place, 40),
     },
     chains: primaryUrlOnly.chains.map((chain) => ({
-      ...chain,
-      citation: chain.citation
-        ? { ...chain.citation, product: truncate(chain.citation.product, 20), url: null }
-        : null,
-      limitation: null,
+      hazard: chain.hazard,
+      name: chain.name,
+      evidence_scope: chain.evidence_scope,
+      status_summary: chain.status_summary,
+      confidence: chain.confidence,
+      ...(chain.citation
+        ? {
+            citation: {
+              ...chain.citation,
+              product: truncate(chain.citation.product, 20),
+              url: null,
+            },
+          }
+        : {}),
     })),
+    synthesis: {
+      directly_observed: primaryUrlOnly.synthesis.directly_observed
+        .slice(0, 1)
+        .map((item) => truncate(item, 60)),
+      supported_inference: primaryUrlOnly.synthesis.directly_observed.length >= 2
+        ? "Multiple chains add regional context; they do not prove causation."
+        : primaryUrlOnly.synthesis.directly_observed.length === 1
+          ? "One chain has direct evidence; cross-chain support is incomplete."
+          : "No direct observation supports a cross-chain inference.",
+      still_unknown: primaryUrlOnly.synthesis.still_unknown
+        .slice(0, 1)
+        .map((item) => truncate(item, 50)),
+      source_status: {
+        official_sources_returned:
+          primaryUrlOnly.synthesis.source_status.official_sources_returned,
+        failed_or_incomplete_checks:
+          primaryUrlOnly.synthesis.source_status.failed_or_incomplete_checks
+            .slice(0, 1)
+            .map((item) => truncate(item, 45)),
+      },
+      what_would_change_conclusion:
+        primaryUrlOnly.synthesis.what_would_change_conclusion
+          .slice(0, 1)
+          .map((item) => truncate(item, 55)),
+    },
+    claim_discussion_available: primaryUrlOnly.claim_discussion_available || undefined,
+  };
+  if (JSON.stringify(finalBundle).length <= MAX_OUTPUT_CHARACTERS) return finalBundle;
+  const {
+    use_decision: omittedUseDecision,
+    related_evidence_visible_in_shared_view: omittedVisibleReceipt,
+    ...mostCompact
+  } = finalBundle;
+  void omittedUseDecision;
+  void omittedVisibleReceipt;
+  return {
+    ...mostCompact,
+    agent_response_contract: {
+      style: "plain_english",
+      summary_first: true,
+    },
   };
 }
 
@@ -1048,6 +1228,7 @@ export async function executeAnalyzeHazardTool(
 
   const hazards = plannedHazards(input);
   if (hazards.length > 1) {
+    const investigationId = `analysis-bundle-${now.getTime()}`;
     const commonRequest = {
       concern: input.concern,
       placeSelection,
@@ -1067,6 +1248,8 @@ export async function executeAnalyzeHazardTool(
           primaryHazardId: input.hazard,
           includedHazardIds: hazards,
           role,
+          investigationId,
+          investigationKind: "analysis",
         },
       };
     });
@@ -1120,6 +1303,271 @@ export async function executeAnalyzeHazardTool(
   return compactSuccess(analysis, time.display);
 }
 
+const COMPARISON_INPUT_KEYS = new Set([
+  "baseline",
+  "comparison",
+  "hazard",
+  "analysis_scope",
+  "concern",
+  "question",
+]);
+
+function comparisonScenarioInput(
+  raw: Record<string, unknown>,
+  scenario: "baseline" | "comparison",
+  now: Date
+): ParsedInput | ToolFailure {
+  const scenarioValue = raw[scenario];
+  if (!isRecord(scenarioValue)) {
+    return failure("invalid_input", `${scenario} must contain place, time, and an optional radius_km.`);
+  }
+  return parseInput({
+    ...scenarioValue,
+    hazard: raw.hazard,
+    analysis_scope: raw.analysis_scope,
+    concern: raw.concern,
+    question: raw.question,
+  }, now);
+}
+
+function comparisonPlaceFailure(
+  scenario: "baseline" | "comparison",
+  input: ToolFailure,
+  rawInput: Record<string, unknown>
+) {
+  if (input.status !== "needs_place_choice") return input;
+  return {
+    ...input,
+    message: `PAUSE FOR USER: the ${scenario} place is ambiguous. Ask the person to choose one option, wait for a new user message, then retry this comparison with every original argument unchanged and set only ${scenario}.place_choice_id to the selected choice_id.`,
+    ambiguous_scenario: scenario,
+    after_user_choice: {
+      required_next_action: "retry_comparison_with_selected_place" as const,
+      continue_task: true,
+      preserve_all_other_arguments: true,
+      set_selected_choice_at: `${scenario}.place_choice_id`,
+      retry_with_original_arguments: rawInput,
+    },
+  };
+}
+
+function scenarioLabel(
+  prefix: "Baseline" | "Comparison",
+  selection: PlaceSelection,
+  timeDisplay: string
+): string {
+  return truncate(`${prefix}: ${selection.label} · ${timeDisplay}`, 120);
+}
+
+function comparisonSummary(analyses: ActiveAnalysis[]) {
+  const byScenario = new Map<string, ActiveAnalysis[]>();
+  for (const analysis of analyses) {
+    const id = analysis.request.evidenceBundle?.scenarioId ?? "unknown";
+    byScenario.set(id, [...(byScenario.get(id) ?? []), analysis]);
+  }
+  const baseline = byScenario.get("baseline") ?? [];
+  const comparison = byScenario.get("comparison") ?? [];
+  const baselineByHazard = new Map(baseline.map((analysis) => [analysis.request.hazardId, analysis]));
+  const comparisonByHazard = new Map(comparison.map((analysis) => [analysis.request.hazardId, analysis]));
+  const agreements: string[] = [];
+  const differences: string[] = [];
+  const unknowns: string[] = [];
+  for (const hazard of [...new Set([...baselineByHazard.keys(), ...comparisonByHazard.keys()])]) {
+    const left = baselineByHazard.get(hazard);
+    const right = comparisonByHazard.get(hazard);
+    if (!left || !right) continue;
+    const leftDetails = resultDetails(left);
+    const rightDetails = resultDetails(right);
+    const leftCount = leftDetails.evidence?.observations.length ?? 0;
+    const rightCount = rightDetails.evidence?.observations.length ?? 0;
+    if (leftCount > 0 && rightCount > 0) {
+      agreements.push(`${HAZARD_NAMES[hazard]} has direct official observations in both scenarios.`);
+    } else if (leftCount !== rightCount) {
+      differences.push(
+        `${HAZARD_NAMES[hazard]} returned direct observations in ${leftCount > 0 ? "the baseline" : "the comparison"} only.`
+      );
+    } else {
+      unknowns.push(`${HAZARD_NAMES[hazard]} returned no direct observation in either scenario.`);
+    }
+    if (leftDetails.kind !== rightDetails.kind) {
+      differences.push(
+        `${HAZARD_NAMES[hazard]} evidence status differs: baseline ${leftDetails.kind.replaceAll("_", " ")}; comparison ${rightDetails.kind.replaceAll("_", " ")}.`
+      );
+    }
+  }
+  return {
+    agreements: agreements.slice(0, 2),
+    differences: differences.slice(0, 3),
+    unknowns: [
+      ...unknowns.slice(0, 1),
+      "Differences in evidence availability do not by themselves prove a difference in hazard severity.",
+    ],
+  };
+}
+
+export async function executeCompareHazardTool(
+  rawInput: Record<string, unknown>,
+  options: WebMCP.ToolExecuteCallbackOptions | undefined,
+  dependencies: AnalyzeHazardToolDependencies
+): Promise<unknown> {
+  const unexpected = Object.keys(rawInput).find((key) => !COMPARISON_INPUT_KEYS.has(key));
+  if (unexpected) return failure("invalid_input", `Unexpected input field: ${unexpected}.`);
+  const signal = options?.signal ?? new AbortController().signal;
+  if (signal.aborted) {
+    throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+  }
+  const now = dependencies.now?.() ?? new Date();
+  const baselineInput = comparisonScenarioInput(rawInput, "baseline", now);
+  if ("status" in baselineInput) return baselineInput;
+  const comparisonInput = comparisonScenarioInput(rawInput, "comparison", now);
+  if ("status" in comparisonInput) return comparisonInput;
+
+  const baselineResolved = await resolvePlace(baselineInput, dependencies.fetchImpl ?? fetch, signal);
+  if ("status" in baselineResolved) {
+    return comparisonPlaceFailure("baseline", baselineResolved, rawInput);
+  }
+  const comparisonResolved = await resolvePlace(comparisonInput, dependencies.fetchImpl ?? fetch, signal);
+  if ("status" in comparisonResolved) {
+    return comparisonPlaceFailure("comparison", comparisonResolved, rawInput);
+  }
+
+  const baselineTime = selectionTime(baselineInput, now);
+  const comparisonTime = selectionTime(comparisonInput, now);
+  let baselineSelection: PlaceSelection;
+  let comparisonSelection: PlaceSelection;
+  try {
+    baselineSelection = buildSelection(
+      baselineInput,
+      baselineResolved,
+      baselineTime,
+      baselineInput.latitude !== undefined ? "agent" : "geocoder"
+    );
+    comparisonSelection = buildSelection(
+      comparisonInput,
+      comparisonResolved,
+      comparisonTime,
+      comparisonInput.latitude !== undefined ? "agent" : "geocoder"
+    );
+  } catch (error) {
+    return failure(
+      "invalid_input",
+      error instanceof Error ? error.message : "One comparison scenario was invalid."
+    );
+  }
+
+  const scenarioInputs = [
+    {
+      id: "baseline",
+      order: 0,
+      input: baselineInput,
+      selection: baselineSelection,
+      time: baselineTime,
+      label: scenarioLabel("Baseline", baselineSelection, baselineTime.display),
+    },
+    {
+      id: "comparison",
+      order: 1,
+      input: comparisonInput,
+      selection: comparisonSelection,
+      time: comparisonTime,
+      label: scenarioLabel("Comparison", comparisonSelection, comparisonTime.display),
+    },
+  ] as const;
+  const investigationId = `comparison-${now.getTime()}`;
+  const requestDrafts = scenarioInputs.flatMap((scenario) =>
+    plannedHazards(scenario.input).map((hazardId) => ({ scenario, hazardId }))
+  );
+  const includedHazards = [...new Set(requestDrafts.map((item) => item.hazardId))];
+  const requests = requestDrafts.map(({ scenario, hazardId }, index): AnalysisRequest => ({
+    hazardId,
+    concern: scenario.input.concern,
+    placeSelection: scenario.selection,
+    ...(scenario.input.question ? { optionalQuestion: scenario.input.question } : {}),
+    evidenceMode: "live",
+    evidenceBundle: {
+      primaryHazardId: scenario.input.hazard,
+      includedHazardIds: includedHazards,
+      role: index === 0
+        ? "start_context"
+        : index === requestDrafts.length - 1
+          ? "primary"
+          : "context",
+      investigationId,
+      investigationKind: "comparison",
+      scenarioId: scenario.id,
+      scenarioLabel: scenario.label,
+      scenarioOrder: scenario.order,
+    },
+  }));
+
+  let analyses: ActiveAnalysis[] | null;
+  if (dependencies.runAnalysisBundle) {
+    analyses = await dependencies.runAnalysisBundle(requests, "agent", signal);
+  } else {
+    analyses = [];
+    for (const request of requests) {
+      const analysis = await dependencies.runAnalysis(request, "agent", signal);
+      if (analysis === null) {
+        analyses = null;
+        break;
+      }
+      analyses.push(analysis);
+    }
+  }
+  if (analyses === null) {
+    return failure("superseded", "A newer request replaced the comparison before every evidence chain completed.");
+  }
+
+  const groupedScenarios = scenarioInputs.map((scenario) => ({
+    id: scenario.id,
+    label: scenario.label,
+    place: truncate(scenario.selection.label, 80),
+    radius_km: scenario.selection.analysisArea.radiusKm,
+    time: scenario.time.display,
+    chains: analyses!
+      .filter((analysis) => analysis.request.evidenceBundle?.scenarioId === scenario.id)
+      .map(compactEvidenceChain),
+  }));
+  const output = {
+    status: "environmental_evidence_comparison",
+    analysis_id: investigationId,
+    ui_updated: true,
+    evidence_scope: "separate_scenarios_and_hazard_chains",
+    must_report_every_scenario_and_chain: true,
+    agent_response_contract: {
+      style: "plain_english",
+      summary_first: true,
+      report_agreements_differences_and_unknowns: true,
+      never_treat_missing_data_as_no_hazard: true,
+    },
+    scenarios: groupedScenarios,
+    comparison: comparisonSummary(analyses),
+    synthesis: synthesizeAnalyses(analyses),
+  };
+  if (JSON.stringify(output).length <= MAX_OUTPUT_CHARACTERS) return output;
+  const reduced = {
+    ...output,
+    scenarios: output.scenarios.map((scenario) => ({
+      ...scenario,
+      chains: scenario.chains.map((chain) => ({
+        hazard: chain.hazard,
+        name: chain.name,
+        evidence_scope: chain.evidence_scope,
+        status_summary: chain.status_summary,
+        confidence: chain.confidence,
+        ...(chain.citation
+          ? { citation: { ...chain.citation, product: "official source", url: null } }
+          : {}),
+      })),
+    })),
+    synthesis: {
+      ...output.synthesis,
+      directly_observed: output.synthesis.directly_observed.slice(0, 2),
+      what_would_change_conclusion: output.synthesis.what_would_change_conclusion.slice(0, 1),
+    },
+  };
+  return reduced;
+}
+
 export function createAnalyzeHazardTool(
   dependencies: AnalyzeHazardToolDependencies
 ): WebMCP.ModelContextTool {
@@ -1134,6 +1582,20 @@ export function createAnalyzeHazardTool(
       untrustedContentHint: true,
     },
     execute: (input, options) => executeAnalyzeHazardTool(input, options, dependencies),
+  };
+}
+
+export function createCompareHazardTool(
+  dependencies: AnalyzeHazardToolDependencies
+): WebMCP.ModelContextTool {
+  return {
+    name: COMPARE_HAZARD_TOOL_NAME,
+    title: "Compare environmental evidence",
+    description:
+      "Compare two place/time/radius scenarios through the same validated evidence pipeline. Use when the person asks what changed, which place/time had stronger evidence, or to compare before/after. Preserve each stated radius. For generic storm use wind_storm + related_context so both Wind & Storm and Flood & Heavy Rain run in both scenarios. Report every scenario and every chain in plain English, then agreements, differences, unknowns, confidence, and what evidence would change the conclusion.",
+    inputSchema: COMPARE_HAZARD_INPUT_SCHEMA,
+    annotations: { readOnlyHint: false, untrustedContentHint: true },
+    execute: (input, options) => executeCompareHazardTool(input, options, dependencies),
   };
 }
 
