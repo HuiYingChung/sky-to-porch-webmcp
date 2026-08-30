@@ -18,6 +18,7 @@ import type {
 import type { BoundingBox } from "@/contracts/common";
 import { CUSTOM_AREA_PLACE_ID, areasIntersect, validateQueryArea } from "@/lib/location/query-area";
 import { queryFirmsEvidence } from "./firms-adapter";
+import { queryWfigsPerimeters, type WfigsResult } from "./wfigs-live-adapter";
 import { getRegistryEntry } from "@/data/dataset-registry";
 import { parseHmsKml } from "./hms-kml";
 import type {
@@ -736,9 +737,11 @@ function observationFor(
 function limitationsFor(
   evidenceState: EvidenceObject["evidenceState"],
   coverageStatus: FireTemporalCoverage["status"],
+  wfigsResults: WfigsResult[] = [],
 ): Limitation[] {
   const fireEntry = getRegistryEntry("noaa_hms_fire_points")!;
   const smokeEntry = getRegistryEntry("noaa_hms_smoke_polygons")!;
+  const wfigsEntry = getRegistryEntry("nifc_wfigs_fire_perimeters")!;
   return [
     ...fireEntry.requiredLimitations.map((description, index) => ({
       limitationId: `hms-fire-live-lim-${index}`,
@@ -752,6 +755,18 @@ function limitationsFor(
       description,
       required: true,
     })),
+    ...(wfigsResults.length > 0 ? wfigsEntry.requiredLimitations.map((description, index) => ({
+      limitationId: `wfigs-live-lim-${index}`,
+      source: "nifc_wfigs_fire_perimeters",
+      description,
+      required: true,
+    })) : []),
+    ...(wfigsResults.some((result) => result.kind === "source_failure") ? [{
+      limitationId: "wfigs-live-source-failure",
+      source: "nifc_wfigs_fire_perimeters",
+      description: "One or more bounded WFIGS perimeter checks failed. NOAA fire and smoke observations do not replace missing perimeter evidence, and the failure is not proof of no fire.",
+      required: true,
+    }] : []),
     {
       limitationId: "hms-live-historical",
       source: "live-adapter",
@@ -784,11 +799,16 @@ function buildEvidence(
   completeDays: RetrievedDay[],
   coverage: FireTemporalCoverage,
   assembledAt: string,
+  wfigsResults: WfigsResult[] = [],
 ): EvidenceObject {
-  const observations = completeDays.flatMap((day) => [
+  const hmsObservations = completeDays.flatMap((day) => [
     observationFor("fire", day, placeId, box),
     observationFor("smoke", day, placeId, box),
   ]);
+  const wfigsObservations = wfigsResults.flatMap((result) =>
+    result.kind === "observations" ? result.observations : []
+  );
+  const observations = [...hmsObservations, ...wfigsObservations];
   const positive = observations.some((observation) => (observation.value ?? 0) > 0);
   const evidenceState: EvidenceObject["evidenceState"] = coverage.status === "partial"
     ? "inconclusive_evidence"
@@ -815,11 +835,13 @@ function buildEvidence(
   const smokeIds = observations
     .filter((observation) => observation.provenance.sourceId === "noaa_hms_smoke_polygons")
     .map((observation) => observation.observationId);
+  const wfigsIds = wfigsObservations.map((observation) => observation.observationId);
   const retrievalStatus: MissionAttribution["retrievalStatus"] = coverage.status === "partial"
     ? "partial"
     : "success";
   const fireEntry = getRegistryEntry("noaa_hms_fire_points")!;
   const smokeEntry = getRegistryEntry("noaa_hms_smoke_polygons")!;
+  const wfigsEntry = getRegistryEntry("nifc_wfigs_fire_perimeters")!;
   const missionAttributions: MissionAttribution[] = [
     {
       missionName: fireEntry.displayName,
@@ -841,6 +863,18 @@ function buildEvidence(
       keyLimitation: smokeEntry.requiredLimitations[0],
       datasetId: "noaa_hms_smoke_polygons",
     },
+    ...(wfigsIds.length > 0 ? [{
+      missionName: wfigsEntry.displayName,
+      agency: wfigsEntry.agency,
+      purpose: wfigsEntry.role,
+      selectionReason: "Official perimeter features were requested only for the exact selected geometry and each completed requested date from 2020 onward.",
+      contributedObservationIds: wfigsIds,
+      retrievalStatus: wfigsResults.some((result) => result.kind === "source_failure")
+        ? "partial" as const
+        : "success" as const,
+      keyLimitation: wfigsEntry.requiredLimitations[0],
+      datasetId: "NIFC WFIGS Interagency Fire Perimeters 2020-present",
+    }] : []),
   ];
   const evidence: EvidenceObject = {
     evidenceId: `ev-hms-live-${placeId}-${firstDate}-${latestDate}`,
@@ -864,7 +898,7 @@ function buildEvidence(
             ? "At least one requested UTC day lacks a complete Fire and Smoke source pair."
             : "Validated sources returned zero in-box counts; zero observations do not imply safety.",
         },
-    limitations: limitationsFor(evidenceState, coverage.status),
+    limitations: limitationsFor(evidenceState, coverage.status, wfigsResults),
     explanations: [],
     assembledAt,
   };
@@ -1167,7 +1201,22 @@ export async function queryLiveFireEvidence(
     return failedResult("validation_failure", { ...coverage, status: "failed" }, deps);
   }
   try {
-    const evidence = buildEvidence(input.placeId, box, completeDays, coverage, assembledAt);
+    const wfigsResults = requestType === "legacy_regression"
+      ? []
+      : await Promise.all(
+          completeDays.map((day) => queryWfigsPerimeters(box, day.date, {
+            fetchImpl: deps.fetch,
+            now: () => new Date(assembledAt),
+          }))
+        );
+    const evidence = buildEvidence(
+      input.placeId,
+      box,
+      completeDays,
+      coverage,
+      assembledAt,
+      wfigsResults
+    );
     return {
       kind: coverage.status === "partial"
         ? "partial_coverage"

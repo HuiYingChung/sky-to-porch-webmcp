@@ -35,6 +35,7 @@ import {
   validateSourceId,
   validateQueryableSourceId,
   validateDatasetRegistryEntry,
+  SOURCE_IDS,
 } from "@/contracts/dataset-registry";
 import {
   validateProvenance,
@@ -318,7 +319,7 @@ describe("validateSourceId", () => {
 
 describe("DATASET_REGISTRY", () => {
   it("contains all registered source entries", () => {
-    expect(DATASET_REGISTRY).toHaveLength(36);
+    expect(DATASET_REGISTRY).toHaveLength(SOURCE_IDS.length);
   });
 
   it("allows the live-gated credential-free AirNow daily file as supporting evidence", () => {
@@ -411,15 +412,16 @@ describe("DATASET_REGISTRY", () => {
     }
   });
 
-  it("active entries are credential-free except the governed FIRMS exception", () => {
-    // UXFIX-02 (ADR-0022): nasa_firms is the single allowed credentialed
-    // source. Its key lives only in the FIRMS_MAP_KEY env var, is required
-    // to be absent from evidence/logs/client output, and the adapter fails
-    // closed when unconfigured.
+  it("active credentialed entries are explicitly server-gated", () => {
     for (const e of getActiveEntries()) {
       if (e.sourceId === "nasa_firms") {
         expect(e.requiresCredential).toBe(true);
         expect(e.authNote).toContain("FIRMS_MAP_KEY");
+        continue;
+      }
+      if (e.sourceId === "epa_aqs") {
+        expect(e.requiresCredential).toBe(true);
+        expect(e.authNote).toMatch(/server-only EPA_AQS_EMAIL and EPA_AQS_KEY/i);
         continue;
       }
       expect(e.requiresCredential).toBe(false);

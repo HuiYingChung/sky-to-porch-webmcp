@@ -39,6 +39,7 @@ export interface DroughtSourceOutcomes {
   gibs: DroughtSourceOutcome;
   usdm: DroughtSourceOutcome;
   administrativeArea?: DroughtSourceOutcome;
+  canadaDrought?: DroughtSourceOutcome;
 }
 
 export type DroughtFailureReason =

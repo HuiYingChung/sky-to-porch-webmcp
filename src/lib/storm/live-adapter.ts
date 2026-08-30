@@ -6,6 +6,8 @@ import { CUSTOM_AREA_PLACE_ID } from "@/lib/location/query-area";
 import { validateQueryArea } from "@/lib/location/query-area";
 import { queryGhcnhWindEvidence } from "@/lib/heat/ground-live-adapter";
 import { queryNwsLocalStormReports } from "./nws-lsr-live-adapter";
+import { queryNceiStormEvents } from "./ncei-storm-events-live-adapter";
+import { queryNhcHurdat2 } from "./nhc-hurdat-live-adapter";
 import type { StormLiveQueryInput, StormQueryResult } from "./types";
 
 const WIND_EARLIEST_DATE = "1901-01-01";
@@ -48,6 +50,38 @@ const LOCAL_STORM_REPORT_FAILURE_LIMITATION: Limitation = {
   source: "nws_local_storm_reports",
   description:
     "The recent NWS Local Storm Report request failed or was only partially completed. Other returned evidence does not replace the missing event-report check, and the failure is not evidence that no storm occurred.",
+  required: true,
+};
+
+const NCEI_STORM_EVENTS_LIMITATION: Limitation = {
+  limitationId: "lim-wind-ncei-storm-events-regional",
+  source: "noaa_ncei_storm_events",
+  description:
+    "NOAA NCEI Storm Events records are delayed historical reports. An event coordinate inside the selected area establishes documented regional event context, not wind at an address, damage, or causation.",
+  required: true,
+};
+
+const NCEI_STORM_EVENTS_FAILURE_LIMITATION: Limitation = {
+  limitationId: "lim-wind-ncei-storm-events-failure",
+  source: "noaa_ncei_storm_events",
+  description:
+    "The NCEI annual Storm Events publication was unavailable or invalid. Other evidence does not replace that historical-event check, and the failure is not evidence that no storm occurred.",
+  required: true,
+};
+
+const HURDAT2_LIMITATION: Limitation = {
+  limitationId: "lim-wind-hurdat2-center-track",
+  source: "nhc_hurdat2",
+  description:
+    "NHC HURDAT2 is a post-analysis tropical-cyclone best track. A six-hour storm-center point inside the selected area is not the wind footprint and does not establish wind or damage at a property.",
+  required: true,
+};
+
+const HURDAT2_FAILURE_LIMITATION: Limitation = {
+  limitationId: "lim-wind-hurdat2-failure",
+  source: "nhc_hurdat2",
+  description:
+    "The bounded HURDAT2 check failed. Other evidence does not replace the missing tropical-cyclone best-track check, and the failure is not evidence that no storm occurred.",
   required: true,
 };
 
@@ -160,12 +194,20 @@ export async function queryLiveStormEvidence(
 
   const retrievedAt = now.toISOString();
   const eventObservation = berylEventObservation(area, input.date, retrievedAt);
-  const [ghcnh, localStormReports] = await Promise.all([
+  const [ghcnh, localStormReports, nceiStormEvents, hurdat2] = await Promise.all([
     queryGhcnhWindEvidence(input.date, area, {
       fetchImpl: dependencies.fetchImpl,
       now: () => now,
     }),
     queryNwsLocalStormReports(area, input.date, input.date, "wind_storm", {
+      fetchImpl: dependencies.fetchImpl,
+      now: () => now,
+    }),
+    queryNceiStormEvents(area, input.date, "wind_storm", {
+      fetchImpl: dependencies.fetchImpl,
+      now: () => now,
+    }),
+    queryNhcHurdat2(area, input.date, {
       fetchImpl: dependencies.fetchImpl,
       now: () => now,
     }),
@@ -176,9 +218,17 @@ export async function queryLiveStormEvidence(
   const localReportObservations = localStormReports.kind === "observations"
     ? localStormReports.observations
     : [];
+  const nceiObservations = nceiStormEvents.kind === "observations"
+    ? nceiStormEvents.observations
+    : [];
+  const hurdatObservations = hurdat2.kind === "observations"
+    ? hurdat2.observations
+    : [];
   const observations: Observation[] = [
     ...stationObservations,
     ...localReportObservations,
+    ...nceiObservations,
+    ...hurdatObservations,
     ...(eventObservation ? [eventObservation] : []),
   ];
   const derivedMetrics = stationObservations.flatMap((observation) =>
@@ -198,15 +248,17 @@ export async function queryLiveStormEvidence(
   if (
     observations.length === 0 &&
     ghcnh.kind === "source_failure" &&
-    localStormReports.kind === "source_failure"
+    localStormReports.kind === "source_failure" &&
+    nceiStormEvents.kind === "source_failure" &&
+    hurdat2.kind === "source_failure"
   ) {
     return sourceFailureResult(
-      "The bounded NOAA GHCNh wind and recent NWS Local Storm Report requests both failed. No rain, flood, fixture, or out-of-area data was substituted."
+      "The bounded NOAA GHCNh, NWS Local Storm Report, NCEI Storm Events, and NHC HURDAT2 requests all failed. No rain, flood, fixture, or out-of-area data was substituted."
     );
   }
 
   const hasStation = stationObservations.length > 0;
-  const hasOfficialEvent = localReportObservations.length > 0 || eventObservation !== null;
+  const hasOfficialEvent = localReportObservations.length > 0 || nceiObservations.length > 0 || hurdatObservations.length > 0 || eventObservation !== null;
   const stationDateReturnedNoObservation = ghcnh.kind === "no_observation" &&
     ghcnh.stage === "station_year";
   const evidenceState = hasStation
@@ -264,7 +316,37 @@ export async function queryLiveStormEvidence(
             datasetId: "NWS LSR",
           }]
         : []),
-      {
+      ...(nceiObservations.length > 0 ? [{
+        missionName: "NOAA NCEI Storm Events Database",
+        agency: "NOAA / NCEI",
+        purpose: "Provide official historical records of documented wind and severe-weather events.",
+        selectionReason: nceiStormEvents.kind === "observations"
+          ? "Only records whose event date matched the request and whose reported coordinate fell inside the exact selected geometry were included."
+          : nceiStormEvents.kind === "source_failure"
+            ? "The bounded annual Storm Events publication check failed closed."
+            : "The published annual file contained no matching geolocated Wind & Storm record inside the selected geometry.",
+        contributedObservationIds: nceiObservations.map((item) => item.observationId),
+        retrievalStatus: "success" as const,
+        keyLimitation: NCEI_STORM_EVENTS_LIMITATION.description,
+        datasetId: "NOAA NCEI Storm Events details bulk CSV v1.0",
+      }] : []),
+      ...(hurdatObservations.length > 0 ? [{
+        missionName: "NHC HURDAT2 best-track database",
+        agency: "NOAA / National Hurricane Center",
+        purpose: "Provide official post-analysis tropical-cyclone center positions and maximum sustained winds.",
+        selectionReason: hurdat2.kind === "observations"
+          ? "Six-hour best-track center points were included only when their timestamp matched the request and the center coordinate fell inside the exact selected geometry."
+          : hurdat2.kind === "source_failure"
+            ? "The bounded HURDAT2 index or track-file check failed closed."
+            : hurdat2.kind === "not_applicable"
+              ? "The requested date falls outside the currently published HURDAT2 record."
+              : "No published tropical-cyclone center track point matched the date and selected geometry.",
+        contributedObservationIds: hurdatObservations.map((item) => item.observationId),
+        retrievalStatus: "success" as const,
+        keyLimitation: HURDAT2_LIMITATION.description,
+        datasetId: "NHC HURDAT2",
+      }] : []),
+      ...(eventObservation ? [{
         missionName: "NWS Houston/Galveston Hurricane Beryl report",
         agency: "NOAA / National Weather Service",
         purpose: "Provide official regional post-event context for the governed Beryl date and area.",
@@ -272,10 +354,10 @@ export async function queryLiveStormEvidence(
           ? "The requested date and selected geometry match the pinned report's governed scope."
           : "The requested date or selected geometry does not match the pinned report scope.",
         contributedObservationIds: eventObservation ? [eventObservation.observationId] : [],
-        retrievalStatus: eventObservation ? "success" : "not_attempted",
+        retrievalStatus: "success" as const,
         keyLimitation: EVENT_LIMITATION.description,
         datasetId: "PSHHGX_2024AL02_Beryl_Summary",
-      },
+      }] : []),
     ],
     freshness: Number.isFinite(latestObservationMs)
       ? {
@@ -306,6 +388,10 @@ export async function queryLiveStormEvidence(
         ("failedRequestCount" in localStormReports && localStormReports.failedRequestCount > 0)
         ? [LOCAL_STORM_REPORT_FAILURE_LIMITATION]
         : []),
+      NCEI_STORM_EVENTS_LIMITATION,
+      ...(nceiStormEvents.kind === "source_failure" ? [NCEI_STORM_EVENTS_FAILURE_LIMITATION] : []),
+      HURDAT2_LIMITATION,
+      ...(hurdat2.kind === "source_failure" ? [HURDAT2_FAILURE_LIMITATION] : []),
       EVENT_LIMITATION,
       CLAIM_LIMITATION,
       NO_DATA_LIMITATION,
@@ -333,6 +419,18 @@ export async function queryLiveStormEvidence(
         : localStormReports.kind === "source_failure"
           ? "failed"
           : localStormReports.kind === "not_applicable"
+            ? "not_applicable"
+            : "no_observation",
+      nceiStormEvents: nceiStormEvents.kind === "observations"
+        ? "success"
+        : nceiStormEvents.kind === "source_failure"
+          ? "failed"
+          : "no_observation",
+      hurdat2: hurdat2.kind === "observations"
+        ? "success"
+        : hurdat2.kind === "source_failure"
+          ? "failed"
+          : hurdat2.kind === "not_applicable"
             ? "not_applicable"
             : "no_observation",
       officialEventContext: eventObservation ? "success" : "not_applicable",

@@ -89,6 +89,9 @@ async function mockFetch(
         features: earthquakeFeatures,
       });
     }
+    if (url.hostname === "webservices.volcano.si.edu") {
+      return Response.json({ type: "FeatureCollection", numberMatched: 0, features: [] });
+    }
     throw new Error(`unexpected mocked request ${url.hostname}${url.pathname}`);
   }) as unknown as typeof fetch;
 }
@@ -161,6 +164,7 @@ describe("Air Quality and Earth & Volcanoes live query routes", () => {
     expect(payload.result.sourceOutcomes).toEqual({
       nasa_gibs_modis_aod: "success",
       airnow_daily_data: "success",
+      epa_aqs: "credential_gate_closed",
     });
     expect(payload.result.evidence.observations).toHaveLength(2);
     expect(payload.result.evidence.observations[1]).toMatchObject({
@@ -180,6 +184,7 @@ describe("Air Quality and Earth & Volcanoes live query routes", () => {
     expect(result.sourceOutcomes).toEqual({
       nasa_gibs_modis_aod: "success",
       airnow_daily_data: "source_failure",
+      epa_aqs: "credential_gate_closed",
     });
     expect(result.evidence?.observations).toHaveLength(1);
     expect(result.rejectionReason).toContain("missing ground evidence is not clean air");
@@ -194,6 +199,7 @@ describe("Air Quality and Earth & Volcanoes live query routes", () => {
     expect(result.sourceOutcomes).toEqual({
       nasa_gibs_modis_aod: "success",
       airnow_daily_data: "no_observation",
+      epa_aqs: "credential_gate_closed",
     });
     expect(result.evidence?.observations).toHaveLength(1);
     expect(result.rejectionReason).toContain("no nearby row is not clean air");
@@ -244,6 +250,7 @@ describe("Air Quality and Earth & Volcanoes live query routes", () => {
       nasa_gibs_omps_so2: "no_observation",
       usgs_volcano_hans: "no_observation",
       usgs_earthquake_geojson: "success",
+      smithsonian_gvp_eruptions: "no_observation",
       earthquake_prediction: "out_of_scope",
     });
     expect(result.evidence?.observations).toHaveLength(1);

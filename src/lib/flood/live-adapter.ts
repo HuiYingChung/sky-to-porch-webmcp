@@ -29,6 +29,8 @@ import {
   validateQueryArea,
 } from "@/lib/location/query-area";
 import { queryNwsLocalStormReports } from "@/lib/storm/nws-lsr-live-adapter";
+import { queryNceiStormEvents } from "@/lib/storm/ncei-storm-events-live-adapter";
+import { queryMrmsQpe } from "./mrms-qpe-live-adapter";
 
 const GIBS_LAYER = "IMERG_Precipitation_Rate";
 const GIBS_HOST = "gibs.earthdata.nasa.gov";
@@ -685,6 +687,38 @@ const LOCAL_STORM_REPORT_FAILURE_LIMITATION: Limitation = {
   required: true,
 };
 
+const NCEI_STORM_EVENTS_LIMITATION: Limitation = {
+  limitationId: "lim-flood-ncei-storm-events-regional",
+  source: "noaa_ncei_storm_events",
+  description:
+    "NOAA NCEI Storm Events records are delayed historical reports. A flood or heavy-rain event coordinate inside the selected area establishes documented regional context, not water depth, route safety, property flooding, or causation.",
+  required: true,
+};
+
+const NCEI_STORM_EVENTS_FAILURE_LIMITATION: Limitation = {
+  limitationId: "lim-flood-ncei-storm-events-failure",
+  source: "noaa_ncei_storm_events",
+  description:
+    "The NCEI annual Storm Events publication was unavailable or invalid. Other evidence does not replace that historical-event check, and the failure is not evidence that no flood or heavy rain occurred.",
+  required: true,
+};
+
+const MRMS_QPE_LIMITATION: Limitation = {
+  limitationId: "lim-flood-mrms-qpe-estimate",
+  source: "noaa_mrms_qpe",
+  description:
+    "MRMS QPE is a rolling radar-derived estimate sampled at the selected-area center. It is not an area total, gauge measurement, flood depth, road condition, or property observation.",
+  required: true,
+};
+
+const MRMS_QPE_FAILURE_LIMITATION: Limitation = {
+  limitationId: "lim-flood-mrms-qpe-failure",
+  source: "noaa_mrms_qpe",
+  description:
+    "The recent MRMS catalog or raster sample failed. Other evidence does not replace the missing numeric precipitation estimate, and the failure is not evidence of no rain or flooding.",
+  required: true,
+};
+
 function floodExtentAttribution(result: FloodExtentResult): MissionAttribution {
   return {
     missionName: "VIIRS NOAA-20 / NOAA-21",
@@ -814,6 +848,9 @@ export async function queryLiveFloodEvidence(
     usgs: "not_attempted",
     canadaGeomet: "not_attempted",
     localStormReports: "not_attempted",
+    nceiStormEvents: "not_attempted",
+    mrmsQpe: "not_attempted",
+    numericImerg: "not_attempted",
   };
   const now = dependencies.now?.() ?? new Date();
   const rejection = validateInput(input, now);
@@ -830,7 +867,7 @@ export async function queryLiveFloodEvidence(
   const box: BoundingBox = validateQueryArea(input.area);
   const areaTag = "custom-area";
   try {
-    const [floodExtent, localStormReports] = await Promise.all([
+    const [floodExtent, localStormReports, nceiStormEvents, mrmsQpe] = await Promise.all([
       queryFloodExtent(input.endDate, box, {
         fetchImpl,
         now: () => now,
@@ -842,6 +879,11 @@ export async function queryLiveFloodEvidence(
         "flood_storm",
         { fetchImpl, now: () => now }
       ),
+      queryNceiStormEvents(box, input.endDate, "flood_storm", {
+        fetchImpl,
+        now: () => now,
+      }),
+      queryMrmsQpe(box, input.endDate, { fetchImpl, now: () => now }),
     ]);
     sourceOutcomes.floodExtent = floodExtent.kind === "observation"
       ? "success"
@@ -855,6 +897,16 @@ export async function queryLiveFloodEvidence(
         : localStormReports.kind === "not_applicable"
           ? "not_attempted"
           : "no_observation";
+    sourceOutcomes.nceiStormEvents = nceiStormEvents.kind === "observations"
+      ? "success"
+      : nceiStormEvents.kind === "source_failure"
+        ? "failed"
+        : "no_observation";
+    sourceOutcomes.mrmsQpe = mrmsQpe.kind === "observation"
+      ? "success"
+      : mrmsQpe.kind === "source_failure"
+        ? "failed"
+        : "no_observation";
 
     // UXFIX-02: one bounded GIBS observation per requested UTC day (max
     // FLOOD_MAX_RANGE_DAYS), fetched sequentially to stay a good citizen.
@@ -925,17 +977,29 @@ export async function queryLiveFloodEvidence(
           dataMode: "live" as const,
         }))
       : [];
+    const nceiObservations = nceiStormEvents.kind === "observations"
+      ? nceiStormEvents.observations.map((observation) => ({
+          ...observation,
+          dataMode: "historical" as const,
+        }))
+      : [];
+    const mrmsObservation = mrmsQpe.kind === "observation" ? mrmsQpe.observation : null;
     const observations = [
       ...gibsObservations,
       ...(floodExtentObservation ? [floodExtentObservation] : []),
       ...groundObservations,
       ...localReportObservations,
+      ...nceiObservations,
+      ...(mrmsObservation ? [mrmsObservation] : []),
     ];
     const satelliteUnsupported =
       gibsDays.every((day) => day.transparent) && floodExtent.kind === "no_observation";
     const unsupported = satelliteUnsupported &&
       groundObservations.length === 0 &&
-      localReportObservations.length === 0;
+      localReportObservations.length === 0 &&
+      nceiObservations.length === 0 &&
+      mrmsObservation === null;
+    const hasEventContext = localReportObservations.length > 0 || nceiObservations.length > 0;
     const inconclusive = !unsupported && (
       groundObservations.length === 0 ||
       floodExtent.kind === "source_failure" ||
@@ -959,6 +1023,34 @@ export async function queryLiveFloodEvidence(
         ...(localStormReports.kind === "observations"
           ? [localStormReportAttribution(localStormReports, localReportObservations)]
           : []),
+        ...(nceiObservations.length > 0 ? [{
+          missionName: "NOAA NCEI Storm Events Database",
+          agency: "NOAA / NCEI",
+          purpose: "Provide official historical records of documented flood and heavy-rain events.",
+          selectionReason: nceiStormEvents.kind === "observations"
+            ? "Only records on the final requested date whose reported coordinate fell inside the exact selected geometry were included."
+            : nceiStormEvents.kind === "source_failure"
+              ? "The bounded annual Storm Events publication check failed closed."
+              : "The annual publication contained no matching geolocated Flood & Heavy Rain record for the final requested date inside the selected geometry.",
+          contributedObservationIds: nceiObservations.map((item) => item.observationId),
+          retrievalStatus: "success" as const,
+          keyLimitation: NCEI_STORM_EVENTS_LIMITATION.description,
+          datasetId: "NOAA NCEI Storm Events details bulk CSV v1.0",
+        }] : []),
+        ...(mrmsObservation ? [{
+          missionName: "NOAA Multi-Radar Multi-Sensor QPE",
+          agency: "NOAA / National Weather Service",
+          purpose: "Provide a recent numeric radar-only 24-hour precipitation estimate at the selected-area center.",
+          selectionReason: mrmsQpe.kind === "observation"
+            ? "The rolling raster period overlapped the final requested UTC date and returned a finite center-point value."
+            : mrmsQpe.kind === "source_failure"
+              ? "The rolling catalog or raster sample failed closed."
+              : "The rolling service did not contain a usable value whose valid period overlapped the final requested date.",
+          contributedObservationIds: mrmsObservation ? [mrmsObservation.observationId] : [],
+          retrievalStatus: "success" as const,
+          keyLimitation: MRMS_QPE_LIMITATION.description,
+          datasetId: "NOAA MRMS radar-only 24-hour QPE",
+        }] : []),
         ...(canadaHydrometric.kind === "observation" || canadaHydrometric.kind === "source_failure"
           ? [canadaHydrometricAttribution(canadaHydrometric)]
           : []),
@@ -972,10 +1064,10 @@ export async function queryLiveFloodEvidence(
             ? floodExtent.kind === "source_failure"
               ? "The returned precipitation or gage context cannot replace the failed flood-extent source."
               : satelliteUnsupported
-                ? localReportObservations.length > 0
+                ? hasEventContext
                   ? "An official in-area event report is available, but both satellite roles returned no usable regional observation and no ground gage established water conditions."
                   : "A ground gage observation is available, but both satellite roles returned no usable regional observation."
-                : localReportObservations.length > 0
+                : hasEventContext
                   ? "An official in-area event report and regional visualization are available, but no applicable USGS or ECCC gage established water conditions for these dates."
                   : "The regional visualization was retrieved but no applicable USGS or ECCC gage in the selected area returned an observation for these dates."
             : "Regional visualization and in-area station evidence are available but do not establish property or route conditions.",
@@ -1002,6 +1094,10 @@ export async function queryLiveFloodEvidence(
           ("failedRequestCount" in localStormReports && localStormReports.failedRequestCount > 0)
           ? [LOCAL_STORM_REPORT_FAILURE_LIMITATION]
           : []),
+        NCEI_STORM_EVENTS_LIMITATION,
+        ...(nceiStormEvents.kind === "source_failure" ? [NCEI_STORM_EVENTS_FAILURE_LIMITATION] : []),
+        MRMS_QPE_LIMITATION,
+        ...(mrmsQpe.kind === "source_failure" ? [MRMS_QPE_FAILURE_LIMITATION] : []),
       ],
       explanations: [],
       assembledAt,

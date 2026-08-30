@@ -29,6 +29,7 @@
         "smoke:wp12:earth-volcano:live": "vite-node --config vitest.config.ts scripts/wp12-earth-volcano-live-source-smoke.ts",
         "smoke:canada-hydrometric:live": "vite-node --config vitest.config.ts scripts/canada-hydrometric-live-source-smoke.ts",
         "smoke:ghcnh:live": "vite-node --config vitest.config.ts scripts/ghcnh-live-source-smoke.ts",
+        "smoke:evidence-expansion:live": "vite-node --config vitest.config.ts scripts/evidence-chain-expansion-live-smoke.ts",
         "verify": "npm run typecheck && npm run lint && npm run test && npm run test:integration && npm run build && npm run test:e2e && npm run secret-check"
     },
     "dependencies": {

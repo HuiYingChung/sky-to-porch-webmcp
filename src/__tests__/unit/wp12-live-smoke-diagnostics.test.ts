@@ -90,6 +90,9 @@ describe("WP-12 live-smoke safe diagnostics", () => {
       if (url.pathname === "/fdsnws/event/1/query") {
         return Response.json({ rawMarker: "FDSN_RAW_MARKER" });
       }
+      if (url.hostname === "webservices.volcano.si.edu") {
+        return Response.json({ type: "FeatureCollection", numberMatched: 0, features: [] });
+      }
       throw new Error(`Unexpected deterministic request: ${url.hostname}${url.pathname}`);
     }) as unknown as typeof fetch;
     const diagnostics: VolcanoEvidenceDiagnostics = { sourceFailures: [] };
@@ -101,7 +104,7 @@ describe("WP-12 live-smoke safe diagnostics", () => {
       concern: "community",
     }, { fetchImpl, now: () => NOW, diagnostics });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
     expect(result.kind).toBe("source_failure");
     expect(result.sourceOutcomes).toMatchObject({
       nasa_gibs_omps_so2: "no_observation",
