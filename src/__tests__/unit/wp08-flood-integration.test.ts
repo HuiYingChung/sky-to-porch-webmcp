@@ -186,6 +186,15 @@ async function mockFloodFetch(options: {
         options.canadaStatus ?? 200
       );
     }
+    if (url.hostname === "www.ncei.noaa.gov") {
+      return new Response("<html><body>No fixture publication</body></html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      });
+    }
+    if (url.hostname === "mapservices.weather.noaa.gov") {
+      return Response.json({ features: [] });
+    }
     // ADR-0043: the only monitoring-locations request is the bbox discovery;
     // the pinned per-site location lookup no longer exists.
     if (url.pathname.endsWith("/collections/monitoring-locations/items")) {
@@ -270,9 +279,14 @@ describe("WP-08 live adapter with mocked official-source responses", () => {
       value: 20.5,
       unit: "ft",
     });
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
     const hosts = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls.map(([input]) => new URL(String(input)).hostname);
-    expect(new Set(hosts)).toEqual(new Set(["gibs.earthdata.nasa.gov", "api.waterdata.usgs.gov"]));
+    expect(new Set(hosts)).toEqual(new Set([
+      "gibs.earthdata.nasa.gov",
+      "api.waterdata.usgs.gov",
+      "www.ncei.noaa.gov",
+      "mapservices.weather.noaa.gov",
+    ]));
     validateEvidenceObject(result.evidence);
 
     const finalized = await finalizeFloodQueryResult(result, "home");

@@ -30,6 +30,8 @@ import {
   type UsgsEarthquakeFailureReason,
   type UsgsEarthquakeSchemaDiagnostic,
 } from "./usgs-earthquake-live-adapter";
+import { queryGvpEruptions } from "./gvp-eruption-live-adapter";
+import { queryEpaAqs, type EpaAqsCredentials } from "./epa-aqs-live-adapter";
 import type {
   CoverageGapHazardId,
   CoverageGapQueryInput,
@@ -54,6 +56,11 @@ export type VolcanoSourceFailureDiagnostic =
       reason: UsgsEarthquakeFailureReason;
       stage: "event_query";
       schemaDiagnostic?: UsgsEarthquakeSchemaDiagnostic;
+    }
+  | {
+      sourceId: "smithsonian_gvp_eruptions";
+      reason: string;
+      stage: "eruption_query";
     };
 
 /** Caller-owned, safe metadata sink. It never contains headers or payloads. */
@@ -197,6 +204,63 @@ function assembleEvidence(
   const satelliteObservation = observations.find(
     (observation) => observation.provenance.sourceId === satelliteSource
   );
+  const supplementalMissionDefinitions: Partial<Record<Observation["provenance"]["sourceId"], {
+    missionName: string;
+    agency: string;
+    purpose: string;
+    keyLimitation: string;
+    datasetId: string;
+  }>> = {
+    airnow_daily_data: {
+      missionName: "AirNow daily monitoring data",
+      agency: "U.S. EPA and partner agencies",
+      purpose: "Provide preliminary outdoor monitoring-site AQI summaries.",
+      keyLimitation: "Outdoor preliminary AQI is not indoor air quality, personal exposure, or a regulatory AQS finding.",
+      datasetId: "AirNow daily_data_v2",
+    },
+    epa_aqs: {
+      missionName: "EPA Air Quality System",
+      agency: "U.S. Environmental Protection Agency",
+      purpose: "Provide validated historical outdoor monitoring-station pollutant samples.",
+      keyLimitation: "Validated AQS data can lag by months and is not indoor air quality, personal exposure, or a current alert.",
+      datasetId: "EPA AQS sampleData/byBox",
+    },
+    usgs_volcano_hans: {
+      missionName: "USGS Volcano Hazards Notification System",
+      agency: "USGS Volcano Hazards Program",
+      purpose: "Provide official reports of observed volcanic activity.",
+      keyLimitation: "HANS reports observations and notices; it does not predict eruption timing.",
+      datasetId: "USGS HANS",
+    },
+    usgs_earthquake_geojson: {
+      missionName: "USGS Earthquake Catalog",
+      agency: "USGS Earthquake Hazards Program",
+      purpose: "Provide observed catalog earthquake events inside the selected geometry.",
+      keyLimitation: "Catalog events may be revised and do not predict earthquakes or establish volcanic causality.",
+      datasetId: "USGS FDSN Event GeoJSON",
+    },
+    smithsonian_gvp_eruptions: {
+      missionName: "Smithsonian Global Volcanism Program",
+      agency: "Smithsonian Institution",
+      purpose: "Provide official historical eruption records whose catalog interval overlaps the requested date.",
+      keyLimitation: "Historical eruption records are not real-time alerts or predictions, and date precision may be incomplete.",
+      datasetId: "GVP Volcanoes of the World Holocene Eruptions",
+    },
+  };
+  const supplementalMissions = [...new Set(observations.map((observation) => observation.provenance.sourceId))]
+    .filter((sourceId) => sourceId !== satelliteSource)
+    .flatMap((sourceId): MissionAttribution[] => {
+      const definition = supplementalMissionDefinitions[sourceId];
+      if (!definition) return [];
+      return [{
+        ...definition,
+        selectionReason: "The official source returned validated observations for the exact selected geometry and requested date.",
+        contributedObservationIds: observations
+          .filter((observation) => observation.provenance.sourceId === sourceId)
+          .map((observation) => observation.observationId),
+        retrievalStatus: "success",
+      }];
+    });
   const observedTimes = observations
     .map((observation) => Date.parse(observation.provenance.observedAt))
     .filter(Number.isFinite);
@@ -209,11 +273,10 @@ function assembleEvidence(
     dataMode: observations.length > 0 ? "live" : "failed",
     observations,
     derivedMetrics: [],
-    missionAttributions: [mission(
-      hazardId,
-      satelliteObservation,
-      outcomes[0] === "source_failure"
-    )],
+    missionAttributions: [
+      mission(hazardId, satelliteObservation, outcomes[0] === "source_failure"),
+      ...supplementalMissions,
+    ],
     freshness: Number.isFinite(latestMs)
       ? {
           status: "historical",
@@ -268,6 +331,12 @@ const AIR_LIMITATIONS: Limitation[] = [
     description: "Missing nearby rows or a failed daily-file request is not evidence of clean air or no health risk.",
     required: true,
   },
+  {
+    limitationId: "lim-air-aqs-validated-lag",
+    source: "epa_aqs",
+    description: "EPA AQS validated monitoring data can lag by six months or more. A credential gate, missing in-area row, or historical station value is not a current clean-air or personal-exposure finding.",
+    required: true,
+  },
 ];
 
 const EARTH_VOLCANO_LIMITATIONS: Limitation[] = [
@@ -289,6 +358,12 @@ const EARTH_VOLCANO_LIMITATIONS: Limitation[] = [
     description: "USGS catalog events are observed reports that may be automatic or revised; they do not predict earthquakes or eruptions, prove a causal link to satellite or volcano observations, or make an empty/failed query evidence of seismic safety.",
     required: true,
   },
+  {
+    limitationId: "lim-gvp-historical-not-prediction",
+    source: "smithsonian_gvp_eruptions",
+    description: "Smithsonian GVP eruption records are historical catalog evidence with potentially incomplete date precision; they are not real-time alerts, exposure findings, or predictions.",
+    required: true,
+  },
 ];
 
 function unsupportedDateResult(
@@ -296,11 +371,12 @@ function unsupportedDateResult(
   hazardId: CoverageGapHazardId
 ): CoverageGapQueryResult {
   const sourceOutcomes: Record<string, CoverageGapSourceOutcome> = hazardId === "air_quality"
-    ? { nasa_gibs_modis_aod: "not_attempted", airnow_daily_data: "not_attempted" }
+    ? { nasa_gibs_modis_aod: "not_attempted", airnow_daily_data: "not_attempted", epa_aqs: "not_attempted" }
     : {
         nasa_gibs_omps_so2: "not_attempted",
         usgs_volcano_hans: "not_attempted",
         usgs_earthquake_geojson: "not_attempted",
+        smithsonian_gvp_eruptions: "not_attempted",
         earthquake_prediction: "out_of_scope",
       };
   return {
@@ -318,7 +394,7 @@ function unsupportedDateResult(
 
 export async function queryAirQualityEvidence(
   input: CoverageGapQueryInput,
-  dependencies: { fetchImpl?: typeof fetch; now?: () => Date } = {}
+  dependencies: { fetchImpl?: typeof fetch; now?: () => Date; aqsCredentials?: EpaAqsCredentials } = {}
 ): Promise<CoverageGapQueryResult> {
   const now = dependencies.now?.() ?? new Date();
   if (parseDate(input.date, now) === "unsupported") {
@@ -327,7 +403,7 @@ export async function queryAirQualityEvidence(
   assertAtmosphericSourceReadiness();
   buildAtmosphericRequest("nasa_gibs_modis_aod", input.date, input.area);
   validateQueryableSourceId("airnow_daily_data");
-  const [satellite, ground] = await Promise.all([
+  const [satellite, ground, aqs] = await Promise.all([
     queryAtmosphericSatellite(
       "nasa_gibs_modis_aod",
       input.date,
@@ -339,6 +415,11 @@ export async function queryAirQualityEvidence(
       now: () => now,
       externalCallsAuthorized: true,
     }),
+    queryEpaAqs(input.area, input.date, {
+      fetchImpl: dependencies.fetchImpl,
+      now: () => now,
+      credentials: dependencies.aqsCredentials,
+    }),
   ]);
   const satelliteOutcome: CoverageGapSourceOutcome = satellite.kind === "observation"
     ? "success"
@@ -346,23 +427,37 @@ export async function queryAirQualityEvidence(
   const groundOutcome: CoverageGapSourceOutcome = ground.kind === "observations"
     ? "success"
     : ground.kind === "no_observation" ? "no_observation" : "source_failure";
+  const aqsOutcome: CoverageGapSourceOutcome = aqs.kind === "observations"
+    ? "success"
+    : aqs.kind === "no_observation"
+      ? "no_observation"
+      : aqs.kind === "credential_gate_closed"
+        ? "credential_gate_closed"
+        : "source_failure";
   const observations: Observation[] = [
     ...(satellite.kind === "observation" ? [asObservation(satellite.observation)] : []),
     ...(ground.kind === "observations" ? ground.observations.map(asObservation) : []),
+    ...(aqs.kind === "observations" ? aqs.observations.map(asObservation) : []),
   ];
   const sourceOutcomes = {
     nasa_gibs_modis_aod: satelliteOutcome,
     airnow_daily_data: groundOutcome,
+    epa_aqs: aqsOutcome,
   };
+  const relevantOutcomes = [
+    satelliteOutcome,
+    groundOutcome,
+    ...(aqsOutcome === "credential_gate_closed" ? [] : [aqsOutcome]),
+  ];
   const evidence = assembleEvidence(
     input,
     "air_quality",
     observations,
-    Object.values(sourceOutcomes),
+    relevantOutcomes,
     AIR_LIMITATIONS,
     now.toISOString()
   );
-  const kind = evidenceStateFor(observations, Object.values(sourceOutcomes));
+  const kind = evidenceStateFor(observations, relevantOutcomes);
   return {
     kind: resultKind(kind),
     hazardId: "air_quality",
@@ -376,6 +471,8 @@ export async function queryAirQualityEvidence(
       ? `MAIAC source failure: ${satellite.reason}. Available outdoor AQI remains separate from satellite evidence.`
       : ground.kind === "source_failure"
         ? `AirNow daily source failure: ${ground.reason}. Satellite AOD is not AQI, and missing ground evidence is not clean air.`
+        : aqs.kind === "source_failure"
+          ? `EPA AQS source failure: ${aqs.reason}. Preliminary AirNow and satellite AOD remain separate from the missing validated historical check.`
         : ground.kind === "no_observation"
           ? "No AirNow daily monitoring-site AQI row was returned in the area. Satellite AOD is not AQI, and no nearby row is not clean air."
           : "Satellite AOD and outdoor monitoring-site AQI are shown as separate evidence and never converted into one another.",
@@ -397,7 +494,7 @@ export async function queryVolcanoEvidence(
   }
   assertAtmosphericSourceReadiness();
   buildAtmosphericRequest("nasa_gibs_omps_so2", input.date, input.area);
-  const [satellite, hans, earthquakes] = await Promise.all([
+  const [satellite, hans, earthquakes, gvp] = await Promise.all([
     queryAtmosphericSatellite("nasa_gibs_omps_so2", input.date, input.area, {
       fetchImpl: dependencies.fetchImpl,
       now: () => now,
@@ -407,6 +504,10 @@ export async function queryVolcanoEvidence(
       now: () => now,
     }),
     queryUsgsEarthquakeEvents(input.date, input.area, {
+      fetchImpl: dependencies.fetchImpl,
+      now: () => now,
+    }),
+    queryGvpEruptions(input.area, input.date, {
       fetchImpl: dependencies.fetchImpl,
       now: () => now,
     }),
@@ -436,6 +537,13 @@ export async function queryVolcanoEvidence(
         : {}),
     });
   }
+  if (gvp.kind === "source_failure") {
+    dependencies.diagnostics?.sourceFailures.push({
+      sourceId: "smithsonian_gvp_eruptions",
+      reason: gvp.reason,
+      stage: "eruption_query",
+    });
+  }
   const satelliteOutcome: CoverageGapSourceOutcome = satellite.kind === "observation"
     ? "success"
     : satellite.kind === "no_observation" ? "no_observation" : "source_failure";
@@ -445,18 +553,23 @@ export async function queryVolcanoEvidence(
   const earthquakeOutcome: CoverageGapSourceOutcome = earthquakes.kind === "observations"
     ? "success"
     : earthquakes.kind === "no_observation" ? "no_observation" : "source_failure";
+  const gvpOutcome: CoverageGapSourceOutcome = gvp.kind === "observations"
+    ? "success"
+    : gvp.kind === "no_observation" ? "no_observation" : "source_failure";
   const observations: Observation[] = [
     ...(satellite.kind === "observation" ? [asObservation(satellite.observation)] : []),
     ...(hans.kind === "observations" ? hans.observations.map(asObservation) : []),
     ...(earthquakes.kind === "observations" ? earthquakes.observations.map(asObservation) : []),
+    ...(gvp.kind === "observations" ? gvp.observations.map(asObservation) : []),
   ];
   const sourceOutcomes = {
     nasa_gibs_omps_so2: satelliteOutcome,
     usgs_volcano_hans: hansOutcome,
     usgs_earthquake_geojson: earthquakeOutcome,
+    smithsonian_gvp_eruptions: gvpOutcome,
     earthquake_prediction: "out_of_scope" as const,
   };
-  const relevantOutcomes = [satelliteOutcome, hansOutcome, earthquakeOutcome];
+  const relevantOutcomes = [satelliteOutcome, hansOutcome, earthquakeOutcome, gvpOutcome];
   const evidence = assembleEvidence(
     input,
     "earth_volcanoes",
@@ -480,7 +593,7 @@ export async function queryVolcanoEvidence(
       ? "The Earth & Volcanoes evidence chain failed closed; missing evidence is not safety, and no danger or prediction conclusion is supported."
       : satelliteOutcome !== "success"
         ? "No validated OMPS observation materially connected satellite evidence to the separate official earthquake or volcano records; no meaningful satellite connection is claimed."
-        : "Satellite SO2, HANS notices, and observed earthquake events are separate source roles; compare their timing, geography, and confidence before drawing an evidence-supported inference. Future timing and emergency danger are outside these historical records.",
+        : "Satellite SO2, HANS notices, GVP eruption records, and observed earthquake events are separate source roles; compare their timing, geography, and confidence before drawing an evidence-supported inference. Future timing and emergency danger are outside these historical records.",
     evidence,
   };
 }

@@ -135,7 +135,45 @@ const ENTRIES: DatasetRegistryEntry[] = [
       "Reported station gusts describe named observation sites and must not be transferred to a roof or address.",
       "A historical report is not a current warning, forecast, engineering inspection, or insurance determination.",
     ],
-    supportedDataModes: ["historical"],
+    supportedDataModes: ["live", "historical"],
+  },
+  {
+    sourceId: "nhc_hurdat2",
+    displayName: "NHC HURDAT2 Best Track",
+    agency: "NOAA / National Hurricane Center",
+    hazardIds: ["wind_storm"],
+    decision: "go_supporting",
+    role:
+      "Official post-analysis tropical-cyclone center positions, maximum sustained wind, and pressure for Atlantic and Northeast Pacific storms.",
+    endpointTemplate: "https://www.nhc.noaa.gov/data/hurdat/{latest-hurdat2-file}",
+    requiresCredential: false,
+    authNote: "No authentication required. The adapter discovers current official HURDAT2 text files from the NHC index.",
+    documentationUrl: "https://www.nhc.noaa.gov/data/",
+    requiredLimitations: [
+      "HURDAT2 is a post-analysis best track, not a real-time alert or forecast.",
+      "A six-hour storm-center point is not the wind footprint and does not establish wind or damage at a property.",
+      "The database covers Atlantic and Northeast Pacific tropical cyclones, not every wind storm worldwide.",
+    ],
+    supportedDataModes: ["live", "historical"],
+  },
+  {
+    sourceId: "noaa_mrms_qpe",
+    displayName: "NOAA MRMS Quantitative Precipitation Estimate",
+    agency: "NOAA / National Weather Service",
+    hazardIds: ["flood_storm"],
+    decision: "go_supporting",
+    role:
+      "Recent radar-only precipitation estimate sampled from an official rolling MRMS raster when its declared valid period overlaps the requested completed date.",
+    endpointTemplate: "https://mapservices.weather.noaa.gov/raster/rest/services/obs/mrms_qpe/ImageServer/identify",
+    requiresCredential: false,
+    authNote: "No authentication required. Public NOAA ArcGIS ImageServer.",
+    documentationUrl: "https://mapservices.weather.noaa.gov/raster/rest/services/obs/mrms_qpe/ImageServer",
+    requiredLimitations: [
+      "The public ImageServer is a rolling recent product, not a historical archive.",
+      "MRMS QPE is a radar-derived estimate in inches and may be missing, biased, or unavailable at a selected point.",
+      "A precipitation estimate does not establish flood depth, property flooding, road safety, or damage.",
+    ],
+    supportedDataModes: ["live"],
   },
   {
     sourceId: "nasa_imerg_raw",
@@ -189,8 +227,7 @@ const ENTRIES: DatasetRegistryEntry[] = [
     hazardIds: ["flood_storm", "wind_storm"],
     decision: "go_supporting",
     role:
-      "Supporting historical storm-event context for documented weather events. " +
-      "Exact current bulk-download filename must be pinned before use in production adapters.",
+      "Supporting historical storm-event context from the latest official annual details publication. Only records with a matching event date and an event coordinate inside the selected geometry are accepted.",
     endpointTemplate:
       "https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/{filename}",
     requiresCredential: false,
@@ -198,9 +235,10 @@ const ENTRIES: DatasetRegistryEntry[] = [
     documentationUrl: "https://www.ncei.noaa.gov/stormevents/ftp.jsp",
     requiredLimitations: [
       "Historical event records only; not a real-time source.",
-      "Exact current bulk-download filename must be verified and pinned before use.",
+      "Bulk publications are delayed and may later be corrected; county-only records without a usable event coordinate are not treated as in-area evidence.",
+      "A documented regional event does not establish conditions, damage, or causation at a property.",
     ],
-    supportedDataModes: ["fixture", "historical"],
+    supportedDataModes: ["live", "fixture", "historical"],
   },
   {
     sourceId: "nws_local_storm_reports",
@@ -400,6 +438,25 @@ const ENTRIES: DatasetRegistryEntry[] = [
     supportedDataModes: ["unavailable"],
   },
   {
+    sourceId: "nifc_wfigs_fire_perimeters",
+    displayName: "NIFC WFIGS Interagency Fire Perimeters",
+    agency: "National Interagency Fire Center",
+    hazardIds: ["fire_smoke"],
+    decision: "go_supporting",
+    role:
+      "Official interagency wildfire perimeter and incident context for selected U.S. areas from the 2020-present WFIGS perimeter service.",
+    endpointTemplate: "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters/FeatureServer/0/query",
+    requiresCredential: false,
+    authNote: "No authentication required. Public NIFC ArcGIS FeatureServer.",
+    documentationUrl: "https://www.arcgis.com/home/item.html?id=5e72b1699bf74eefb3f3aff6f4ba5511",
+    requiredLimitations: [
+      "Not every wildfire has a published perimeter, and perimeter publication timing varies.",
+      "Perimeters are incident mapping context, not parcel damage, containment certainty, evacuation guidance, or current tactical truth.",
+      "No intersecting feature is missing perimeter evidence, not proof of no fire.",
+    ],
+    supportedDataModes: ["live", "historical"],
+  },
+  {
     sourceId: "nasa_tempo",
     displayName: "NASA TEMPO Atmospheric Composition Products",
     agency: "NASA / Smithsonian Astrophysical Observatory",
@@ -482,6 +539,25 @@ const ENTRIES: DatasetRegistryEntry[] = [
     supportedDataModes: ["live", "fixture", "historical"],
   },
   {
+    sourceId: "epa_aqs",
+    displayName: "EPA Air Quality System Data API",
+    agency: "U.S. Environmental Protection Agency",
+    hazardIds: ["air_quality"],
+    decision: "go_supporting",
+    role:
+      "Validated historical outdoor monitoring observations queried by exact selected bounds when server-only EPA AQS credentials are configured.",
+    endpointTemplate: "https://aqs.epa.gov/data/api/sampleData/byBox",
+    requiresCredential: true,
+    authNote: "Requires server-only EPA_AQS_EMAIL and EPA_AQS_KEY. The client and evidence output never expose them.",
+    documentationUrl: "https://aqs.epa.gov/aqsweb/documents/data_api.html",
+    requiredLimitations: [
+      "AQS validated data can lag collection by six months or more and is not a current alert source.",
+      "Outdoor monitoring-station observations are not indoor air quality or personal exposure.",
+      "No in-area row or an unconfigured credential gate is missing evidence, not safe air.",
+    ],
+    supportedDataModes: ["live", "historical"],
+  },
+  {
     sourceId: "nasa_lance_flood_extent",
     displayName: "NASA LANCE MODIS/VIIRS Global Flood Extent",
     agency: "NASA / LANCE / MODIS and VIIRS",
@@ -528,14 +604,15 @@ const ENTRIES: DatasetRegistryEntry[] = [
     hazardIds: ["fire_smoke"],
     decision: "defer",
     role:
-      "Prepared Canada-wide wildfire supplement for agency-reported active fires, hotspots, fire weather, and explicitly labelled perimeter estimates.",
+      "Prepared Canada-wide wildfire supplement for agency-reported active fires, hotspots, fire weather, and explicitly labelled perimeter estimates. Live integration remains paused during the official CWFIS-to-CWFIF service migration.",
     endpointTemplate:
-      "https://cwfis.cfs.nrcan.gc.ca/geoserver/public/wfs?service=WFS&request=GetFeature&typeName=public:activefires_current&bbox={bbox}",
+      "https://cwfis.cfs.nrcan.gc.ca/geoserver/public/wfs?service=WFS&request=GetFeature&typeName=public:cwfif_national_activefires&bbox={bbox}",
     requiresCredential: false,
     authNote: "Public OGC and download services; cache and request-rate policy require validation.",
     documentationUrl:
-      "https://cwfis.cfs.nrcan.gc.ca/downloads/CWFIS_DataServices_HowtoAccessDailyMaps%26DataLayers.pdf",
+      "https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf",
     requiredLimitations: [
+      "The official service is migrating from CWFIS to CWFIF; the live schema and availability must be revalidated before this source becomes queryable.",
       "CWFIS states that maps and services are approximations and may not show the most current fire situation.",
       "Agency-reported fires, satellite hotspots, danger ratings, and perimeter estimates must remain separate claim types.",
       "No record does not establish no fire or no danger.",
@@ -566,7 +643,7 @@ const ENTRIES: DatasetRegistryEntry[] = [
     displayName: "Canadian Drought Monitor",
     agency: "Agriculture and Agri-Food Canada",
     hazardIds: ["drought_land"],
-    decision: "defer",
+    decision: "go_supporting",
     role:
       "Prepared official monthly Canada-wide drought classification supplement delivered through an ArcGIS ImageServer.",
     endpointTemplate:
@@ -580,7 +657,7 @@ const ENTRIES: DatasetRegistryEntry[] = [
       "D0 is abnormally dry; missing imagery or no mapped class is not proof of no local impact.",
       "Nunavut and the Arctic Archipelago have stated coverage gaps.",
     ],
-    supportedDataModes: ["unavailable"],
+    supportedDataModes: ["live", "historical"],
   },
   {
     sourceId: "mexico_conabio_satif",
@@ -686,9 +763,9 @@ const ENTRIES: DatasetRegistryEntry[] = [
     displayName: "USGS Earthquake Catalog GeoJSON Query",
     agency: "USGS / Earthquake Hazards Program",
     hazardIds: ["earth_volcanoes"],
-    decision: "go_supporting_only",
+    decision: "go",
     role:
-      "Observed earthquake catalog event data only. " +
+      "Primary official observed-earthquake catalog event data. " +
       "Must never be used to predict future earthquakes or eruption timing. " +
       "'No observation' in a bounded query is not proof of seismic safety.",
     endpointTemplate:
@@ -709,9 +786,9 @@ const ENTRIES: DatasetRegistryEntry[] = [
     displayName: "USGS Volcano Hazards Notification System (HANS)",
     agency: "USGS / Volcano Hazards Program",
     hazardIds: ["earth_volcanoes"],
-    decision: "go_supporting_only",
+    decision: "go",
     role:
-      "Official volcanic activity notices from USGS VHP. " +
+      "Primary official U.S. volcanic activity notices from USGS VHP. " +
       "Reports observed activity; must never be used to predict eruption timing or volcanic risk scores. " +
       "'No notice' is not proof of no volcanic hazard.",
     endpointTemplate: "https://volcanoes.usgs.gov/hans-public/api/vona",
@@ -724,6 +801,25 @@ const ENTRIES: DatasetRegistryEntry[] = [
       "API availability may vary; unavailability must be reported as source_failure.",
     ],
     supportedDataModes: ["live", "fixture"],
+  },
+  {
+    sourceId: "smithsonian_gvp_eruptions",
+    displayName: "Smithsonian Global Volcanism Program Eruptions",
+    agency: "Smithsonian Institution / Global Volcanism Program",
+    hazardIds: ["earth_volcanoes"],
+    decision: "go_supporting",
+    role:
+      "Official global historical eruption records filtered by requested date and exact selected geometry through the GVP WFS service.",
+    endpointTemplate: "https://webservices.volcano.si.edu/geoserver/GVP-VOTW/ows",
+    requiresCredential: false,
+    authNote: "No authentication required. Public OGC WFS service.",
+    documentationUrl: "https://volcano.si.edu/database/webservices.cfm",
+    requiredLimitations: [
+      "GVP historical records document known eruption activity; they are not real-time alerts or predictions.",
+      "Incomplete start or end dates and later catalog revisions must remain visible.",
+      "A regional eruption record does not establish ash exposure, property impact, or future activity.",
+    ],
+    supportedDataModes: ["live", "historical"],
   },
   {
     sourceId: "us_drought_monitor_rest",

@@ -80,6 +80,8 @@ describe("Wind & Storm evidence chain", () => {
     expect(adapter.sourceOutcomes).toEqual({
       ghcnhWind: "success",
       localStormReports: "not_applicable",
+      nceiStormEvents: "no_observation",
+      hurdat2: "failed",
       officialEventContext: "success",
     });
     expect(adapter.evidence?.hazardId).toBe("wind_storm");
@@ -127,6 +129,8 @@ describe("Wind & Storm evidence chain", () => {
     expect(adapter.sourceOutcomes).toEqual({
       ghcnhWind: "no_observation",
       localStormReports: "not_applicable",
+      nceiStormEvents: "no_observation",
+      hurdat2: "failed",
       officialEventContext: "not_applicable",
     });
     expect(adapter.evidence).toMatchObject({
@@ -137,7 +141,6 @@ describe("Wind & Storm evidence chain", () => {
       confidence: { level: "insufficient" },
       missionAttributions: [
         { retrievalStatus: "no_observation", contributedObservationIds: [] },
-        { retrievalStatus: "not_attempted", contributedObservationIds: [] },
       ],
     });
     expect(adapter.evidence?.limitations.map((item) => item.description).join(" "))

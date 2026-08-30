@@ -77,7 +77,7 @@ describe("evidence coverage catalog and About surface", () => {
       const profile = SOURCE_COVERAGE_PROFILES.find((item) => item.sourceId === sourceId);
       expect(profile).toMatchObject({
         integrationStatus: "live_integrated",
-        evidenceRole: "supporting",
+        evidenceRole: "primary",
         lastVerifiedDate: "2026-08-18",
       });
       expect(profile?.liveGateNote).toMatch(/2026-08-18/);
@@ -113,12 +113,13 @@ describe("evidence coverage catalog and About surface", () => {
       (profile) => profile.sourceId === "noaa_ncei_global_hourly"
     );
     expect(ghcnh?.integrationStatus).toBe("live_integrated");
-    expect(ghcnh?.liveGateNote).toMatch(/ADR-0039/);
+    expect(ghcnh?.level).toBe("global");
+    expect(ghcnh?.regionLabel).toMatch(/Global GHCNh/i);
     expect(ghcnh?.temporalCoverage).toMatch(/four weeks/i);
     expect(ghcnh?.coverageNote).toMatch(/no heat index/i);
   });
 
-  it("registers the NOAA Storm Events supporting profile without claiming a live path", () => {
+  it("registers the NOAA Storm Events production historical adapter", () => {
     const storm = SOURCE_COVERAGE_PROFILES.find(
       (profile) => profile.sourceId === "noaa_ncei_storm_events"
     );
@@ -126,11 +127,12 @@ describe("evidence coverage catalog and About surface", () => {
       hazardIds: ["flood_storm", "wind_storm"],
       level: "national",
       kind: "official_event",
-      integrationStatus: "supporting_only",
+      integrationStatus: "live_integrated",
       evidenceRole: "supporting",
       countryCodes: ["US"],
     });
-    expect(storm?.liveGateNote).toMatch(/no live gate/i);
+    expect(storm?.liveGateNote).toMatch(/annual details publication/i);
+    expect(storm?.liveGateNote).toMatch(/coordinates inside the selected geometry/i);
     expect(storm?.coverageNote).toMatch(/never prove/i);
   });
 

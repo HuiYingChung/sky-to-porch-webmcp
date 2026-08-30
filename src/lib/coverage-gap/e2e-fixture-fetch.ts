@@ -167,5 +167,13 @@ export const coverageGapE2eFetch: typeof fetch = async (input, init) => {
     const fixture = earthquakeFixture(url);
     if (fixture !== null) return Response.json(fixture, { status: 200 });
   }
+  if (
+    url.protocol === "https:" &&
+    url.hostname === "webservices.volcano.si.edu" &&
+    url.pathname === "/geoserver/GVP-VOTW/ows" &&
+    (init?.method ?? "GET") === "GET"
+  ) {
+    return Response.json({ type: "FeatureCollection", numberMatched: 0, features: [] });
+  }
   throw new Error(`Blocked unexpected coverage-gap E2E request: ${url.origin}${url.pathname}`);
 };

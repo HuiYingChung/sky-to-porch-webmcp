@@ -22,7 +22,7 @@ import {
 } from "./source-contracts";
 import { getUsAdministrativeArea, type UsAdministrativeArea } from "@/data/us-administrative-areas";
 import { resolveUsAdministrativeArea } from "./administrative-area-live";
-import { CUSTOM_AREA_PLACE_ID, validateQueryArea } from "@/lib/location/query-area";
+import { CUSTOM_AREA_PLACE_ID, areasIntersect, validateQueryArea } from "@/lib/location/query-area";
 import type {
   DroughtFailureReason,
   DroughtFailureStage,
@@ -32,6 +32,8 @@ import type {
   DroughtSourceOutcomes,
 } from "./types";
 import { selectGibsDomainDate, inspectGibsPng, normalizeUsdmPercentArea } from "./live-schema";
+import { queryCanadaDroughtMonitor } from "./canada-drought-live-adapter";
+import { getRegistryEntry } from "@/data/dataset-registry";
 
 // ---------------------------------------------------------------------------
 // Constants (exact per prompt)
@@ -42,6 +44,12 @@ const MAX_DOMAIN_BYTES = 65_536;
 const MAX_PNG_BYTES = 2_000_000;
 const MAX_USDM_BYTES = 65_536;
 const DOMAIN_LOOKBACK_DAYS = 64;
+const CANADA_DROUGHT_APPROXIMATE_COVERAGE = {
+  west: -141,
+  south: 41.6,
+  east: -52,
+  north: 83,
+};
 
 // Allowed hosts (exact per prompt)
 const GIBS_DOMAIN_HOST = "gitc.earthdata.nasa.gov";
@@ -909,8 +917,19 @@ export async function queryLiveDroughtEvidence(
     return { outcome: "success", observation: usdmObs, date: requestedTuesday };
   })();
 
-  // Run both branches independently
-  const [gibsData, usdmData] = await Promise.all([gibsChainPromise, usdmChainPromise]);
+  const canadaDroughtPromise = isCustomArea && areasIntersect(queryArea!, CANADA_DROUGHT_APPROXIMATE_COVERAGE)
+    ? queryCanadaDroughtMonitor(queryArea, requestedDate, {
+        fetchImpl,
+        now: () => now,
+      })
+    : Promise.resolve({ kind: "not_applicable" as const, reason: "before_record" as const });
+
+  // Run the independent satellite, U.S. regional, and Canadian regional branches together.
+  const [gibsData, usdmData, canadaDrought] = await Promise.all([
+    gibsChainPromise,
+    usdmChainPromise,
+    canadaDroughtPromise,
+  ]);
 
   // Assemble evidence
   let evidence: EvidenceObject;
@@ -922,6 +941,59 @@ export async function queryLiveDroughtEvidence(
       assembledAt,
       selectionKey
     );
+    const canadaObservation = canadaDrought.kind === "observation"
+      ? canadaDrought.observation
+      : undefined;
+    const canadaEntry = getRegistryEntry("canada_drought_monitor")!;
+    if (canadaObservation) evidence.missionAttributions.push({
+      missionName: canadaEntry.displayName,
+      agency: canadaEntry.agency,
+      purpose: canadaEntry.role,
+      selectionReason: "The latest official monthly product not after the requested date returned a center-point source raster class inside the exact selected geometry.",
+      contributedObservationIds: [canadaObservation.observationId],
+      retrievalStatus: "success",
+      keyLimitation: canadaEntry.requiredLimitations[0],
+      datasetId: "Canadian Drought Monitor ImageServer",
+    });
+    if (canadaDrought.kind !== "not_applicable") evidence.limitations.push(...canadaEntry.requiredLimitations.map((description, index) => ({
+      limitationId: `canada-drought-live-lim-${index}`,
+      source: "canada_drought_monitor",
+      description,
+      required: true,
+    })));
+    if (canadaObservation) {
+      evidence.observations.push(canadaObservation);
+      if (["no_observation", "source_failure", "unsupported_coverage"].includes(evidence.evidenceState)) {
+        evidence.evidenceState = "inconclusive_evidence";
+      }
+      evidence.dataMode = "live";
+      evidence.confidence = {
+        level: evidence.evidenceState === "observations_returned" ? evidence.confidence.level : "low",
+        rationale: "Official regional drought evidence is available, but source scale and classification timing do not establish property, crop, household-water, or safety conditions.",
+      };
+      const observedMs = Date.parse(canadaObservation.provenance.observedAt);
+      const previousMs = evidence.freshness.mostRecentObservationAt
+        ? Date.parse(evidence.freshness.mostRecentObservationAt)
+        : NaN;
+      const latestMs = Number.isFinite(previousMs) ? Math.max(previousMs, observedMs) : observedMs;
+      evidence.freshness = {
+        status: "historical",
+        classificationBasis: "historical_context",
+        mostRecentObservationAt: new Date(latestMs).toISOString(),
+        evaluatedAt: assembledAt,
+        ageSeconds: Math.floor((Date.parse(assembledAt) - latestMs) / 1000),
+        note: "Historical regional products were selected for the requested date; they are not current property conditions.",
+      };
+    }
+    if (canadaDrought.kind === "source_failure") {
+      evidence.limitations.push({
+        limitationId: "canada-drought-live-source-failure",
+        source: "canada_drought_monitor",
+        description: "The Canadian Drought Monitor check failed. Other returned evidence does not replace it, and the failure is not proof of no drought.",
+        required: true,
+      });
+    }
+    validateEvidenceObject(evidence);
   } catch {
     // evidence_assembly failure
     const sourceOutcomes: DroughtSourceOutcomes = {
@@ -934,6 +1006,13 @@ export async function queryLiveDroughtEvidence(
       ...(administrativeAreaOutcome
         ? { administrativeArea: administrativeAreaOutcome }
         : {}),
+      ...(canadaDrought.kind === "not_applicable" ? {} : {
+        canadaDrought: canadaDrought.kind === "observation"
+          ? "success" as const
+          : canadaDrought.kind === "source_failure"
+            ? "failed" as const
+            : "no_observation" as const,
+      }),
     };
     return {
       kind: "source_failure",
@@ -954,6 +1033,13 @@ export async function queryLiveDroughtEvidence(
     ...(administrativeAreaOutcome
       ? { administrativeArea: administrativeAreaOutcome }
       : {}),
+    ...(canadaDrought.kind === "not_applicable" ? {} : {
+      canadaDrought: canadaDrought.kind === "observation"
+        ? "success" as const
+        : canadaDrought.kind === "source_failure"
+          ? "failed" as const
+          : "no_observation" as const,
+    }),
   };
 
   // Determine result kind from evidence state

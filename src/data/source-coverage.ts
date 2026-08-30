@@ -86,7 +86,22 @@ const PROFILES: SourceCoverageProfile[] = [
     updateCadence: "Daily or near-real-time by layer",
     spatialResolution: "Points, agency incidents, grids, and estimated polygons",
     coverageNote: "Separates agency-reported fires, hotspots, danger ratings, and perimeter estimates.",
-    liveGateNote: "Official OGC contract identified; the bounded schema smoke has not yet run.",
+    liveGateNote: "The replacement CWFIF layer is identified, but official migration and temporary service availability prevent a truthful live schema gate.",
+  },
+  {
+    sourceId: "nifc_wfigs_fire_perimeters",
+    hazardIds: ["fire_smoke"],
+    level: "national",
+    kind: "official_event",
+    integrationStatus: "live_integrated",
+    evidenceRole: "supporting",
+    regionLabel: "United States · WFIGS 2020-present",
+    countryCodes: ["US"],
+    temporalCoverage: "Incident perimeters from 2020 onward where agencies publish them",
+    updateCadence: "Incident-driven; publication timing varies",
+    spatialResolution: "Official incident perimeter polygons",
+    coverageNote: "Perimeter context is separate from satellite detections, smoke, parcel damage, and tactical truth.",
+    liveGateNote: "Integrated with exact selected-envelope intersection, incident-date filtering, record caps, and fail-closed ArcGIS validation.",
   },
   {
     sourceId: "mexico_conabio_satif",
@@ -142,6 +157,21 @@ const PROFILES: SourceCoverageProfile[] = [
     lastVerifiedDate: "2026-08-26",
   },
   {
+    sourceId: "nhc_hurdat2",
+    hazardIds: ["wind_storm"],
+    level: "regional",
+    kind: "official_event",
+    integrationStatus: "live_integrated",
+    evidenceRole: "supporting",
+    regionLabel: "Atlantic and Northeast Pacific basins",
+    countryCodes: [],
+    temporalCoverage: "Atlantic 1851-present publication; Northeast Pacific 1949-present publication",
+    updateCadence: "Post-analysis annual best-track publication",
+    spatialResolution: "Six-hour tropical-cyclone center track points",
+    coverageNote: "A best-track center point is not a storm wind footprint or property observation.",
+    liveGateNote: "Integrated with dynamic official-file discovery, bounded text parsing, exact date and in-area center-point filtering.",
+  },
+  {
     sourceId: "nasa_gibs_imerg",
     hazardIds: ["flood_storm"],
     level: "global",
@@ -156,6 +186,21 @@ const PROFILES: SourceCoverageProfile[] = [
     coverageNote: "Rain context only. It is never labelled flood extent.",
     liveGateNote: "Integrated with visual-only claims and transparent/no-data handling.",
     satellite: { platform: "GPM constellation", sensor: "Multiple precipitation sensors", product: "IMERG precipitation rate" },
+  },
+  {
+    sourceId: "noaa_mrms_qpe",
+    hazardIds: ["flood_storm"],
+    level: "national",
+    kind: "blended_official",
+    integrationStatus: "live_integrated",
+    evidenceRole: "supporting",
+    regionLabel: "United States MRMS domains",
+    countryCodes: ["US"],
+    temporalCoverage: "Rolling recent raster catalog only",
+    updateCadence: "Operational rolling products",
+    spatialResolution: "Approximately 1 km source raster; application samples the selected-area center",
+    coverageNote: "Numeric radar-only precipitation estimate, not a historical archive or flood-depth observation.",
+    liveGateNote: "Integrated with declared-valid-period overlap, locked raster ID, finite-value checks, and explicit NoData handling.",
   },
   {
     sourceId: "usgs_instantaneous_values",
@@ -177,7 +222,7 @@ const PROFILES: SourceCoverageProfile[] = [
     hazardIds: ["flood_storm", "wind_storm"],
     level: "national",
     kind: "official_event",
-    integrationStatus: "supporting_only",
+    integrationStatus: "live_integrated",
     evidenceRole: "supporting",
     regionLabel: "United States",
     countryCodes: ["US"],
@@ -189,9 +234,7 @@ const PROFILES: SourceCoverageProfile[] = [
       "delayed and geographically coarse, and they never prove that a storm caused damage at " +
       "one property.",
     liveGateNote:
-      "Registered supporting source with fixture/historical modes only; the exact NCEI " +
-      "bulk-download filename must be pinned before any production adapter, so no live gate " +
-      "exists. Users are pointed at the official Storm Events search as a verification checker.",
+      "The adapter discovers the latest official annual details publication, bounds compressed and decompressed bytes, parses quoted CSV, and accepts only matching event dates and reported coordinates inside the selected geometry.",
   },
   {
     sourceId: "nws_local_storm_reports",
@@ -309,12 +352,12 @@ const PROFILES: SourceCoverageProfile[] = [
   {
     sourceId: "noaa_ncei_global_hourly",
     hazardIds: ["extreme_heat", "wind_storm"],
-    level: "national",
+    level: "global",
     kind: "ground_station",
     integrationStatus: "live_integrated",
     evidenceRole: "supporting",
-    regionLabel: "United States · 6,462 GHCNh stations (historical dates)",
-    countryCodes: ["US"],
+    regionLabel: "Global GHCNh station inventory (historical dates)",
+    countryCodes: [],
     temporalCoverage:
       "Station history up to roughly four weeks behind real time (by-year publication lag, " +
       "verified 2026-08-19)",
@@ -327,8 +370,7 @@ const PROFILES: SourceCoverageProfile[] = [
       "from one named GHCNh station. NOAA publishes no heat index in this product and none is " +
       "derived. One station is never property-level or individual evidence.",
     liveGateNote:
-      "ADR-0039 governs the Heat fallback. ADR-0002 reuses the same bounded in-area station " +
-      "selection and exact-field parser for historical Wind & Storm observations.",
+      "The global official station inventory is parsed with bounded in-area selection and exact-field validation; Heat and Wind & Storm share the same coordinate-authoritative fallback.",
   },
   {
     sourceId: "nasa_gibs_modis_ndvi_16day",
@@ -366,7 +408,7 @@ const PROFILES: SourceCoverageProfile[] = [
     hazardIds: ["drought_land"],
     level: "national",
     kind: "blended_official",
-    integrationStatus: "prepared_for_live",
+    integrationStatus: "live_integrated",
     evidenceRole: "supporting",
     regionLabel: "Canada except stated Arctic gaps",
     countryCodes: ["CA"],
@@ -374,7 +416,7 @@ const PROFILES: SourceCoverageProfile[] = [
     updateCadence: "Monthly, usually by the 10th for the prior month",
     spatialResolution: "5 km image-service pixels",
     coverageNote: "Official Canadian national drought classification.",
-    liveGateNote: "ImageServer contract is documented; the sample/category parser smoke has not yet run.",
+    liveGateNote: "Integrated with official monthly catalog selection, locked-raster center sampling, and source class-code preservation without guessing an unverified label mapping.",
   },
   {
     sourceId: "mexico_drought_monitor",
@@ -444,6 +486,21 @@ const PROFILES: SourceCoverageProfile[] = [
     lastVerifiedDate: "2026-08-15",
   },
   {
+    sourceId: "epa_aqs",
+    hazardIds: ["air_quality"],
+    level: "national",
+    kind: "ground_station",
+    integrationStatus: "live_key_required",
+    evidenceRole: "supporting",
+    regionLabel: "United States regulatory monitoring network",
+    countryCodes: ["US"],
+    temporalCoverage: "Validated historical samples; publication can lag six months or more",
+    updateCadence: "Validation and certification dependent",
+    spatialResolution: "Named outdoor monitoring stations",
+    coverageNote: "Validated outdoor station samples remain separate from preliminary AirNow and satellite AOD.",
+    liveGateNote: "Server-only EPA_AQS_EMAIL and EPA_AQS_KEY gate; bounded by-box PM2.5 parsing fails closed and never exposes credentials.",
+  },
+  {
     sourceId: "mexico_sinaica",
     hazardIds: ["air_quality"],
     level: "national",
@@ -481,7 +538,7 @@ const PROFILES: SourceCoverageProfile[] = [
     level: "national",
     kind: "official_event",
     integrationStatus: "live_integrated",
-    evidenceRole: "supporting",
+    evidenceRole: "primary",
     regionLabel: "USGS global catalog for validated U.S. selections",
     countryCodes: ["US"],
     temporalCoverage: "Bounded historical and recent completed UTC dates",
@@ -500,7 +557,7 @@ const PROFILES: SourceCoverageProfile[] = [
     level: "national",
     kind: "official_alert",
     integrationStatus: "live_integrated",
-    evidenceRole: "supporting",
+    evidenceRole: "primary",
     regionLabel: "United States volcano observatories",
     countryCodes: ["US"],
     temporalCoverage: "Recent notices and current elevated volcanoes",
@@ -512,6 +569,21 @@ const PROFILES: SourceCoverageProfile[] = [
       "issuance observations on the fixed Hawaii historical path. Notices remain observed official " +
       "activity, never eruption prediction; availability may vary and failures stay visible.",
     lastVerifiedDate: "2026-08-18",
+  },
+  {
+    sourceId: "smithsonian_gvp_eruptions",
+    hazardIds: ["earth_volcanoes"],
+    level: "global",
+    kind: "official_event",
+    integrationStatus: "live_integrated",
+    evidenceRole: "primary",
+    regionLabel: "Global Holocene eruption catalog",
+    countryCodes: [],
+    temporalCoverage: "Historical eruption records with source-specific date precision",
+    updateCadence: "Catalog revisions as research and reports are incorporated",
+    spatialResolution: "Volcano point and eruption-record interval",
+    coverageNote: "Historical eruption evidence is not a real-time alert, exposure finding, or prediction.",
+    liveGateNote: "Integrated through bounded GVP WFS GeoJSON with exact geometry and conservative incomplete-date interval handling.",
   },
 ];
 

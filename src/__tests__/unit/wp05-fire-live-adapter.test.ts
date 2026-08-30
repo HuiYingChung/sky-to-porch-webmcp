@@ -95,6 +95,9 @@ function successfulFetch(options: {
 } = {}): HmsLiveDependencies["fetch"] {
   return vi.fn(async (request) => {
     const url = urlText(request);
+    if (url.includes("WFIGS_Interagency_Perimeters")) {
+      return Response.json({ type: "FeatureCollection", features: [] });
+    }
     const date = isoDateFromProductUrl(url);
     if (url.includes("Smoke_Polygons")) {
       return byteResponse(options.smoke ?? LA_SMOKE_KML, KML_MEDIA_TYPE, {
@@ -163,11 +166,12 @@ describe("queryLiveFireEvidence temporal success", () => {
       resolvedStartDate: "2026-08-06",
       resolvedEndDate: "2026-08-06",
     });
-    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([
       "https://satepsanone.nesdis.noaa.gov/pub/FIRE/web/HMS/Smoke_Polygons/KML/2026/08/hms_smoke20260806.kml",
       "https://satepsanone.nesdis.noaa.gov/pub/FIRE/web/HMS/Fire_Points/Text/2026/08/hms_fire20260806.txt",
+      expect.stringContaining("WFIGS_Interagency_Perimeters"),
     ]);
-    for (const [, options] of fetch.mock.calls) {
+    for (const [, options] of fetch.mock.calls.slice(0, 2)) {
       expect(options).toMatchObject({
         method: "GET",
         cache: "no-store",
@@ -266,7 +270,7 @@ describe("queryLiveFireEvidence temporal success", () => {
     );
     expect(result.kind).toBe("success");
     expect(result.temporalCoverage?.resolvedEndDate).toBe("2026-08-06");
-    expect(fetch.mock.calls.every(([url]) => String(url).includes("20260806"))).toBe(true);
+    expect(fetch.mock.calls.slice(0, 2).every(([url]) => String(url).includes("20260806"))).toBe(true);
     expect(fetch.mock.calls.every(([url]) => !String(url).includes("20260807"))).toBe(true);
   });
 

@@ -65,6 +65,9 @@ export interface FloodSourceOutcomes {
   usgs: FloodSourceOutcome;
   canadaGeomet?: FloodSourceOutcome;
   localStormReports?: FloodSourceOutcome;
+  nceiStormEvents?: FloodSourceOutcome;
+  mrmsQpe?: FloodSourceOutcome;
+  numericImerg?: FloodSourceOutcome;
 }
 
 export type FloodQueryResultKind =

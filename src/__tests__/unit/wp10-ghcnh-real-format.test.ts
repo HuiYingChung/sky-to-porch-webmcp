@@ -55,17 +55,22 @@ function stationRow(overrides: Partial<Record<
 }
 
 describe("ADR-0035 GHCNh station-list parsing (real header)", () => {
-  it("accepts the verbatim real sample and keeps STATE as untrusted metadata only", () => {
-    // The real sample contains only Antigua (AG) stations, one of which
-    // carries the dirty value STATE=TX. ISO_CODE scoping must exclude both.
+  it("accepts the global real sample and keeps STATE as untrusted metadata only", () => {
+    // The real sample contains Antigua (AG) stations, one of which carries
+    // STATE=TX. Global coverage keeps the rows but never uses STATE for routing.
     const inventory = parseGhcnhStationList(REAL_STATION_LIST + "\n" + stationRow());
     expect(REAL_STATION_HEADER).toBe(
       "GHCN_ID,LATITUDE,LONGITUDE,ELEVATION,STATE,NAME,GSN,(US)HCN_(US)CRN,WMO_ID,ICAO,ISO_CODE"
     );
     expect(inventory.dataRowCount).toBe(3);
     expect(inventory.skippedRowCount).toBe(0);
-    expect(inventory.stations).toHaveLength(1);
-    expect(inventory.stations[0]).toEqual({
+    expect(inventory.stations).toHaveLength(3);
+    expect(inventory.stations.map((station) => station.id)).toEqual([
+      "ACL000BARA9",
+      "ACM00078861",
+      "USW00012960",
+    ]);
+    expect(inventory.stations[2]).toEqual({
       id: "USW00012960",
       latitude: 29.9844,
       longitude: -95.3608,
@@ -113,9 +118,12 @@ describe("ADR-0035 GHCNh station-list parsing (real header)", () => {
     expect(() => parseGhcnhStationList(text)).toThrow("schema_validation");
   });
 
-  it("fails closed when no valid U.S. station remains", () => {
-    // Valid rows, but none with ISO_CODE US (the real sample alone).
-    expect(() => parseGhcnhStationList(REAL_STATION_LIST)).toThrow("schema_validation");
+  it("accepts a valid inventory even when no U.S. station is present", () => {
+    const inventory = parseGhcnhStationList(REAL_STATION_LIST);
+    expect(inventory.stations.map((station) => station.id)).toEqual([
+      "ACL000BARA9",
+      "ACM00078861",
+    ]);
   });
 
   it("requires the real header names and rejects the previously assumed ID header", () => {

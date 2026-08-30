@@ -264,7 +264,7 @@ function exactHeaderIndices(headers: string[], required: readonly string[]): Rec
 }
 
 export interface GhcnhStationInventory {
-  /** Stations with ISO_CODE === "US", the product's query scope. */
+  /** Globally published GHCNh stations with valid coordinates. */
   stations: GhcnhStation[];
   /** All non-empty data rows in the file, valid or not, any country. */
   dataRowCount: number;
@@ -278,12 +278,12 @@ export interface GhcnhStationInventory {
  *
  * ADR-0035 decisions validated against the owner-supplied 2026-08-19 sample:
  * - STATE is dirty descriptive data (a real Antigua row carries STATE=TX), so
- *   country scoping uses ISO_CODE === "US" only; STATE is kept as metadata.
+ *   it is kept as metadata and never used for country scoping.
  * - Bounded row tolerance: individually malformed rows (wrong cell count,
  *   invalid ID, duplicate ID after the first, out-of-range coordinates,
  *   invalid elevation, empty name) are skipped and counted instead of failing
  *   the whole inventory. The parse fails closed as schema_validation only if
- *   no valid U.S. station remains or the skipped fraction exceeds
+ *   no valid station remains or the skipped fraction exceeds
  *   GHCNH_STATION_LIST_MAX_SKIPPED_FRACTION of the data rows.
  */
 export function parseGhcnhStationList(text: string): GhcnhStationInventory {
@@ -325,9 +325,6 @@ export function parseGhcnhStationList(text: string): GhcnhStationInventory {
       continue;
     }
     ids.add(id);
-    // Product scope is U.S. selections; non-US rows are valid rows that are
-    // filtered out here (never counted as skipped). This also bounds memory.
-    if (cells[indices.ISO_CODE].trim() !== "US") continue;
     stations.push({
       id,
       latitude,

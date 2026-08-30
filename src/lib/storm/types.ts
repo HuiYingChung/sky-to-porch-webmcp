@@ -26,6 +26,8 @@ export type StormSourceOutcome =
 export interface StormSourceOutcomes {
   ghcnhWind: StormSourceOutcome;
   localStormReports: StormSourceOutcome;
+  nceiStormEvents: StormSourceOutcome;
+  hurdat2: StormSourceOutcome;
   officialEventContext: StormSourceOutcome;
 }
 
