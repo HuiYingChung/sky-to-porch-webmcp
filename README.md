@@ -64,11 +64,11 @@ Open the live site in ChatGPT's in-app browser, or in a WebMCP-compatible
 browser. No Sky to Porch account or API key is required.
 
 1. Ask: **“Use this site's MCP tools to check storm information within 50 km
-   of Houston, Texas, on August 28, 2026.”** Confirm that the Agent returns and
+   of Houston, Texas, on July 8, 2024.”** Confirm that the Agent returns and
    links both Wind and Flood results.
 2. Ask: **“Inspect the exact observations, source status, and citations.”**
    Confirm that this reads the active result without rerunning it.
-3. Ask: **“Compare that with the same 50 km area on July 8, 2024.”** Confirm
+3. Ask: **“Compare that with the same 50 km area on July 7, 2024.”** Confirm
    that both scenarios and all requested chains remain visible.
 4. Ask: **“Check wildfire evidence for Springfield.”** Confirm that the Agent
    waits for a specific place instead of guessing, then resumes after a choice.
@@ -79,7 +79,7 @@ The normal human map workflow remains functional in browsers without WebMCP.
 
 | Ask the Agent | What it demonstrates |
 | --- | --- |
-| “Check storm information within 50 km of Houston, Texas, on August 28, 2026.” | One broad request runs separate Wind and Flood chains; an observation in one chain is not erased by a no-observation result in the other. |
+| “Check storm information within 50 km of Houston, Texas, on July 8, 2024.” | One broad request runs separate Wind and Flood chains around Hurricane Beryl; an observation in one chain is not erased by a no-observation result in the other. |
 | “Run the Houston Beryl roof demo.” | Historical wind, hurricane-track, event-report, rain, flood, and gauge evidence remains claim-separated around a property concern. |
 | “Run the Los Angeles fire and health demo.” | Fire detections, smoke, incident perimeters, aerosol, and ground air-quality evidence remain separate from person-specific health conclusions. |
 | “Run the Tucson dog and heat demo.” | Heat observations and drought/land context are investigated together without turning environmental data into a veterinary diagnosis. |
@@ -119,7 +119,7 @@ explains only the validated result.
 
 The evidence layer now includes bounded adapters for NOAA NCEI Storm Events,
 NWS Local Storm Reports, NHC HURDAT2, NOAA Global Historical Climatology
-Network hourly stations, NOAA MRMS recent QPE, NIFC WFIGS perimeters, EPA AQS,
+Network hourly stations, NOAA MRMS current rolling 24-hour QPE, NIFC WFIGS perimeters, EPA AQS,
 Smithsonian GVP, USGS earthquake and volcano feeds, the Canadian Drought
 Monitor, plus the existing NASA, NOAA, USGS, AirNow, and Canadian hydrometric
 sources.
