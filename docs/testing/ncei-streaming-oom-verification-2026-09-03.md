@@ -82,7 +82,7 @@ sequential queries sampled 26 MB peak JavaScript heap and 119 MB maximum RSS.
 These numbers are local process measurements. They do not establish Vercel
 function memory, latency, concurrency behavior, or production recovery.
 
-## Production repair status
+## Production repair status — pre-deploy boundary
 
 At the time of this candidate record, the repair had not been deployed or
 rerun against the production routes. No production success or production
@@ -90,6 +90,55 @@ memory reduction is claimed. A later deployment check must record the exact
 commit and deployment, both route responses, runtime memory/log evidence, and
 the supported-browser Judge quick-start journey without replacing this
 pre-deployment boundary.
+
+## Production post-deploy verification — 2026-09-03/04
+
+The repair was merged in pull request #13 as merge commit
+`07096ef91bd482c600f263ddd98ee5e9d97f898c`. Vercel deployment
+`dpl_2Zfn2axorbunWVSL1LiHgt5Soeta` reached `READY` for `main` at that exact
+Git SHA and serves the production alias
+`https://sky-to-porch-webmcp.vercel.app/`.
+
+The Houston 50 km production reruns were performed at 2026-09-04 01:22–01:23
+UTC (2026-09-03 20:22–20:23 CDT):
+
+| Route | Input | Result | Client elapsed | Vercel invocation | Fluid memory |
+| --- | --- | --- | --- | --- | --- |
+| `POST /api/storm/query` | 2024-07-08 | HTTP 200, JSON `ok: true`, observations returned | 2.948 s | 2.46 s | 473 MB |
+| `POST /api/flood/query` | 2024-07-08 through 2024-07-08 | HTTP 200, JSON `ok: true`, observations returned | 3.213 s | 2.83 s | 345 MB |
+
+The NCEI Storm Events source legitimately returned `no_observation` for that
+date and box; the successful Wind result retained its other evidence sources.
+The Flood result returned three observations. Copying the Storm request body
+verbatim to the Flood route first produced HTTP 400 `invalid_input`, because
+the Flood contract requires `startDate` and `endDate` rather than `date`; the
+corrected request above passed. That validation response was not an OOM or
+route failure.
+
+Vercel request details tied both HTTP 200 invocations to the deployment above,
+production, and `main`. A post-`READY` production log scan showed both 200
+responses and the expected 400 validation response, with no HTTP 500, runtime
+error, or OOM entry for either route. Settings > Functions showed Fluid Compute
+enabled, and Observability > Functions independently reported the same state.
+The measured 345 MB and 473 MB invocations completed without exhausting the
+production instance. They are Vercel's whole-invocation Fluid memory
+measurements; the greater-than-2 GB figure above is the separate local legacy
+RSS measurement, so the two are not treated as identical metrics.
+
+README Judge quick-start step 1 was attempted from a logged-in ChatGPT Free
+session after opening the production site from the chat. ChatGPT replied that
+it could access the site but did not have access to the site's WebMCP tool
+interface, so the required Agent return with linked Wind and Flood results was
+**not verified in that environment**. Both the Codex in-app browser and the
+controlled Chrome page likewise exposed the site's explicit `Agent
+unavailable` status. No successful WebMCP claim is made.
+
+As a browser fallback, the production human UI completed both Houston example
+journeys in the same session. Wind & Storm (July 8) displayed `Observations
+returned` with three sources and 18 limitations; Flood & Heavy Rain (July 8–9)
+displayed `Observations returned` with three sources and 19 limitations. This
+confirms the production browser-to-route-to-result path for both products, but
+does not replace the blocked WebMCP Agent check.
 
 ## 2026-08-30 expansion boundary
 
