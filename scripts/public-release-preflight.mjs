@@ -109,13 +109,13 @@ const reviewedLiteral = (...parts) => parts.join("");
 const REVIEWED_PUBLIC_MATCHES = new Map([
   // Documented placeholder contact for local-only diagnostic request headers.
   [".env.example", new Set([reviewedLiteral("you", "@", "example.com")])],
-  // Public ArcGIS item URL for the reviewed World Bank flood dataset catalog entry.
+  // Public ArcGIS item URL for the reviewed dataset catalog entry.
   [
     "src/data/dataset-registry.ts",
     new Set([
       reviewedLiteral(
         "/ho",
-        "me/item.html?id=5e72b1699bf74eefb3f3aff6f4ba5511"
+        'me/item.html?id=5e72b1699bf74eefb3f3aff6f4ba5511",'
       ),
     ]),
   ],
