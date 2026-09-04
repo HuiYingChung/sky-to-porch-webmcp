@@ -153,6 +153,9 @@ remain separate so fixture success is never presented as live-source proof.
 The 2026-08-30 expanded evidence-chain record is local deterministic and local
 live-source evidence. Those expansion journeys have not been separately
 verified in production.
+The streamed NCEI repair passed production route and memory verification, and
+a 2026-09-04 WebMCP-compatible Chrome run passed Judge quick-start step 1 with
+separate Wind and Flood chains returned in one related bundle.
 
 Key records:
 
