@@ -1,11 +1,15 @@
 # ADR-0004: Bounded discovery tools without a mandatory waterfall
 
-**Status:** Superseded in part by ADR-0005 and ADR-0006
+**Status:** Superseded in part by ADR-0005, ADR-0006, and ADR-0012
 **Date:** 2026-08-26
 
 Current-name note: the selector-free capability tool described below was
 renamed to `get_sky_to_porch_help_and_demos` in `ceb182a` so Agents do not use
 it as a preflight before concrete analysis.
+
+Lifecycle note: ADR-0012 supersedes the state-scoped registration mechanism
+below. The contextual actions remain state-dependent at execution time, but
+their tool definitions now stay registered for the page lifetime.
 
 ## Context
 

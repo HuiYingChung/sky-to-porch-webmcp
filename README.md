@@ -97,6 +97,10 @@ The normal human map workflow remains functional in browsers without WebMCP.
 | `get_sky_to_porch_help_and_demos` | Returns capabilities and ready-to-run demo inputs. |
 | `prepare_storm_claim_discussion` | Opens a bounded evidence and property-document checklist after a Home + Wind result. |
 
+The six tool definitions stay registered for the page lifetime so Agent tool
+handles remain stable across analyses. State-dependent tools fail closed with a
+clear availability status until the required result exists.
+
 Concrete questions go directly to analysis. Named places are resolved by
 deterministic application code; the Agent cannot inject guessed coordinates.
 Every user-specified radius remains authoritative.
@@ -146,26 +150,22 @@ tool contracts and compact outputs live under
 
 ## Verification
 
-`npm run verify` runs type checking, lint, unit tests, integration tests,
-production build, desktop/mobile browser journeys, and the secret gate.
-Live-source smoke checks and optional model-scored tool-selection evaluations
-remain separate so fixture success is never presented as live-source proof.
-The 2026-08-30 expanded evidence-chain record is local deterministic and local
-live-source evidence. Those expansion journeys have not been separately
-verified in production.
-The streamed NCEI repair passed production route and memory verification, and
-a 2026-09-04 WebMCP-compatible Chrome run passed Judge quick-start step 1 with
-separate Wind and Flood chains returned in one related bundle.
+Verification is layered. Passing one layer is not presented as proof of a
+different layer.
 
-Key records:
+| Layer | Reproducible check | What it establishes |
+| --- | --- | --- |
+| Local release gate | `npm run verify` | Types, lint, unit and integration tests, production build, desktop/mobile browser journeys, and secret scanning. Browser journeys use deterministic fixtures and a WebMCP test double. |
+| Live-source adapters | The relevant `npm run smoke:*:live` command | Bounded requests and parsing against that named provider at the time of the run. It does not prove every provider or the deployed application. |
+| Deployed application | Production route and memory checks | The deployed commit serves the expected contract within the recorded resource boundary. |
+| Native WebMCP | Complete the Judge quick start in a compatible browser | Real browser discovery, tool execution, and shared-UI updates. Multi-turn completion is required before claiming stable native handles. |
+| Model selection | `npm run eval:webmcp:model` | Optional model-scored tool choice and argument quality; kept separate from deterministic tests. |
 
-- [NCEI streamed-archive OOM verification](docs/testing/ncei-streaming-oom-verification-2026-09-03.md)
-- [Expanded evidence-chain local/live-source verification](docs/testing/evidence-chain-expansion-live-verification-2026-08-30.md)
-- [Native Agent acceptance](docs/testing/native-agent-acceptance-2026-08-27.md)
-- [Production Agent verification](docs/testing/native-agent-production-verification-2026-08-27.md)
-- [Historical demo verification](docs/testing/evidence-forward-demo-live-verification-2026-08-27.md)
-- [WebMCP evaluation boundary](docs/testing/webmcp-evals.md)
-- [Target architecture](docs/architecture/webmcp-target.md)
+Detailed evidence is organized by scope:
+
+- **Browser and deployment:** [Native Agent acceptance](docs/testing/native-agent-acceptance-2026-08-27.md), [production Agent verification](docs/testing/native-agent-production-verification-2026-08-27.md), and [NCEI streamed-archive verification](docs/testing/ncei-streaming-oom-verification-2026-09-03.md).
+- **Evidence adapters:** [expanded evidence-chain verification](docs/testing/evidence-chain-expansion-live-verification-2026-08-30.md) and [historical demo verification](docs/testing/evidence-forward-demo-live-verification-2026-08-27.md).
+- **Method and boundaries:** [WebMCP evaluation boundary](docs/testing/webmcp-evals.md) and [target architecture](docs/architecture/webmcp-target.md).
 
 ## Evidence boundary
 

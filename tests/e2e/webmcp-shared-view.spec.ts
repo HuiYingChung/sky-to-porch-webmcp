@@ -52,13 +52,32 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
   await page.addInitScript(() => {
     const state = globalThis as typeof globalThis & {
       __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+      __skyToPorchWebMcpRegistrationCounts?: Record<string, number>;
+      __skyToPorchWebMcpRegistrationEpoch?: number;
+      __skyToPorchCapturedCompareDefinition?: WebMCP.ModelContextTool;
     };
     state.__skyToPorchWebMcpTools = {};
+    state.__skyToPorchWebMcpRegistrationCounts = {};
+    state.__skyToPorchWebMcpRegistrationEpoch = 0;
     Object.defineProperty(document, "modelContext", {
       configurable: true,
       value: {
-        registerTool: async (tool: WebMCP.ModelContextTool) => {
+        registerTool: async (
+          tool: WebMCP.ModelContextTool,
+          options?: WebMCP.ModelContextRegisterToolOptions
+        ) => {
+          if (state.__skyToPorchWebMcpTools![tool.name]) {
+            throw new DOMException(`Duplicate tool: ${tool.name}`, "InvalidStateError");
+          }
           state.__skyToPorchWebMcpTools![tool.name] = tool;
+          state.__skyToPorchWebMcpRegistrationCounts![tool.name] =
+            (state.__skyToPorchWebMcpRegistrationCounts![tool.name] ?? 0) + 1;
+          state.__skyToPorchWebMcpRegistrationEpoch! += 1;
+          options?.signal?.addEventListener("abort", () => {
+            if (state.__skyToPorchWebMcpTools![tool.name] !== tool) return;
+            delete state.__skyToPorchWebMcpTools![tool.name];
+            state.__skyToPorchWebMcpRegistrationEpoch! += 1;
+          }, { once: true });
         },
       },
     });
@@ -116,6 +135,48 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
   });
 
   await gotoHydrated(page, "/");
+  await page.waitForFunction(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    return Object.keys(state.__skyToPorchWebMcpTools ?? {}).length === 6;
+  });
+  const registryBeforeAnalysis = await page.evaluate(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+      __skyToPorchWebMcpRegistrationCounts?: Record<string, number>;
+      __skyToPorchWebMcpRegistrationEpoch?: number;
+      __skyToPorchCapturedCompareDefinition?: WebMCP.ModelContextTool;
+    };
+    const tools = state.__skyToPorchWebMcpTools ?? {};
+    const expectedNames = [
+      "analyze_environmental_hazard",
+      "compare_environmental_evidence",
+      "get_sky_to_porch_help_and_demos",
+      "get_environmental_source_coverage",
+      "inspect_current_environmental_evidence",
+      "prepare_storm_claim_discussion",
+    ];
+    if (!expectedNames.every((name) => Boolean(tools[name]))) {
+      throw new Error("The complete stable WebMCP tool set was not registered");
+    }
+    state.__skyToPorchCapturedCompareDefinition = tools.compare_environmental_evidence;
+    return {
+      epoch: state.__skyToPorchWebMcpRegistrationEpoch,
+      counts: state.__skyToPorchWebMcpRegistrationCounts,
+    };
+  });
+  expect(registryBeforeAnalysis).toEqual({
+    epoch: 6,
+    counts: {
+      analyze_environmental_hazard: 1,
+      compare_environmental_evidence: 1,
+      get_sky_to_porch_help_and_demos: 1,
+      get_environmental_source_coverage: 1,
+      inspect_current_environmental_evidence: 1,
+      prepare_storm_claim_discussion: 1,
+    },
+  });
   const output = await page.evaluate(async () => {
     const state = globalThis as typeof globalThis & {
       __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
@@ -160,7 +221,6 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
     optionalQuestion: "What official fire and smoke observations were recorded near Albuquerque?",
     time: { kind: "range", startDate: "2025-05-20", endDate: "2025-05-20" },
   });
-
   const receipt = page.locator('[data-testid="agent-analysis-notice"]:visible');
   await expect(receipt).toContainText("Agent made this view more useful");
   await expect(receipt.getByTestId("agent-analysis-receipt"))
@@ -201,6 +261,25 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
       { source: "noaa_hms_fire_points", observed_at: "2025-05-20T00:00:00Z" },
       { source: "noaa_hms_smoke_polygons", observed_at: "2025-05-20T00:00:00Z" },
     ],
+  });
+  const registryAfterInspection = await page.evaluate(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+      __skyToPorchWebMcpRegistrationCounts?: Record<string, number>;
+      __skyToPorchWebMcpRegistrationEpoch?: number;
+      __skyToPorchCapturedCompareDefinition?: WebMCP.ModelContextTool;
+    };
+    return {
+      epoch: state.__skyToPorchWebMcpRegistrationEpoch,
+      counts: state.__skyToPorchWebMcpRegistrationCounts,
+      cachedCompareDefinitionStillCurrent:
+        state.__skyToPorchCapturedCompareDefinition ===
+        state.__skyToPorchWebMcpTools?.compare_environmental_evidence,
+    };
+  });
+  expect(registryAfterInspection).toEqual({
+    ...registryBeforeAnalysis,
+    cachedCompareDefinitionStillCurrent: true,
   });
 });
 
@@ -371,6 +450,8 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
       "compare_environmental_evidence",
       "get_sky_to_porch_help_and_demos",
       "get_environmental_source_coverage",
+      "inspect_current_environmental_evidence",
+      "prepare_storm_claim_discussion",
     ],
     analysisAnnotations: { readOnlyHint: false, untrustedContentHint: true },
     hazardCatalog: {

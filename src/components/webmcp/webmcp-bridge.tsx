@@ -2,15 +2,16 @@
 
 /// <reference types="webmcp-types" />
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { ActiveAnalysis, AnalysisRequest } from "@/lib/analysis/types";
 import {
   createAnalyzeHazardTool,
   createCompareHazardTool,
 } from "@/lib/webmcp/analyze-tool";
 import {
-  createInspectEvidenceTool,
-  createStormClaimDiscussionTool,
+  createStateBackedInspectEvidenceTool,
+  createStateBackedStormClaimDiscussionTool,
+  type ContextualToolState,
 } from "@/lib/webmcp/context-tools";
 import {
   createGetEnvironmentalSourceCoverageTool,
@@ -34,6 +35,12 @@ interface WebMcpBridgeProps {
   onStatusChange?: (status: WebMcpStatus) => void;
 }
 
+interface WebMcpRuntimeState extends ContextualToolState {
+  runAnalysis: WebMcpBridgeProps["runAnalysis"];
+  runAnalysisBundle: WebMcpBridgeProps["runAnalysisBundle"];
+  onStatusChange: WebMcpBridgeProps["onStatusChange"];
+}
+
 export type WebMcpStatus =
   | "checking"
   | "unsupported"
@@ -52,65 +59,97 @@ export function WebMcpBridge({
   onOpenStormClaimDiscussion = () => {},
   onStatusChange,
 }: WebMcpBridgeProps) {
-  const baselineTools = useMemo(
-    () => [
-      createAnalyzeHazardTool({
-        runAnalysis,
-        ...(runAnalysisBundle ? { runAnalysisBundle } : {}),
-      }),
-      createCompareHazardTool({
-        runAnalysis,
-        ...(runAnalysisBundle ? { runAnalysisBundle } : {}),
-      }),
-      createEnvironmentalCapabilitiesTool(),
-      createGetEnvironmentalSourceCoverageTool(),
-    ],
-    [runAnalysis, runAnalysisBundle]
+  const runtimeStateRef = useRef<WebMcpRuntimeState>({
+    runAnalysis,
+    runAnalysisBundle,
+    activeAnalysis,
+    relatedAnalyses,
+    onOpenStormClaimDiscussion,
+    onStatusChange,
+  });
+
+  useLayoutEffect(() => {
+    runtimeStateRef.current = {
+      runAnalysis,
+      runAnalysisBundle,
+      activeAnalysis,
+      relatedAnalyses,
+      onOpenStormClaimDiscussion,
+      onStatusChange,
+    };
+  }, [
+    activeAnalysis,
+    onOpenStormClaimDiscussion,
+    onStatusChange,
+    relatedAnalyses,
+    runAnalysis,
+    runAnalysisBundle,
+  ]);
+
+  const registeredTools = useMemo(
+    () => {
+      const runCurrentAnalysis: WebMcpBridgeProps["runAnalysis"] = (
+        request,
+        origin,
+        signal
+      ) => runtimeStateRef.current.runAnalysis(request, origin, signal);
+      const runCurrentAnalysisBundle: NonNullable<WebMcpBridgeProps["runAnalysisBundle"]> = async (
+        requests,
+        origin,
+        signal
+      ) => {
+        const current = runtimeStateRef.current;
+        if (current.runAnalysisBundle) {
+          return current.runAnalysisBundle(requests, origin, signal);
+        }
+        const analyses: ActiveAnalysis[] = [];
+        for (const request of requests) {
+          const analysis = await current.runAnalysis(request, origin, signal);
+          if (analysis === null) return null;
+          analyses.push(analysis);
+        }
+        return analyses;
+      };
+      const analysisDependencies = {
+        runAnalysis: runCurrentAnalysis,
+        runAnalysisBundle: runCurrentAnalysisBundle,
+      };
+      return [
+        createAnalyzeHazardTool(analysisDependencies),
+        createCompareHazardTool(analysisDependencies),
+        createEnvironmentalCapabilitiesTool(),
+        createGetEnvironmentalSourceCoverageTool(),
+        createStateBackedInspectEvidenceTool(() => runtimeStateRef.current),
+        createStateBackedStormClaimDiscussionTool(() => runtimeStateRef.current),
+      ];
+    },
+    []
   );
 
   useEffect(() => {
     if (!document.modelContext) {
-      onStatusChange?.("unsupported");
+      runtimeStateRef.current.onStatusChange?.("unsupported");
       return;
     }
     const controller = new AbortController();
-    onStatusChange?.("registering");
+    runtimeStateRef.current.onStatusChange?.("registering");
     void Promise.all(
-      baselineTools.map((tool) =>
+      registeredTools.map((tool) =>
         document.modelContext!.registerTool(tool, { signal: controller.signal })
       )
     )
       .then(() => {
-        if (!controller.signal.aborted) onStatusChange?.("ready");
+        if (!controller.signal.aborted) runtimeStateRef.current.onStatusChange?.("ready");
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
-          onStatusChange?.("error");
-          console.error("WebMCP baseline tool registration failed", error);
+          runtimeStateRef.current.onStatusChange?.("error");
+          console.error("WebMCP tool registration failed", error);
           controller.abort(error);
         }
       });
     return () => controller.abort();
-  }, [baselineTools, onStatusChange]);
-
-  useEffect(() => {
-    if (!document.modelContext || !activeAnalysis) return;
-    const controller = new AbortController();
-    const contextualTools = [
-      createInspectEvidenceTool(activeAnalysis, relatedAnalyses),
-      createStormClaimDiscussionTool(activeAnalysis, onOpenStormClaimDiscussion),
-    ].filter((item): item is WebMCP.ModelContextTool => item !== null);
-    void Promise.all(
-      contextualTools.map((contextualTool) =>
-        document.modelContext!.registerTool(contextualTool, { signal: controller.signal })
-      )
-    ).catch((error: unknown) => {
-      if (!controller.signal.aborted) {
-        console.error("WebMCP contextual tool registration failed", error);
-      }
-    });
-    return () => controller.abort();
-  }, [activeAnalysis, onOpenStormClaimDiscussion, relatedAnalyses]);
+  }, [registeredTools]);
 
   return null;
 }
