@@ -33,6 +33,7 @@ import {
   type ParaphraseRunOutcome,
   type ParaphraseUtteranceStyle,
 } from "./webmcp-model-eval-paraphrases";
+import { exactEvalCallMatch } from "./webmcp-model-eval-matching";
 
 type EvalCall = ParaphraseEvalCall;
 
@@ -343,9 +344,7 @@ function sameValue(actual: unknown, expected: unknown): boolean {
 }
 
 function exactCall(actual: EvalCall, expected: EvalCall): boolean {
-  return actual.functionName === expected.functionName &&
-    sameValue(actual.arguments, expected.arguments) &&
-    Object.keys(actual.arguments).length === Object.keys(expected.arguments).length;
+  return exactEvalCallMatch(actual, expected);
 }
 
 function semanticArgumentsMatch(actual: EvalCall, expected: EvalCall): boolean {
@@ -361,8 +360,7 @@ function semanticArgumentsMatch(actual: EvalCall, expected: EvalCall): boolean {
     return sameValue(actualArgs, expectedArgs);
   }
   if (actual.functionName !== "analyze_environmental_hazard") {
-    return sameValue(actualArgs, expectedArgs) &&
-      Object.keys(actualArgs).length === Object.keys(expectedArgs).length;
+    return exactEvalCallMatch(actual, expected);
   }
 
   for (const [key, expectedValue] of Object.entries(expectedArgs)) {
