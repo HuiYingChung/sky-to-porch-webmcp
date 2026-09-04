@@ -3,6 +3,11 @@
 **Status:** Accepted
 **Date:** 2026-09-04
 
+**Partially superseded by:**
+[ADR-0014](ADR-0014-visible-place-lookup-and-map-sync.md), which replaces
+Decision 2 and the corresponding place-lookup UI behavior. The original
+decision is retained below as a historical record.
+
 ## Context
 
 The six-tool WebMCP surface could run, compare, and inspect environmental

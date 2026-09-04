@@ -223,8 +223,8 @@ describe("WebMCP environmental evidence comparison tool", () => {
 
     expect(completed.status).toBe("environmental_evidence_comparison");
     expect(completed.scenarios.map((scenario) => scenario.place)).toEqual([
-      "Houston, Texas (OSM search)",
-      "Houston, Texas (OSM search)",
+      "Houston, Texas (place search result)",
+      "Houston, Texas (place search result)",
     ]);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(runAnalysisBundle).toHaveBeenCalledTimes(1);

@@ -38,6 +38,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useReducer,
   useRef,
   useState,
@@ -83,6 +84,10 @@ import type {
   EnvironmentalMapToolUpdate,
   EnvironmentalMapToolUpdateResult,
 } from "@/lib/webmcp/map-tool";
+import type {
+  AgentPlaceLookupReceipt,
+  AgentPlaceLookupReceiptPayload,
+} from "@/lib/webmcp/place-tool";
 
 interface QueryContextValue {
   draft: QueryDraft;
@@ -142,6 +147,8 @@ interface QueryContextValue {
   agentInvestigation: AgentInvestigationState | null;
   /** Current browser-native WebMCP discovery/registration state. */
   webMcpStatus: WebMcpStatus;
+  /** Latest visible outcome from the Agent place lookup tool. */
+  agentPlaceLookupReceipt: AgentPlaceLookupReceipt | null;
   /** Shared desired and runtime environmental-map state across desktop/mobile. */
   environmentalMapState: EnvironmentalMapState;
   wildfireLayerState: WildfireLayerUiState;
@@ -225,11 +232,22 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [agentInvestigation, setAgentInvestigation] = useState<AgentInvestigationState | null>(null);
   const [webMcpStatus, setWebMcpStatus] = useState<WebMcpStatus>("checking");
+  const [agentPlaceLookupReceipt, setAgentPlaceLookupReceipt] =
+    useState<AgentPlaceLookupReceipt | null>(null);
+  const placeLookupReceiptRevisionRef = useRef(0);
+  const pendingPlaceLookupReceiptCommitsRef = useRef(
+    new Map<number, () => void>()
+  );
   // Mutable ref for the unified query generation (never triggers render).
   const analysisQueryGenRef = useRef(0);
-  // Intent generation starts before Agent geocoding and also advances for
-  // every human invalidation, so a delayed lookup cannot reclaim newer UI.
+  // Context intent advances only for real place/analysis mutations and human
+  // invalidation. A speculative place search must not cancel matching work
+  // unless it resolves to a different selected place.
   const analysisIntentGenRef = useRef(0);
+  // Named-place searches share a separate last-request-wins order. This lets
+  // a newer lookup replace an older lookup without disturbing analysis that
+  // can safely continue when the newer lookup is ambiguous or fails.
+  const namedPlaceIntentGenRef = useRef(0);
   const analysisAbortRef = useRef<AbortController | null>(null);
   const activeAnalysisRef = useRef<ActiveAnalysis | null>(null);
   const previousAnalysisRef = useRef<ActiveAnalysis | null>(null);
@@ -258,6 +276,37 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   const commitPlaceSelection = useCallback((selection: PlaceSelection | null) => {
     placeSelectionRef.current = selection;
     setPlaceSelectionState(selection);
+  }, []);
+
+  const publishAgentPlaceLookupReceipt = useCallback((
+    feedback: AgentPlaceLookupReceiptPayload
+  ) => {
+    const receiptRevision = ++placeLookupReceiptRevisionRef.current;
+    return new Promise<void>((resolve) => {
+      pendingPlaceLookupReceiptCommitsRef.current.set(receiptRevision, resolve);
+      setAgentPlaceLookupReceipt({
+        ...feedback,
+        receipt_revision: receiptRevision,
+      });
+    });
+  }, []);
+
+  // A tool may report ui_updated only after this provider's layout commit.
+  // Resolve older acknowledgements too when a newer receipt overtakes them.
+  useLayoutEffect(() => {
+    if (!agentPlaceLookupReceipt) return;
+    for (const [revision, resolve] of pendingPlaceLookupReceiptCommitsRef.current) {
+      if (revision > agentPlaceLookupReceipt.receipt_revision) continue;
+      pendingPlaceLookupReceiptCommitsRef.current.delete(revision);
+      resolve();
+    }
+  }, [agentPlaceLookupReceipt]);
+
+  useEffect(() => () => {
+    for (const resolve of pendingPlaceLookupReceiptCommitsRef.current.values()) {
+      resolve();
+    }
+    pendingPlaceLookupReceiptCommitsRef.current.clear();
   }, []);
 
   const synchronizeEnvironmentalMapSelection = useCallback((
@@ -345,6 +394,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     setHeatLoadingState(false);
     setDroughtLoadingState(false);
     setCoverageGapLoadingState(false);
+    setAgentPlaceLookupReceipt(null);
   }
 
   function dispatch(action: QueryDraftAction) {
@@ -414,6 +464,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       date: update.date,
       contextChanged: sourceAreaChanged,
       origin: update.origin,
+      focusPlace: update.focusPlace,
     });
     return {
       mapState: nextMapState,
@@ -432,11 +483,21 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     [readEnvironmentalMapState]
   );
 
-  // Reserve a browser-tool intent before its optional geocoding awaits. Human
-  // invalidation advances the same intent generation, so neither an older
-  // Agent call nor an older human request can reclaim newer state.
+  // Named-place tools reserve only their own request order and observe the
+  // current context. They do not invalidate analysis while the result is
+  // still unknown.
+  const reserveContextInvocation = useCallback(() => {
+    const namedPlaceGeneration = ++namedPlaceIntentGenRef.current;
+    const contextGeneration = analysisIntentGenRef.current;
+    return () => namedPlaceGeneration === namedPlaceIntentGenRef.current &&
+      contextGeneration === analysisIntentGenRef.current;
+  }, []);
+
+  // Analysis starts are intentionally mutating: reserve the same ordering
+  // token, then stop older loading work before the new analysis begins.
   const beginContextMutationInvocation = useCallback(() => {
-    const intentGeneration = ++analysisIntentGenRef.current;
+    const contextGeneration = ++analysisIntentGenRef.current;
+    namedPlaceIntentGenRef.current += 1;
     analysisQueryGenRef.current += 1;
     analysisAbortRef.current?.abort(
       new DOMException("Superseded by a newer Agent request", "AbortError")
@@ -450,7 +511,8 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     setHeatLoadingState(false);
     setDroughtLoadingState(false);
     setCoverageGapLoadingState(false);
-    return () => intentGeneration === analysisIntentGenRef.current;
+    setAgentPlaceLookupReceipt(null);
+    return () => contextGeneration === analysisIntentGenRef.current;
   }, []);
 
   useEffect(() => {
@@ -779,6 +841,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         analysisLoading,
         agentInvestigation,
         webMcpStatus,
+        agentPlaceLookupReceipt,
         environmentalMapState,
         wildfireLayerState: environmentalMap.wildfireState,
         floodExtentLayerState: environmentalMap.floodExtentState,
@@ -800,6 +863,8 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         environmentalMapState={environmentalMapState}
         readEnvironmentalMapSnapshot={readEnvironmentalMapSnapshot}
         applyEnvironmentalMapUpdate={applyEnvironmentalMapUpdate}
+        publishAgentPlaceLookupReceipt={publishAgentPlaceLookupReceipt}
+        reserveContextInvocation={reserveContextInvocation}
         beginContextMutationInvocation={beginContextMutationInvocation}
         onStatusChange={setWebMcpStatus}
       />

@@ -68,6 +68,7 @@ export interface EnvironmentalMapController {
       date: string | null;
       contextChanged: boolean;
       origin: "human" | "agent";
+      focusPlace?: boolean;
       now?: Date;
     }
   ) => EnvironmentalMapState;
@@ -126,6 +127,7 @@ export function useEnvironmentalMapController(
       date: string | null;
       contextChanged: boolean;
       origin: "human" | "agent";
+      focusPlace?: boolean;
       now?: Date;
     }
   ): EnvironmentalMapState => {

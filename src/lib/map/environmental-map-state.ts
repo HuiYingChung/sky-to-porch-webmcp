@@ -33,6 +33,8 @@ export interface EnvironmentalMapState {
   contextRevision: number;
   /** Changes for every Agent map request so mobile can reveal the Map view. */
   agentFocusRevision: number;
+  /** Changes only when the Agent explicitly asks to frame a place again. */
+  placeFocusRevision: number;
 }
 
 export type EnvironmentalMapLayerPatch = Partial<
@@ -99,6 +101,7 @@ export function createInitialEnvironmentalMapState(): EnvironmentalMapState {
     revision: 0,
     contextRevision: 0,
     agentFocusRevision: 0,
+    placeFocusRevision: 0,
   };
 }
 
@@ -183,6 +186,7 @@ export function applyEnvironmentalMapDesiredState(
     date: string | null;
     contextChanged: boolean;
     origin: "human" | "agent";
+    focusPlace?: boolean;
     now?: Date;
   }
 ): EnvironmentalMapState {
@@ -216,5 +220,7 @@ export function applyEnvironmentalMapDesiredState(
     contextRevision: current.contextRevision + (contextReset ? 1 : 0),
     agentFocusRevision: current.agentFocusRevision +
       (options.origin === "agent" ? 1 : 0),
+    placeFocusRevision: current.placeFocusRevision +
+      (options.origin === "agent" && options.focusPlace ? 1 : 0),
   };
 }

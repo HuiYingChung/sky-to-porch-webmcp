@@ -90,7 +90,7 @@ export function formatAnalysisTime(analysis: ActiveAnalysis): string {
 
 export function formatAnalysisPlace(analysis: ActiveAnalysis): string {
   return analysis.request.placeSelection.label.replace(
-    /\s+\((?:agent coordinates|OSM search)\)$/u,
+    /\s+\((?:agent coordinates|OSM search|place search result)\)$/u,
     ""
   );
 }

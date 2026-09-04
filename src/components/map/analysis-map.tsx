@@ -66,7 +66,8 @@ function asGibsStatus(
 }
 
 export function AnalysisMap({ idPrefix }: { idPrefix: string }) {
-  const [showNonMap, setShowNonMap] = useState(false);
+  const [nonMapAtFocusRevision, setNonMapAtFocusRevision] =
+    useState<number | null>(null);
   const {
     placeSelection,
     environmentalMapState,
@@ -76,6 +77,8 @@ export function AnalysisMap({ idPrefix }: { idPrefix: string }) {
     reportMapOverlayStatus,
     reportMapRendererStatus,
   } = useQueryDraft();
+  const showNonMap = nonMapAtFocusRevision ===
+    environmentalMapState.placeFocusRevision;
   const layers: LayerState[] = INITIAL_LAYERS.map((layer) => {
     const environmentalId = ENVIRONMENTAL_LAYER_BY_MAP_LAYER_ID[
       layer.id as keyof typeof ENVIRONMENTAL_LAYER_BY_MAP_LAYER_ID
@@ -156,6 +159,7 @@ export function AnalysisMap({ idPrefix }: { idPrefix: string }) {
             osmAttribution={OSM_ATTRIBUTION}
             overlayDate={canvasDate}
             overlayContextRevision={environmentalMapState.contextRevision}
+            focusRevision={environmentalMapState.placeFocusRevision}
             circlePolygon={circlePolygon}
             wildfireData={wildfireVisible && wildfireState.status === "ready"
               ? wildfireState.result.featureCollection
@@ -163,7 +167,9 @@ export function AnalysisMap({ idPrefix }: { idPrefix: string }) {
             floodExtentData={floodExtentVisible && floodExtentState.status === "ready"
               ? floodExtentState.result
               : null}
-            onUseWithoutMap={() => setShowNonMap(true)}
+            onUseWithoutMap={() => setNonMapAtFocusRevision(
+              environmentalMapState.placeFocusRevision
+            )}
             onGibsOverlayStatus={handleGibsOverlayStatus}
             onDataOverlayStatus={handleDataOverlayStatus}
             onRendererStatus={reportMapRendererStatus}
@@ -218,7 +224,9 @@ export function AnalysisMap({ idPrefix }: { idPrefix: string }) {
 
           <button
             type="button"
-            onClick={() => setShowNonMap(true)}
+            onClick={() => setNonMapAtFocusRevision(
+              environmentalMapState.placeFocusRevision
+            )}
             data-testid="show-non-map-btn"
             aria-label="Show the selected area without the map"
             style={{
@@ -245,7 +253,7 @@ export function AnalysisMap({ idPrefix }: { idPrefix: string }) {
           <div style={{ padding: "6px 8px", background: "var(--surface-2)", borderBottom: "1px solid var(--border-default)" }}>
             <button
               type="button"
-              onClick={() => setShowNonMap(false)}
+              onClick={() => setNonMapAtFocusRevision(null)}
               data-testid="show-map-btn"
               aria-label="Switch back to map"
               style={{

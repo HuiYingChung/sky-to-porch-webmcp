@@ -6,9 +6,12 @@ The automated unit and browser tests verify facts owned by the application:
 
 - tool schema and annotations;
 - strict argument validation;
-- place ambiguity without silent guessing;
+- place ambiguity without silent guessing, including every validated
+  geography-only candidate in the bounded result;
 - cancellation and registration lifecycle;
 - shared map and evidence state;
+- visible plain-language notices for ambiguous, invalid, no-match, and failed
+  place lookups, with no map or evidence change;
 - bounded output, evidence-strength summaries, and structured citations;
 - neutral `general` fallback when concern is omitted;
 - no-data safety language only when no usable observation is returned.
@@ -65,6 +68,23 @@ are marked incomplete and list every missing case, style, and run. Non-demo
 analysis questions must cover all seven hazard families so
 curated prompts cannot mask a generic-query regression.
 
+The geography-only cases distinguish three visible outcomes. One clear match
+must select and frame the shared map while preserving its current radius, map
+date, and requested layers. An ambiguous name must present every validated
+candidate in the capped set, up to five, with useful geographic details and ask
+the person which place they mean. Invalid input, no match, and lookup failure
+must explain the problem in ordinary language. The latter two paths must keep
+the current map and evidence intact, and a stale or cancelled result must stay
+silent. Model-facing answers may not expose internal status names or field
+names as instructions to the person.
+
+Race coverage must also prove that layer-only changes neither discard a pending
+lookup nor move the camera, unresolved lookups do not cancel compatible
+analysis, and every unique success prevents older context work from replacing
+it. Same-place success must preserve matching evidence while issuing a new map
+focus. Browser coverage keeps the announcement region mounted before the first
+lookup and verifies a new announcement mutation for repeated identical text.
+
 Before release, run the dataset repeatedly with the challenge agent and record:
 
 1. tool-selection accuracy;
@@ -101,7 +121,9 @@ Before release, run the dataset repeatedly with the challenge agent and record:
    plain English, beginning with an overall summary and preserving each
    chain's evidence and limitation.
 19. whether a pure place/geography request selects `look_up_place_location`
-    without mutating the UI or making an environmental claim;
+    and makes the result visible without making an environmental claim: one
+    clear match synchronizes the shared map, while ambiguity or failure explains
+    the next step without moving the map or clearing evidence;
 20. whether an explicit map-layer request selects
     `set_environmental_map_layers`, preserves omitted layers, and keeps map
     imagery separate from analysis evidence.
@@ -222,6 +244,13 @@ complete journeys:
   plus a button that opens and focuses that exact chain; the Agent conversation
   reports the same complete bundle in plain English;
 - ambiguous place → user choice → stable-ID follow-up → evidence;
+- unique geography-only lookup → selected and framed shared map with the prior
+  radius, map date, and desired layers preserved → evidence cleared only if the
+  selected place changed;
+- ambiguous geography-only lookup → all validated candidates, up to five,
+  shown with their geographic details in plain language → person chooses →
+  exact retry selects the map; no-match, invalid, and failure variants keep the
+  current map and evidence while explaining what happened;
 - applicable official-source paths exhausted → strongest available evidence;
   only an actually empty result uses the explicit missing-data state;
 - replacement or cancellation → stale result cannot overwrite the current view.

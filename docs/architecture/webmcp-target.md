@@ -97,9 +97,33 @@ No scenario or chain can silently replace another in the Agent receipt.
 Resolves a place name through the same bounded Photon/OpenStreetMap geocoder
 used by analysis. It returns only source-supplied representative coordinates,
 place bounds when available, administrative context, and provenance. It does
-not update the page, run environmental sources, or infer conditions. Ambiguous
-results use stable choice IDs and the same pause/choose/retry contract as
-analysis.
+not run environmental sources or infer conditions. A unique validated result
+selects and frames the place on the shared map while preserving the current
+radius, map date, and requested layer visibility. Evidence is cleared only if
+the selected place changes.
+
+An ambiguous result lists every validated candidate in the bounded response,
+up to five, including a human-readable name, available administrative context,
+representative coordinates, and source-supplied bounds when available. The
+global page notice shows those choices and asks which place
+the person meant. No match, invalid input, and lookup failure also produce a
+visible explanation in ordinary language. None of these unresolved outcomes
+moves the map or clears evidence. Cancelled or superseded older calls produce
+no notice and cannot replace newer state.
+
+Named-place searches reserve their own last-request-wins order without
+invalidating in-flight analysis while the result is still unknown. Ambiguity
+and failure may therefore remain visible while compatible analysis completes.
+A unique result then claims the shared context action before applying the
+selection—even for a same-place refocus—so an older request cannot overwrite
+the finished lookup. A dedicated place-focus counter drives camera framing and
+exit from the non-map fallback; ordinary layer changes use a separate Agent map
+counter and do not reframe the place.
+
+The lookup tool resolves only after the provider has committed both the map
+transaction and its visible notice. Two always-mounted announcement slots
+alternate for repeated results, allowing identical success or failure text to
+be announced again without showing an implementation counter.
 
 ### set_environmental_map_layers
 
@@ -158,6 +182,13 @@ unchanged, asks the person, waits for the reply, then copies the selected ID to
 the current candidates before analysis, so duplicate labels and candidate
 reordering cannot select the wrong place or restart the ambiguity loop.
 
+That three-choice contract applies to environmental analysis. A
+geography-only `look_up_place_location` request instead exposes all validated
+candidates in its separately bounded set, up to five, because their geographic
+details are the requested result as well as the information needed to choose.
+The person-facing notice uses place names and ordinary geographic descriptions;
+stable IDs remain retry metadata rather than UI instructions.
+
 After a successful Agent analysis, the visible product shows an action receipt
 with the place, hazard, and time. Evidence is one action away. If another
 completed result was visible before the Agent update, one previous snapshot is
@@ -176,23 +207,26 @@ All eight definitions share one AbortController and one page-lifetime
 registration. Abort only when the bridge unmounts or group registration fails;
 ordinary analysis-state changes must not unregister or re-register tools.
 
-The three state-dependent execute callbacks read the latest authoritative
+The four state-dependent execute callbacks read the latest authoritative
 analysis or map snapshot through stable getters. This keeps RegisteredTool
 handles valid across analysis, comparison, and back-to-back map turns without
 mixing state from different render generations.
 
 ## Security and failure behavior
 
-- Analysis and map tools do not mutate persistent or external state, but their
-  `readOnlyHint` is false because synchronizing the visible page is an
-  intentional state change.
+- Analysis, place-lookup, and map-layer tools do not mutate persistent or
+  external state, but their `readOnlyHint` is false because synchronizing the
+  visible page is an intentional state change.
 - Hazard and coverage discovery are accurately marked read-only and never
   update the shared UI or query a live source.
 - External observations are marked as untrusted content.
 - Cross-origin exposure is disabled unless an exact trusted origin is
   explicitly required.
 - Invalid input, ambiguity, unsupported coverage, no observation, source
-  failure, and internal failure return distinct compact error states.
+  failure, and internal failure return distinct compact states. Place-lookup
+  ambiguity, invalid input, no match, and failure additionally produce a
+  visible page notice that uses ordinary language rather than internal status
+  or field names.
 - Tool output must not turn missing evidence into reassurance.
 - A shared storm name must not merge wind observations into a water result or
   water observations into a wind result.

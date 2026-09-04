@@ -3,6 +3,7 @@
 /// <reference types="webmcp-types" />
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { flushSync } from "react-dom";
 import type { ActiveAnalysis, AnalysisRequest } from "@/lib/analysis/types";
 import {
   createAnalyzeHazardTool,
@@ -17,7 +18,10 @@ import {
   createGetEnvironmentalSourceCoverageTool,
   createEnvironmentalCapabilitiesTool,
 } from "@/lib/webmcp/discovery-tools";
-import { createLookUpPlaceLocationTool } from "@/lib/webmcp/place-tool";
+import {
+  createLookUpPlaceLocationTool,
+  type AgentPlaceLookupReceiptPayload,
+} from "@/lib/webmcp/place-tool";
 import {
   createSetEnvironmentalMapLayersTool,
   type EnvironmentalMapToolSnapshot,
@@ -49,6 +53,10 @@ interface WebMcpBridgeProps {
   applyEnvironmentalMapUpdate?: (
     update: EnvironmentalMapToolUpdate
   ) => EnvironmentalMapToolUpdateResult;
+  publishAgentPlaceLookupReceipt?: (
+    feedback: AgentPlaceLookupReceiptPayload
+  ) => void | Promise<void>;
+  reserveContextInvocation?: () => () => boolean;
   beginContextMutationInvocation?: () => () => boolean;
   onOpenStormClaimDiscussion?: () => void;
   onStatusChange?: (status: WebMcpStatus) => void;
@@ -63,6 +71,10 @@ interface WebMcpRuntimeState extends ContextualToolState {
   applyEnvironmentalMapUpdate: NonNullable<
     WebMcpBridgeProps["applyEnvironmentalMapUpdate"]
   >;
+  publishAgentPlaceLookupReceipt: NonNullable<
+    WebMcpBridgeProps["publishAgentPlaceLookupReceipt"]
+  >;
+  reserveContextInvocation?: WebMcpBridgeProps["reserveContextInvocation"];
   beginContextMutationInvocation?: WebMcpBridgeProps[
     "beginContextMutationInvocation"
   ];
@@ -82,6 +94,7 @@ const NOOP_ENVIRONMENTAL_MAP_UPDATE = (): EnvironmentalMapToolUpdateResult => ({
   mapState: EMPTY_ENVIRONMENTAL_MAP_STATE,
   analysisCleared: false,
 });
+const NOOP_PLACE_LOOKUP_RECEIPT = () => {};
 
 /** Registers browser-native WebMCP against the same application service as the UI. */
 export function WebMcpBridge({
@@ -93,6 +106,8 @@ export function WebMcpBridge({
   environmentalMapState = EMPTY_ENVIRONMENTAL_MAP_STATE,
   readEnvironmentalMapSnapshot,
   applyEnvironmentalMapUpdate = NOOP_ENVIRONMENTAL_MAP_UPDATE,
+  publishAgentPlaceLookupReceipt = NOOP_PLACE_LOOKUP_RECEIPT,
+  reserveContextInvocation,
   beginContextMutationInvocation,
   onOpenStormClaimDiscussion = () => {},
   onStatusChange,
@@ -109,6 +124,8 @@ export function WebMcpBridge({
       mapState: environmentalMapState,
     })),
     applyEnvironmentalMapUpdate,
+    publishAgentPlaceLookupReceipt,
+    reserveContextInvocation,
     beginContextMutationInvocation,
     onOpenStormClaimDiscussion,
     onStatusChange,
@@ -127,6 +144,8 @@ export function WebMcpBridge({
         mapState: environmentalMapState,
       })),
       applyEnvironmentalMapUpdate,
+      publishAgentPlaceLookupReceipt,
+      reserveContextInvocation,
       beginContextMutationInvocation,
       onOpenStormClaimDiscussion,
       onStatusChange,
@@ -141,7 +160,9 @@ export function WebMcpBridge({
     runAnalysis,
     runAnalysisBundle,
     placeSelection,
+    publishAgentPlaceLookupReceipt,
     readEnvironmentalMapSnapshot,
+    reserveContextInvocation,
     beginContextMutationInvocation,
   ]);
 
@@ -169,12 +190,40 @@ export function WebMcpBridge({
         }
         return analyses;
       };
-      let fallbackInvocation = 0;
+      let fallbackContextMutation = 0;
+      let fallbackNamedPlaceInvocation = 0;
       const beginCurrentContextMutation = () => {
         const current = runtimeStateRef.current.beginContextMutationInvocation;
         if (current) return current();
-        const invocation = ++fallbackInvocation;
-        return () => invocation === fallbackInvocation;
+        const contextMutation = ++fallbackContextMutation;
+        fallbackNamedPlaceInvocation += 1;
+        return () => contextMutation === fallbackContextMutation;
+      };
+      const reserveCurrentContext = () => {
+        const current = runtimeStateRef.current.reserveContextInvocation;
+        if (current) return current();
+        const namedPlaceInvocation = ++fallbackNamedPlaceInvocation;
+        const contextMutation = fallbackContextMutation;
+        return () => namedPlaceInvocation === fallbackNamedPlaceInvocation &&
+          contextMutation === fallbackContextMutation;
+      };
+      const applyCurrentMapUpdate = (
+        update: EnvironmentalMapToolUpdate
+      ): EnvironmentalMapToolUpdateResult => {
+        let result: EnvironmentalMapToolUpdateResult | undefined;
+        flushSync(() => {
+          result = runtimeStateRef.current.applyEnvironmentalMapUpdate(update);
+        });
+        return result!;
+      };
+      const publishCurrentPlaceLookupReceipt = async (
+        feedback: AgentPlaceLookupReceiptPayload
+      ) => {
+        let committed: void | Promise<void>;
+        flushSync(() => {
+          committed = runtimeStateRef.current.publishAgentPlaceLookupReceipt(feedback);
+        });
+        await committed!;
       };
       const analysisDependencies = {
         runAnalysis: runCurrentAnalysis,
@@ -186,13 +235,20 @@ export function WebMcpBridge({
         createCompareHazardTool(analysisDependencies),
         createEnvironmentalCapabilitiesTool(),
         createGetEnvironmentalSourceCoverageTool(),
-        createLookUpPlaceLocationTool(),
+        createLookUpPlaceLocationTool({
+          readState: () =>
+            runtimeStateRef.current.readEnvironmentalMapSnapshot(),
+          applyUpdate: applyCurrentMapUpdate,
+          publishFeedback: publishCurrentPlaceLookupReceipt,
+          beginContextInvocation: reserveCurrentContext,
+          beginContextMutationInvocation: beginCurrentContextMutation,
+        }),
         createSetEnvironmentalMapLayersTool({
           readState: () =>
             runtimeStateRef.current.readEnvironmentalMapSnapshot(),
-          applyUpdate: (update) =>
-            runtimeStateRef.current.applyEnvironmentalMapUpdate(update),
-          beginContextInvocation: beginCurrentContextMutation,
+          applyUpdate: applyCurrentMapUpdate,
+          beginContextInvocation: reserveCurrentContext,
+          beginContextMutationInvocation: beginCurrentContextMutation,
         }),
         createStateBackedInspectEvidenceTool(() => runtimeStateRef.current),
         createStateBackedStormClaimDiscussionTool(() => runtimeStateRef.current),

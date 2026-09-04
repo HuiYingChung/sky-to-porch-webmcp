@@ -942,7 +942,6 @@
           "layers": {
             "flood_extent": true
           },
-          "place": "Tucson",
           "date": "2025-07-24",
           "radius_km": 40
         }

@@ -34,6 +34,8 @@ interface MaplibreMapCanvasProps {
   overlayDate: string;
   /** Source-request generation for the current selected area and map date. */
   overlayContextRevision: number;
+  /** Agent focus event, including a repeated lookup of the same place. */
+  focusRevision: number;
   circlePolygon: (
     lon: number,
     lat: number,
@@ -146,6 +148,7 @@ export function MaplibreMapCanvas({
   osmAttribution,
   overlayDate,
   overlayContextRevision,
+  focusRevision,
   circlePolygon,
   wildfireData,
   floodExtentData,
@@ -810,7 +813,7 @@ export function MaplibreMapCanvas({
         duration: 800,
       });
     }
-  }, [placeSelection, status, circlePolygon]);
+  }, [placeSelection, status, circlePolygon, focusRevision]);
 
   if (status === "webgl_error") {
     return (
