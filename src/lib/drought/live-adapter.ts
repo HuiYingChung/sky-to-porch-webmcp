@@ -523,8 +523,10 @@ function assembleEvidence(
   // Limitations
   const baseLimitations: Limitation[] = [
     LIM_GIBS_VISUAL_ONLY,
-    LIM_USDM_REGIONAL,
-    LIM_SCALE_MISMATCH,
+    ...(usdmData.outcome !== "not_attempted" ? [LIM_USDM_REGIONAL] : []),
+    ...(gibsData.outcome !== "not_attempted" && usdmData.outcome !== "not_attempted"
+      ? [LIM_SCALE_MISMATCH]
+      : []),
   ];
 
   const stateLimitations: Limitation[] = [];
@@ -549,7 +551,9 @@ function assembleEvidence(
     dataMode,
     observations,
     derivedMetrics: [],
-    missionAttributions: [gibsMissionAttrib, usdmMissionAttrib],
+    missionAttributions: [gibsMissionAttrib, usdmMissionAttrib].filter(
+      (attribution) => attribution.retrievalStatus !== "not_attempted"
+    ),
     freshness,
     confidence: {
       level: confidenceLevel,

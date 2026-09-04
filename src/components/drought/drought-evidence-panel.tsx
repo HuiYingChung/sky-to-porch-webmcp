@@ -165,6 +165,9 @@ function MissionsPanel({
 }: { result: DroughtQueryResult } & MissionSelectionIntegrationProps) {
   const evidence = result.evidence;
   if (!evidence) return <RejectionPanel result={result} />;
+  const includesUsdm = evidence.missionAttributions.some((mission) =>
+    mission.missionName.includes("U.S. Drought Monitor")
+  );
   return (
     <div data-testid="drought-missions-panel" style={{ fontSize: "14px" }}>
       <h3 style={{ margin: "0 0 8px", fontSize: "16px" }}>Mission and sensor background</h3>
@@ -188,10 +191,12 @@ function MissionsPanel({
           <MissionReferenceDetails datasetId={mission.datasetId} missionName={mission.missionName} />
         </article>
       ))}
-      <p style={{ color: "var(--text-muted)" }}>
-        The U.S. Drought Monitor is a multi-agency regional assessment, not a satellite mission
-        and not a property-level water-availability measurement.
-      </p>
+      {includesUsdm && (
+        <p style={{ color: "var(--text-muted)" }}>
+          The U.S. Drought Monitor is a multi-agency regional assessment, not a satellite mission
+          and not a property-level water-availability measurement.
+        </p>
+      )}
       </ProgressiveDisclosure>
     </div>
   );
