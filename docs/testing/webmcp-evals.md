@@ -52,8 +52,15 @@ The dataset also includes post-analysis state for
 `prepare_storm_claim_discussion`. All six stable tool definitions are presented
 in every selection case, including before a result exists, so the two
 state-dependent actions are tested as real distractors instead of disappearing
-from the simulated registry. At least one natural selection case must exist for
-every tool. Non-demo analysis questions must cover all seven hazard families so
+from the simulated registry. Every tool must have a paraphrase family with at
+least three semantically equivalent requests: a question, an imperative, and a
+conversational ask. Each family preserves the same expected call and state
+prerequisite while changing the surface wording, and the runner reports results
+per family using exact-call matching so aggregate accuracy cannot hide a tool
+that only recognizes one phrase or supplies an invalid call. Family summaries
+are calculated against the complete checked-in family: focused `--case` runs
+are marked incomplete and list every missing case, style, and run. Non-demo
+analysis questions must cover all seven hazard families so
 curated prompts cannot mask a generic-query regression.
 
 Before release, run the dataset repeatedly with the challenge agent and record:
@@ -79,8 +86,9 @@ Before release, run the dataset repeatedly with the challenge agent and record:
     selector-free list response and then the analysis tool;
 13. whether the final answer leads with the strongest observations, citations,
     evidence-supported inference, and confidence rather than repeated caveats.
-14. whether every registered tool is selected for its distinct natural ask and
-    never merely called to increase the visible tool count;
+14. whether all three phrasings in every tool's paraphrase family select the
+    same intended tool, and whether no tool is merely called to increase the
+    visible tool count;
 15. whether non-demo questions across all seven hazards preserve the same
     answer order and shared UI update as curated demos.
 16. after `needs_place_choice`, whether the model asks the person to choose and
@@ -95,6 +103,11 @@ Do not call this dataset "passed" until the model-backed runs and raw outcomes
 have been retained for the exact tool definition under review.
 
 ## Execution status
+
+The current 38-case selection dataset contains six three-utterance paraphrase
+families, one for every registered tool. These cases are deterministic coverage
+until the exact suite is run with a model; no current six-tool paraphrase pass
+is claimed yet.
 
 The retained 2026-08-27 model-backed result covers the prior 22-case dataset
 and four multi-turn ambiguity cases. The owner authorized paid OpenAI

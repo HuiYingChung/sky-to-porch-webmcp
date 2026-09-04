@@ -22,17 +22,20 @@ import {
   scoreMultiChainPlainEnglishSummary,
   type EvidenceDetailRequirements,
 } from "./webmcp-model-eval-scoring";
+import {
+  assertValidParaphraseMetadata,
+  summarizeParaphraseFamilies,
+  type ParaphraseEvalCall,
+  type ParaphraseEvalCase,
+  type ParaphraseRunOutcome,
+  type ParaphraseUtteranceStyle,
+} from "./webmcp-model-eval-paraphrases";
 
-interface EvalCall {
-  functionName: string;
-  arguments: Record<string, unknown>;
-}
+type EvalCall = ParaphraseEvalCall;
 
-interface EvalCase {
-  id: string;
+interface EvalCase extends ParaphraseEvalCase {
   availableAfter?: "completed_environmental_analysis" | "completed_home_wind_analysis";
   messages: Array<{ role: "user"; content: string }>;
-  expectedCall: EvalCall[];
   expectedAssistant?: {
     mustAskUserToChooseHazard?: boolean;
     mustWaitForUserReply?: boolean;
@@ -76,12 +79,13 @@ interface ApiResponse {
   error?: unknown;
 }
 
-interface RunOutcome {
+interface RunOutcome extends ParaphraseRunOutcome {
   case_id: string;
+  paraphrase_family?: string;
+  utterance_style?: ParaphraseUtteranceStyle;
   run: number;
   expected_calls: EvalCall[];
   actual_calls: EvalCall[];
-  exact_match: boolean;
   expected_argument_subset_match: boolean;
   assistant_expectations_match: boolean;
   semantic_match: boolean;
@@ -507,6 +511,8 @@ async function runSelectionCase(
   const semantic = callSemanticsMatch && assistantMatch;
   return {
     case_id: item.id,
+    ...(item.paraphraseFamily ? { paraphrase_family: item.paraphraseFamily } : {}),
+    ...(item.utteranceStyle ? { utterance_style: item.utteranceStyle } : {}),
     run,
     expected_calls: item.expectedCall,
     actual_calls: actualCalls,
@@ -697,10 +703,12 @@ async function main() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
   const options = parseArgs();
-  const dataset = JSON.parse(await readFile(resolve(
+  const parsedDataset: unknown = JSON.parse(await readFile(resolve(
     process.cwd(),
     "tests/webmcp/tool-selection-evals.json"
-  ), "utf8")) as EvalCase[];
+  ), "utf8"));
+  assertValidParaphraseMetadata(parsedDataset);
+  const dataset = parsedDataset as EvalCase[];
   const postToolDataset = JSON.parse(await readFile(resolve(
     process.cwd(),
     "tests/webmcp/post-tool-behavior-evals.json"
@@ -730,7 +738,11 @@ async function main() {
         item,
         run
       ));
-      console.log(`[${run}/${options.runs}] ${item.id}: ${outcomes.at(-1)?.semantic_match ? "PASS" : "CHECK"}`);
+      const outcome = outcomes.at(-1);
+      const selectionPassed = item.paraphraseFamily
+        ? outcome?.exact_match
+        : outcome?.semantic_match;
+      console.log(`[${run}/${options.runs}] ${item.id}: ${selectionPassed ? "PASS" : "CHECK"}`);
     }
     for (const item of selectedPostTool) {
       const outcome = await runPostToolCase(
@@ -748,6 +760,7 @@ async function main() {
   const exactPasses = outcomes.filter((item) => item.exact_match).length;
   const subsetPasses = outcomes.filter((item) => item.expected_argument_subset_match).length;
   const semanticPasses = outcomes.filter((item) => item.semantic_match).length;
+  const paraphraseSummary = summarizeParaphraseFamilies(dataset, outcomes, options.runs);
   const usage = usageSummary(options.model, [
     ...outcomes.flatMap((item) => item.usage),
     ...postToolOutcomes.flatMap((item) => item.usage),
@@ -767,6 +780,7 @@ async function main() {
       semantic_passes: semanticPasses,
       total: outcomes.length,
     },
+    paraphrase_summary: paraphraseSummary,
     post_tool_summary: {
       passes: postToolOutcomes.filter((item) => item.passed).length,
       total: postToolOutcomes.length,
@@ -778,6 +792,32 @@ async function main() {
   console.log(`Selection exact: ${exactPasses}/${outcomes.length}`);
   console.log(`Selection expected-subset: ${subsetPasses}/${outcomes.length}`);
   console.log(`Selection semantic: ${semanticPasses}/${outcomes.length}`);
+  console.log(
+    `Paraphrase families (exact calls): ${paraphraseSummary.passes}/` +
+    `${paraphraseSummary.expected_runs}; ${paraphraseSummary.executed_runs} executed; ` +
+    `${paraphraseSummary.complete ? "COMPLETE" : "INCOMPLETE"}; ` +
+    `${paraphraseSummary.all_passed ? "PASS" : "CHECK"}`
+  );
+  for (const family of paraphraseSummary.families) {
+    console.log(
+      `Paraphrase ${family.family} (${family.expected_tool}): ` +
+      `${family.passes}/${family.expected_runs} exact; ${family.executed_runs} executed; ` +
+      `${family.complete ? "COMPLETE" : "INCOMPLETE"}; ` +
+      `${family.all_passed ? "PASS" : "CHECK"}`
+    );
+    for (const failure of family.failed_cases) {
+      console.log(
+        `  Failed ${failure.case_id} (${failure.utterance_style}) runs: ` +
+        failure.runs.join(", ")
+      );
+    }
+    for (const missing of family.missing_cases) {
+      console.log(
+        `  Missing ${missing.case_id} (${missing.utterance_style}) runs: ` +
+        missing.runs.join(", ")
+      );
+    }
+  }
   console.log(`Post-tool behavior: ${postToolOutcomes.filter((item) => item.passed).length}/${postToolOutcomes.length}`);
   if (usage.estimated_cost_usd !== null) {
     console.log(`Estimated API cost: $${usage.estimated_cost_usd.toFixed(4)}`);

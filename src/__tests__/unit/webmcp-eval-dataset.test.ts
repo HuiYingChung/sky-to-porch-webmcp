@@ -20,23 +20,34 @@ import {
   PREPARE_STORM_CLAIM_INPUT_SCHEMA,
   PREPARE_STORM_CLAIM_TOOL_NAME,
 } from "@/lib/webmcp/context-tools";
+import {
+  assertValidParaphraseMetadata,
+  PARAPHRASE_UTTERANCE_STYLES,
+  summarizeParaphraseFamilies,
+  type ParaphraseEvalCall,
+  type ParaphraseEvalCase,
+} from "../../../scripts/webmcp-model-eval-paraphrases";
 
-interface EvalCall {
-  functionName: string;
-  arguments: Record<string, unknown>;
-}
+type EvalCall = ParaphraseEvalCall;
 
-interface EvalCase {
-  id: string;
+interface EvalCase extends ParaphraseEvalCase {
   availableAfter?: "completed_environmental_analysis" | "completed_home_wind_analysis";
   messages: Array<{ role: "user"; content: string }>;
-  expectedCall: EvalCall[];
   expectedAssistant?: {
     mustAskUserToChooseHazard?: boolean;
     mustWaitForUserReply?: boolean;
     mayListHazardsBeforeQuestion?: boolean;
   };
 }
+
+const REGISTERED_TOOL_NAMES = [
+  ANALYZE_HAZARD_TOOL_NAME,
+  COMPARE_HAZARD_TOOL_NAME,
+  CAPABILITIES_TOOL_NAME,
+  GET_COVERAGE_TOOL_NAME,
+  INSPECT_EVIDENCE_TOOL_NAME,
+  PREPARE_STORM_CLAIM_TOOL_NAME,
+] as const;
 
 interface PostToolBehaviorCase {
   id: string;
@@ -62,10 +73,12 @@ interface PostToolBehaviorCase {
 }
 
 describe("WebMCP tool-selection eval dataset", () => {
-  const dataset = JSON.parse(readFileSync(resolve(
+  const parsedDataset: unknown = JSON.parse(readFileSync(resolve(
     process.cwd(),
     "tests/webmcp/tool-selection-evals.json"
-  ), "utf8")) as EvalCase[];
+  ), "utf8"));
+  assertValidParaphraseMetadata(parsedDataset);
+  const dataset = parsedDataset as EvalCase[];
   const postToolDataset = JSON.parse(readFileSync(resolve(
     process.cwd(),
     "tests/webmcp/post-tool-behavior-evals.json"
@@ -274,18 +287,90 @@ describe("WebMCP tool-selection eval dataset", () => {
     const calledTools = new Set(dataset.flatMap((item) =>
       item.expectedCall.map((call) => call.functionName)
     ));
-    expect(calledTools).toEqual(new Set([
-      ANALYZE_HAZARD_TOOL_NAME,
-      COMPARE_HAZARD_TOOL_NAME,
-      CAPABILITIES_TOOL_NAME,
-      GET_COVERAGE_TOOL_NAME,
-      INSPECT_EVIDENCE_TOOL_NAME,
-      PREPARE_STORM_CLAIM_TOOL_NAME,
-    ]));
+    expect(calledTools).toEqual(new Set(REGISTERED_TOOL_NAMES));
     expect(dataset.find((item) => item.id === "inspect-after-custom-analysis")?.availableAfter)
       .toBe("completed_environmental_analysis");
     expect(dataset.find((item) => item.id === "prepare-claim-after-home-wind")?.availableAfter)
       .toBe("completed_home_wind_analysis");
+  });
+
+  it("requires a three-style paraphrase family for every registered tool", () => {
+    const families = new Map<string, EvalCase[]>();
+    for (const item of dataset) {
+      if (!item.paraphraseFamily) continue;
+      families.set(item.paraphraseFamily, [
+        ...(families.get(item.paraphraseFamily) ?? []),
+        item,
+      ]);
+    }
+
+    const toolsWithParaphraseFamilies = new Set<string>();
+    for (const [family, items] of families) {
+      expect(items.length, `${family} needs at least three natural phrasings`)
+        .toBeGreaterThanOrEqual(3);
+      expect(
+        new Set(items.map((item) => item.utteranceStyle)),
+        `${family} must vary the form of the request`
+      ).toEqual(new Set(PARAPHRASE_UTTERANCE_STYLES));
+
+      const reference = items[0];
+      expect(reference.expectedCall, `${family} must target one tool`).toHaveLength(1);
+      const targetTool = reference.expectedCall[0].functionName;
+      toolsWithParaphraseFamilies.add(targetTool);
+
+      const prompts = new Set<string>();
+      for (const item of items) {
+        expect(item.expectedCall, `${item.id} must preserve the same intent`).toEqual(
+          reference.expectedCall
+        );
+        expect(item.availableAfter, `${item.id} must preserve the same state prerequisite`).toBe(
+          reference.availableAfter
+        );
+        const prompt = item.messages[0].content.trim().toLocaleLowerCase();
+        expect(prompt.length).toBeGreaterThan(0);
+        for (const toolName of REGISTERED_TOOL_NAMES) {
+          expect(prompt, `${item.id} must not name an internal tool`).not.toContain(toolName);
+        }
+        prompts.add(prompt);
+      }
+      expect(prompts.size, `${family} must contain distinct utterances`).toBe(items.length);
+    }
+
+    expect(toolsWithParaphraseFamilies).toEqual(new Set(REGISTERED_TOOL_NAMES));
+  });
+
+  it("marks a focused case incomplete against all checked-in paraphrase families", () => {
+    const summary = summarizeParaphraseFamilies(dataset, [{
+      case_id: "capability-discovery",
+      run: 1,
+      exact_match: true,
+    }], 1);
+
+    expect(summary).toMatchObject({
+      expected_cases: 18,
+      expected_runs: 18,
+      executed_runs: 1,
+      passes: 1,
+      total: 18,
+      complete: false,
+      all_passed: false,
+    });
+    expect(summary.families).toHaveLength(6);
+    expect(summary.families.find((family) => family.family === "capability-discovery"))
+      .toMatchObject({
+        expected_case_count: 3,
+        expected_runs: 3,
+        executed_runs: 1,
+        passes: 1,
+        complete: false,
+        all_passed: false,
+      });
+    expect(summary.missing_cases).toContainEqual({
+      family: "capability-discovery",
+      case_id: "capability-discovery-imperative",
+      utterance_style: "imperative",
+      runs: [1],
+    });
   });
 
   it("covers every hazard with non-demo questions through the shared analysis tool", () => {
@@ -316,6 +401,31 @@ describe("WebMCP tool-selection eval dataset", () => {
       expect(dataset.find((item) => item.id === id)?.expectedCall[0]?.functionName)
         .toBe(ANALYZE_HAZARD_TOOL_NAME);
     }
+  });
+
+  it("keeps neighboring intents distinct when their wording overlaps", () => {
+    const expectedTool = (id: string) =>
+      dataset.find((item) => item.id === id)?.expectedCall[0]?.functionName;
+
+    expect(expectedTool("capability-discovery-conversational"))
+      .toBe(CAPABILITIES_TOOL_NAME);
+    expect(expectedTool("direct-fire-place-conversational"))
+      .toBe(ANALYZE_HAZARD_TOOL_NAME);
+
+    expect(expectedTool("coverage-discovery-air-quality-conversational"))
+      .toBe(GET_COVERAGE_TOOL_NAME);
+    expect(expectedTool("inspect-source-failure-follow-up"))
+      .toBe(INSPECT_EVIDENCE_TOOL_NAME);
+
+    expect(expectedTool("generic-recent-storm-related-context"))
+      .toBe(ANALYZE_HAZARD_TOOL_NAME);
+    expect(expectedTool("compare-generic-storm-scenarios-conversational"))
+      .toBe(COMPARE_HAZARD_TOOL_NAME);
+
+    expect(expectedTool("initial-insurer-request-needs-analysis"))
+      .toBe(ANALYZE_HAZARD_TOOL_NAME);
+    expect(expectedTool("prepare-claim-after-home-wind-conversational"))
+      .toBe(PREPARE_STORM_CLAIM_TOOL_NAME);
   });
 
   it("lets narrow historical evidence asks proceed without concern and broad goals ask first", () => {

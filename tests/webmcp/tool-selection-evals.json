@@ -1,10 +1,46 @@
 [
   {
     "id": "capability-discovery",
+    "paraphraseFamily": "capability-discovery",
+    "utteranceStyle": "question",
     "messages": [
       {
         "role": "user",
-        "content": "What kinds of environmental hazards can Sky to Porch help me investigate?"
+        "content": "Which environmental topics does this site support, and which example investigations can I try?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_sky_to_porch_help_and_demos",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "id": "capability-discovery-imperative",
+    "paraphraseFamily": "capability-discovery",
+    "utteranceStyle": "imperative",
+    "messages": [
+      {
+        "role": "user",
+        "content": "List the environmental topics this site supports and the example investigations I can try."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_sky_to_porch_help_and_demos",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "id": "capability-discovery-conversational",
+    "paraphraseFamily": "capability-discovery",
+    "utteranceStyle": "conversational",
+    "messages": [
+      {
+        "role": "user",
+        "content": "I'm not sure where to start—could you show me the environmental topics this site supports and the example investigations I can try?"
       }
     ],
     "expectedCall": [
@@ -16,10 +52,50 @@
   },
   {
     "id": "coverage-discovery-air-quality",
+    "paraphraseFamily": "air-quality-source-coverage",
+    "utteranceStyle": "question",
     "messages": [
       {
         "role": "user",
         "content": "Which source regions and time ranges are eligible for Air Quality evidence? Do not run an observation query yet."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_environmental_source_coverage",
+        "arguments": {
+          "hazard": "air_quality"
+        }
+      }
+    ]
+  },
+  {
+    "id": "coverage-discovery-air-quality-imperative",
+    "paraphraseFamily": "air-quality-source-coverage",
+    "utteranceStyle": "imperative",
+    "messages": [
+      {
+        "role": "user",
+        "content": "List the supported regions and date ranges for Air Quality sources without checking actual conditions."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_environmental_source_coverage",
+        "arguments": {
+          "hazard": "air_quality"
+        }
+      }
+    ]
+  },
+  {
+    "id": "coverage-discovery-air-quality-conversational",
+    "paraphraseFamily": "air-quality-source-coverage",
+    "utteranceStyle": "conversational",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Before I run anything, can you tell me where the Air Quality pipeline has eligible data and how far back it goes?"
       }
     ],
     "expectedCall": [
@@ -48,10 +124,56 @@
   },
   {
     "id": "direct-fire-place",
+    "paraphraseFamily": "latest-tucson-fire-smoke-analysis",
+    "utteranceStyle": "imperative",
     "messages": [
       {
         "role": "user",
-        "content": "Show me the latest fire and smoke evidence around Tucson and update the Sky to Porch map."
+        "content": "Show the latest completed fire-and-smoke evidence around Tucson and update the Sky to Porch map."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Tucson",
+          "hazard": "fire_smoke",
+          "time": "latest_completed",
+          "analysis_scope": "single_hazard_only"
+        }
+      }
+    ]
+  },
+  {
+    "id": "direct-fire-place-question",
+    "paraphraseFamily": "latest-tucson-fire-smoke-analysis",
+    "utteranceStyle": "question",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What does the latest completed fire-and-smoke evidence around Tucson show, and can you update the Sky to Porch map with it?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Tucson",
+          "hazard": "fire_smoke",
+          "time": "latest_completed",
+          "analysis_scope": "single_hazard_only"
+        }
+      }
+    ]
+  },
+  {
+    "id": "direct-fire-place-conversational",
+    "paraphraseFamily": "latest-tucson-fire-smoke-analysis",
+    "utteranceStyle": "conversational",
+    "messages": [
+      {
+        "role": "user",
+        "content": "I'd like to check Tucson's latest completed fire-and-smoke evidence—could you show it and update the Sky to Porch map for me?"
       }
     ],
     "expectedCall": [
@@ -194,6 +316,27 @@
     ]
   },
   {
+    "id": "initial-insurer-request-needs-analysis",
+    "messages": [
+      {
+        "role": "user",
+        "content": "I haven't run an analysis yet. Before I call my insurer about roof damage after Hurricane Beryl, check official wind and related flood or heavy-rain evidence around Houston on July 8, 2024."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Houston",
+          "hazard": "wind_storm",
+          "time": "2024-07-08",
+          "analysis_scope": "related_context",
+          "concern": "home"
+        }
+      }
+    ]
+  },
+  {
     "id": "los-angeles-health-demo",
     "messages": [
       {
@@ -282,11 +425,49 @@
   },
   {
     "id": "inspect-after-custom-analysis",
+    "paraphraseFamily": "inspect-current-result",
+    "utteranceStyle": "imperative",
     "availableAfter": "completed_environmental_analysis",
     "messages": [
       {
         "role": "user",
-        "content": "Now inspect the current result. Show me the strongest observations, their exact times and official citations, then explain the strongest supported inference and confidence."
+        "content": "Without running another search, inspect the result open now and show its strongest observations, exact times, official citations, strongest supported inference, and confidence."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "inspect_current_environmental_evidence",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "id": "inspect-after-custom-analysis-question",
+    "paraphraseFamily": "inspect-current-result",
+    "utteranceStyle": "question",
+    "availableAfter": "completed_environmental_analysis",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Without running another search, what strongest observations, exact times, official citations, supported inference, and confidence back the result open now?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "inspect_current_environmental_evidence",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "id": "inspect-after-custom-analysis-conversational",
+    "paraphraseFamily": "inspect-current-result",
+    "utteranceStyle": "conversational",
+    "availableAfter": "completed_environmental_analysis",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Could you walk me through the result already open, without rerunning it, including the strongest observations, exact times, official citations, strongest supported inference, and confidence?"
       }
     ],
     "expectedCall": [
@@ -316,10 +497,72 @@
   },
   {
     "id": "compare-generic-storm-scenarios",
+    "paraphraseFamily": "compare-houston-austin-storms",
+    "utteranceStyle": "imperative",
     "messages": [
       {
         "role": "user",
-        "content": "Compare storm evidence within 50 km of Houston on August 28, 2026 with storm evidence within 15 km of Austin on August 27, 2026. Report both wind and water evidence for both scenarios."
+        "content": "Determine which scenario has stronger storm evidence—Houston within 50 km on August 28, 2026, or Austin within 15 km on August 27, 2026—and compare both wind and flood or heavy-rain evidence for each."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "compare_environmental_evidence",
+        "arguments": {
+          "baseline": {
+            "place": "Houston",
+            "radius_km": 50,
+            "time": "2026-08-28"
+          },
+          "comparison": {
+            "place": "Austin",
+            "radius_km": 15,
+            "time": "2026-08-27"
+          },
+          "hazard": "wind_storm",
+          "analysis_scope": "related_context"
+        }
+      }
+    ]
+  },
+  {
+    "id": "compare-generic-storm-scenarios-question",
+    "paraphraseFamily": "compare-houston-austin-storms",
+    "utteranceStyle": "question",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Which scenario has stronger storm evidence: within 50 km of Houston on August 28, 2026, or within 15 km of Austin on August 27, 2026? Compare both wind and flood or heavy-rain evidence for each."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "compare_environmental_evidence",
+        "arguments": {
+          "baseline": {
+            "place": "Houston",
+            "radius_km": 50,
+            "time": "2026-08-28"
+          },
+          "comparison": {
+            "place": "Austin",
+            "radius_km": 15,
+            "time": "2026-08-27"
+          },
+          "hazard": "wind_storm",
+          "analysis_scope": "related_context"
+        }
+      }
+    ]
+  },
+  {
+    "id": "compare-generic-storm-scenarios-conversational",
+    "paraphraseFamily": "compare-houston-austin-storms",
+    "utteranceStyle": "conversational",
+    "messages": [
+      {
+        "role": "user",
+        "content": "I'm trying to see which of two storm checks was stronger. Could you compare Houston within 50 km on August 28, 2026 with Austin within 15 km on August 27, 2026, using both wind and flood or heavy-rain evidence for each?"
       }
     ],
     "expectedCall": [
@@ -344,11 +587,49 @@
   },
   {
     "id": "prepare-claim-after-home-wind",
+    "paraphraseFamily": "prepare-home-wind-claim",
+    "utteranceStyle": "imperative",
     "availableAfter": "completed_home_wind_analysis",
     "messages": [
       {
         "role": "user",
         "content": "Open the evidence-backed storm claim discussion and show me what roof or property records would strengthen the assessment for my insurer conversation."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "prepare_storm_claim_discussion",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "id": "prepare-claim-after-home-wind-question",
+    "paraphraseFamily": "prepare-home-wind-claim",
+    "utteranceStyle": "question",
+    "availableAfter": "completed_home_wind_analysis",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What roof or property documentation should I gather before discussing this wind result with my insurer? Open the evidence-backed checklist."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "prepare_storm_claim_discussion",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "id": "prepare-claim-after-home-wind-conversational",
+    "paraphraseFamily": "prepare-home-wind-claim",
+    "utteranceStyle": "conversational",
+    "availableAfter": "completed_home_wind_analysis",
+    "messages": [
+      {
+        "role": "user",
+        "content": "I'm getting ready to talk with the insurance company about the home wind analysis on screen. Can you show the records that could strengthen that conversation?"
       }
     ],
     "expectedCall": [
