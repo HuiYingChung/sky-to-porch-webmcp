@@ -144,7 +144,7 @@ describe("Wind & Storm evidence chain", () => {
       ],
     });
     expect(adapter.evidence?.limitations.map((item) => item.description).join(" "))
-      .toMatch(/station-year retrievals.*no usable wind rows.*publication lag/iu);
+      .toMatch(/historical hourly station records.*no usable wind readings.*may not be published yet/iu);
     expect(() => validateEvidenceObject(adapter.evidence)).not.toThrow();
 
     const final = await finalizeStormQueryResult(

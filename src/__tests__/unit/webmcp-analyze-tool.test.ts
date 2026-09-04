@@ -10,11 +10,23 @@ import {
   executeAnalyzeHazardTool,
 } from "@/lib/webmcp/analyze-tool";
 import { placeChoiceId } from "@/lib/webmcp/place-resolution";
+import type {
+  AgentPlaceLookupFeedbackContext,
+  AgentPlaceLookupFeedbackSession,
+} from "@/lib/webmcp/place-tool";
 
 const NOW = new Date("2026-08-26T18:00:00.000Z");
 
 function toolOptions(signal = new AbortController().signal): WebMCP.ToolExecuteCallbackOptions {
   return { signal };
+}
+
+function expectPublicToolOutput(output: unknown): void {
+  const serialized = JSON.stringify(output);
+  expect(serialized).not.toMatch(/"(?:analysis_id|source_id|included_chains)"\s*:/u);
+  expect(serialized).not.toMatch(
+    /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/u
+  );
 }
 
 function evidenceWithLongContent(): EvidenceObject {
@@ -36,7 +48,7 @@ function evidenceWithLongContent(): EvidenceObject {
         sourceUrl: `https://example.test/source/${index}/${"x".repeat(500)}`,
         retrievedAt: "2026-08-26T17:00:00.000Z",
         observedAt: "2026-08-25T12:00:00.000Z",
-        product: "test product",
+        product: "NOAA satellite fire detections",
         payloadHash: "a".repeat(64),
       },
     })),
@@ -216,11 +228,207 @@ describe("WebMCP environmental hazard tool", () => {
       },
     ]);
     const message = "message" in output ? output.message : "";
-    expect(message).toContain("PAUSE FOR USER:");
-    expect(message).toContain("wait for a new user message");
-    expect(message).toContain("continue the unfinished task");
-    expect(message).toContain("copy retry_with_original_arguments exactly");
+    expect(message).toContain("Several places matched “Springfield”");
+    expect(message).toContain("Please choose one below");
+    expect(message).toContain("current map and results have not changed");
+    expect(message).not.toContain("PAUSE FOR USER");
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
+    expect(runAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("returns all five checked place candidates", async () => {
+    const runAnalysis = vi.fn();
+    const candidates = Array.from({ length: 5 }, (_, index) => ({
+      id: `springfield-${index}`,
+      label: `Springfield ${index + 1}`,
+      lon: -90 - index,
+      lat: 35 + index,
+    }));
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      results: candidates,
+    }), { headers: { "Content-Type": "application/json" } }));
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Springfield",
+        hazard: "fire_smoke",
+        analysis_scope: "single_hazard_only",
+        time: "latest_completed",
+      },
+      toolOptions(),
+      { runAnalysis, fetchImpl, now: () => NOW }
+    );
+
+    expect(output.status).toBe("needs_place_choice");
+    expect("choices" in output ? output.choices : []).toHaveLength(5);
+    expect("choices" in output ? output.choices?.at(-1)?.label : undefined)
+      .toBe("Springfield 5");
+    expect(runAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("sanitizes an unexpected geocoder exception in both output and visible feedback", async () => {
+    const rawError = [
+      "C:\\services\\geocode-handler.ts:77",
+      "550e8400-e29b-41d4-a716-446655440000",
+      "sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    ].join(" ");
+    const feedback: Array<
+      Parameters<AgentPlaceLookupFeedbackSession["publish"]>[0]
+    > = [];
+    const publish = vi.fn(async (
+      receipt: Parameters<AgentPlaceLookupFeedbackSession["publish"]>[0]
+    ) => {
+      feedback.push(receipt);
+      return true;
+    });
+    const runAnalysis = vi.fn();
+
+    const output = await executeAnalyzeHazardTool(
+      {
+        place: "Houston",
+        hazard: "fire_smoke",
+        analysis_scope: "single_hazard_only",
+        time: "latest_completed",
+      },
+      toolOptions(),
+      {
+        runAnalysis,
+        fetchImpl: vi.fn(async () => {
+          throw new Error(rawError);
+        }),
+        now: () => NOW,
+        beginPlaceLookupFeedback: async () => ({
+          isCurrent: () => true,
+          publish,
+        }),
+      }
+    );
+
+    expect(output).toMatchObject({
+      status: "place_lookup_failed",
+      message: "Place search was unavailable; no evidence query was run.",
+    });
+    expect(feedback).toEqual([
+      expect.objectContaining({
+        status: "place_lookup_failed",
+        query: "Houston",
+        operation: "analysis",
+      }),
+    ]);
+    const publicText = JSON.stringify({ output, feedback });
+    expect(publicText).not.toContain(rawError);
+    expect(publicText).not.toContain("geocode-handler.ts");
+    expect(publicText).not.toContain("550e8400-e29b-41d4-a716-446655440000");
+    expect(publicText).not.toContain("0123456789abcdef0123456789abcdef");
+    expectPublicToolOutput(output);
+    expect(runAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("does not start an analysis when a newer invalid request arrives during terminal place feedback", async () => {
+    let latestInvocation = 0;
+    let releaseFeedback!: () => void;
+    const feedbackPending = new Promise<void>((resolve) => {
+      releaseFeedback = resolve;
+    });
+    const beginInvocation = () => {
+      const invocation = ++latestInvocation;
+      return () => invocation === latestInvocation;
+    };
+    const terminalFeedbackStarted = vi.fn();
+    const beginPlaceLookupFeedback = vi.fn(async (
+      context: AgentPlaceLookupFeedbackContext
+    ): Promise<AgentPlaceLookupFeedbackSession> => ({
+      isCurrent: () => true,
+      publish: vi.fn(async () => {
+        if (context.query === "Houston") {
+          terminalFeedbackStarted();
+          await feedbackPending;
+        }
+        return true;
+      }),
+    }));
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      results: [{
+        id: "houston-city",
+        label: "Houston, Texas",
+        lon: -95.3698,
+        lat: 29.7604,
+      }],
+    }), { headers: { "Content-Type": "application/json" } }));
+    const runAnalysis = vi.fn(async (request: AnalysisRequest) =>
+      successfulFireAnalysis(request));
+    const dependencies = {
+      runAnalysis,
+      fetchImpl,
+      now: () => NOW,
+      beginInvocation,
+      beginPlaceLookupFeedback,
+    };
+
+    const older = executeAnalyzeHazardTool(
+      {
+        place: "Houston",
+        hazard: "fire_smoke",
+        analysis_scope: "single_hazard_only",
+        time: "latest_completed",
+      },
+      toolOptions(),
+      dependencies
+    );
+    await vi.waitFor(() => expect(terminalFeedbackStarted).toHaveBeenCalledTimes(1));
+
+    const invalid = await executeAnalyzeHazardTool(
+      { place: "Austin", hazard: "not-a-hazard", time: "latest_completed" },
+      toolOptions(),
+      dependencies
+    );
+    expect(invalid).toMatchObject({ status: "invalid_input", ui_updated: false });
+
+    releaseFeedback();
+    await expect(older).resolves.toMatchObject({
+      status: "superseded",
+      ui_updated: false,
+    });
+    expect(runAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("rechecks cancellation after terminal place feedback", async () => {
+    let releaseFeedback!: () => void;
+    const feedbackPending = new Promise<void>((resolve) => {
+      releaseFeedback = resolve;
+    });
+    const publish = vi.fn(async () => {
+      await feedbackPending;
+      return true;
+    });
+    const controller = new AbortController();
+    const runAnalysis = vi.fn();
+    const pending = executeAnalyzeHazardTool(
+      {
+        place: "Houston",
+        hazard: "fire_smoke",
+        analysis_scope: "single_hazard_only",
+        time: "latest_completed",
+      },
+      toolOptions(controller.signal),
+      {
+        runAnalysis,
+        fetchImpl: vi.fn(async () => new Response(JSON.stringify({
+          ok: true,
+          results: [{ id: "houston-city", label: "Houston", lon: -95.36, lat: 29.76 }],
+        }), { headers: { "Content-Type": "application/json" } })),
+        now: () => NOW,
+        beginPlaceLookupFeedback: async () => ({ isCurrent: () => true, publish }),
+      }
+    );
+    await vi.waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
+
+    controller.abort(new DOMException("cancelled", "AbortError"));
+    releaseFeedback();
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(runAnalysis).not.toHaveBeenCalled();
   });
 
@@ -451,7 +659,7 @@ describe("WebMCP environmental hazard tool", () => {
       ],
     });
     expect("message" in output ? output.message : "").toContain(
-      "previous place choice no longer matches"
+      "earlier choice is no longer available"
     );
     expect(runAnalysis).not.toHaveBeenCalled();
   });
@@ -490,6 +698,15 @@ describe("WebMCP environmental hazard tool", () => {
     expect(output.ui_updated).toBe(true);
     expect(output.no_data_is_not_no_danger).toBeUndefined();
     expect(output).toMatchObject({
+      status_label: "Official readings and reports returned",
+      hazard_label: "Fire & Smoke",
+      display_summary: expect.stringMatching(/Fire & Smoke.*official readings and reports returned/iu),
+      agent_response_contract: {
+        style: "plain_english",
+        use_display_summary_and_labels: true,
+        use_source_name: true,
+        never_repeat_internal_ids_source_keys_or_enum_names: true,
+      },
       answer_order: [
         "strongest_supported_assessment",
         "observation_values_times_and_official_citations",
@@ -503,12 +720,20 @@ describe("WebMCP environmental hazard tool", () => {
         source_count: 1,
       },
       citations: [{
-        source: "noaa_hms_fire_points",
-        product: "test product",
-        observed_at: "2026-08-25T12:00:00.000Z",
-        retrieved_at: "2026-08-26T17:00:00.000Z",
+        source_name: "NOAA HMS Fire Detection Points",
+        product: "NOAA satellite fire detections",
+        observed: "Aug 25, 2026, 12:00 PM UTC",
+        retrieved: "Aug 26, 2026, 5:00 PM UTC",
       }],
     });
+    expect("evidence" in output ? output.evidence?.observations[0] : undefined)
+      .toMatchObject({
+        source_name: "NOAA HMS Fire Detection Points",
+        observed: "Aug 25, 2026, 12:00 PM UTC",
+      });
+    expect("display_summary" in output ? output.display_summary : "")
+      .not.toContain("noaa_hms_fire_points");
+    expectPublicToolOutput(output);
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
   });
 
@@ -634,7 +859,6 @@ describe("WebMCP environmental hazard tool", () => {
         "confidence_and_evidence_that_would_change_it",
       ],
       overall_summary: "Flood & Heavy Rain: not supported for this area; Wind & Storm: not supported for this area",
-      included_chains: ["flood_storm", "wind_storm"],
       chains: [
         {
           hazard: "flood_storm",
@@ -650,6 +874,7 @@ describe("WebMCP environmental hazard tool", () => {
         },
       ],
     });
+    expectPublicToolOutput(output);
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
   });
 
@@ -710,8 +935,9 @@ describe("WebMCP environmental hazard tool", () => {
           summary_first: true,
         },
         request: { radius_km: radiusKm, analysis_scope: "related_context" },
-        included_chains: expectedHazards,
+        chains: expectedHazards.map((hazard) => ({ hazard })),
       });
+      expectPublicToolOutput(output);
     }
   );
 
@@ -844,12 +1070,26 @@ describe("WebMCP environmental hazard tool", () => {
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
     expect(output).toMatchObject({
       status: "related_environmental_evidence_bundle",
-      included_chains: ["flood_storm", "wind_storm"],
       chains: [
-        { hazard: "flood_storm", citation: { source: "nasa_gibs_imerg" } },
-        { hazard: "wind_storm", citation: { source: "noaa_ncei_global_hourly" } },
+        {
+          hazard: "flood_storm",
+          citation: {
+            source_name: expect.stringContaining("NASA GIBS IMERG"),
+            observed: expect.stringContaining("Jul 8, 2024"),
+          },
+        },
+        {
+          hazard: "wind_storm",
+          citation: {
+            source_name: expect.stringContaining("NOAA NCEI Global"),
+            observed: expect.stringContaining("Jul 8, 2024"),
+          },
+        },
       ],
     });
+    expectPublicToolOutput(output);
+    expect(JSON.stringify(output)).not.toContain("nasa_gibs_imerg");
+    expect(JSON.stringify(output)).not.toContain("noaa_ncei_global_hourly");
   });
 
   it("reports moderate assessment confidence when every chain has independent official sources", async () => {
@@ -908,10 +1148,23 @@ describe("WebMCP environmental hazard tool", () => {
       },
       inference_guidance: "state_strongest_supported_inference_and_confidence",
       chains: [
-        { hazard: "air_quality", citation: { source: "nasa_gibs_modis_aod" } },
-        { hazard: "fire_smoke", citation: { source: "noaa_hms_fire_points" } },
+        {
+          hazard: "air_quality",
+          citation: {
+            source_name: expect.stringContaining("NASA GIBS MODIS"),
+            observed: expect.stringContaining("Aug 25, 2026"),
+          },
+        },
+        {
+          hazard: "fire_smoke",
+          citation: {
+            source_name: expect.stringContaining("NOAA HMS Fire"),
+            observed: expect.stringContaining("Aug 25, 2026"),
+          },
+        },
       ],
     });
+    expectPublicToolOutput(output);
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
   });
 
@@ -950,8 +1203,9 @@ describe("WebMCP environmental hazard tool", () => {
     expect(output).toMatchObject({
       status: "related_environmental_evidence_bundle",
       relationship: "related_evidence_for_assessment",
-      included_chains: expectedHazards,
+      chains: expectedHazards.map((expectedHazard) => ({ hazard: expectedHazard })),
     });
+    expectPublicToolOutput(output);
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARACTERS);
   });
 
@@ -1019,8 +1273,13 @@ describe("WebMCP environmental hazard tool", () => {
       "earth_volcanoes",
     ]);
     expect(output).toMatchObject({
-      included_chains: ["air_quality", "extreme_heat", "earth_volcanoes"],
+      chains: [
+        { hazard: "air_quality" },
+        { hazard: "extreme_heat" },
+        { hazard: "earth_volcanoes" },
+      ],
     });
+    expectPublicToolOutput(output);
   });
 
   it("propagates caller cancellation from a related-context bundle", async () => {
@@ -1097,7 +1356,7 @@ describe("WebMCP environmental hazard tool", () => {
       },
       "cannot be combined",
     ],
-  ])("fails closed on invalid input %#", async (input, expectedMessage) => {
+  ])("fails closed on invalid input %#", async (input, _expectedMessage) => {
     const runAnalysis = vi.fn();
     const output = await executeAnalyzeHazardTool(
       input,
@@ -1106,7 +1365,11 @@ describe("WebMCP environmental hazard tool", () => {
     );
 
     expect(output.status).toBe("invalid_input");
-    expect("message" in output ? output.message : "").toContain(expectedMessage);
+    expect("message" in output ? output.message : "").toBe(
+      "We couldn’t use this environmental request. Check the place, topic, date, and area size, then try again."
+    );
+    expect("message" in output ? output.message : "").not.toContain(_expectedMessage);
+    expectPublicToolOutput(output);
     expect(runAnalysis).not.toHaveBeenCalled();
   });
 });

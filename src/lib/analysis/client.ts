@@ -204,7 +204,7 @@ async function analyzeCoverageGap(
       meaning: {
         concern,
         summary:
-          "The request failed. No source retrieval or fixture fallback occurred.",
+          "The check failed. No older or unrelated information was substituted.",
         optionalQuestionAcknowledged: optionalQuestion !== undefined,
       },
       limitations: [
@@ -308,7 +308,7 @@ async function analyzeDrought(
         kind: "source_failure",
         sourceOutcomes: { gibs: "failed", usdm: "failed" },
         rejectionReason:
-          "Drought request failed. No stale or fixture evidence was substituted.",
+          "The drought check failed. No older or unrelated information was substituted.",
       },
     };
   }
@@ -404,7 +404,7 @@ async function analyzeHeat(
       result: {
         kind: "source_failure",
         rejectionReason:
-          "Heat request failed. No stale or fixture evidence was substituted.",
+          "The heat check failed. No older or unrelated information was substituted.",
       },
     };
   }
@@ -512,7 +512,7 @@ async function analyzeFlood(
       result: {
         kind: "source_failure",
         rejectionReason:
-          "Flood request failed. No stale or fixture evidence was substituted.",
+          "The flood check failed. No older or unrelated information was substituted.",
       },
     };
   }
@@ -569,7 +569,7 @@ async function analyzeWindStorm(
       result: {
         kind: "source_failure",
         rejectionReason:
-          "Wind request failed. No rain, flood, fixture, or out-of-area station evidence was substituted.",
+          "The wind check failed. No rain, flood, example, or out-of-area station information was substituted.",
       },
     };
   }

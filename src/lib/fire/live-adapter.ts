@@ -764,30 +764,30 @@ function limitationsFor(
     ...(wfigsResults.some((result) => result.kind === "source_failure") ? [{
       limitationId: "wfigs-live-source-failure",
       source: "nifc_wfigs_fire_perimeters",
-      description: "One or more bounded WFIGS perimeter checks failed. NOAA fire and smoke observations do not replace missing perimeter evidence, and the failure is not proof of no fire.",
+      description: "One or more official wildfire-boundary checks could not be completed. Satellite fire and smoke information does not replace a missing boundary, and this does not prove there was no fire.",
       required: true,
     }] : []),
     {
       limitationId: "hms-live-historical",
       source: "live-adapter",
       description:
-        "This is a live retrieval of completed historical NOAA HMS daily files, not current or real-time data.",
+        "These are historical daily fire and smoke records requested from NOAA. They do not describe current or real-time conditions.",
       required: true,
     },
     ...(coverageStatus === "partial" ? [{
       limitationId: "hms-live-partial-coverage",
       source: "live-adapter",
       description:
-        "Partial coverage: at least one requested UTC date lacked a complete Fire and Smoke source pair. " +
-        "Unsupported days contributed no observations and were not treated as zero danger.",
+        "Fire or smoke information was unavailable for at least one requested date. " +
+        "Dates without both sources were not treated as having no danger.",
       required: true,
     }] : []),
     ...(evidenceState === "no_observation" || evidenceState === "inconclusive_evidence" ? [{
       limitationId: "hms-live-no-observation-not-safety",
       source: "live-adapter",
       description:
-        "Zero in-box counts or incomplete date coverage do not mean no fire or no danger. " +
-        "Cloud, smoke, canopy, terrain, processing delay, and missing files can limit observations.",
+        "No detections inside the selected area, or missing information for some dates, does not mean there was no fire or danger. " +
+        "Clouds, smoke, tree cover, terrain, processing delays, and missing records can limit what is shown.",
       required: true,
     }] : []),
   ];
@@ -826,8 +826,9 @@ function buildEvidence(
     evaluatedAt: assembledAt,
     ageSeconds,
     note:
-      `LIVE RETRIEVAL · HISTORICAL OBSERVATION. Complete NOAA daily evidence spans ${firstDate} through ${latestDate}. ` +
-      `Coverage status: ${coverage.status}.`,
+      coverage.status === "complete"
+        ? `Historical NOAA fire and smoke information is available for every requested date from ${firstDate} through ${latestDate}.`
+        : `Historical NOAA fire and smoke information is available for some, but not all, requested dates from ${firstDate} through ${latestDate}.`,
   };
   const fireIds = observations
     .filter((observation) => observation.provenance.sourceId === "noaa_hms_fire_points")
@@ -846,8 +847,10 @@ function buildEvidence(
     {
       missionName: fireEntry.displayName,
       agency: fireEntry.agency,
-      purpose: fireEntry.role,
-      selectionReason: "Registered source for historical satellite fire-point observations on each complete requested day.",
+      purpose: fireEntry.role
+        .replace(/^Credential-free historical/u, "Historical")
+        .replace("within a bounding box", "inside the selected area"),
+      selectionReason: "Historical satellite fire-point observations on each requested day with available fire and smoke records.",
       contributedObservationIds: fireIds,
       retrievalStatus,
       keyLimitation: fireEntry.requiredLimitations[0],
@@ -856,8 +859,8 @@ function buildEvidence(
     {
       missionName: smokeEntry.displayName,
       agency: smokeEntry.agency,
-      purpose: smokeEntry.role,
-      selectionReason: "Registered source for historical smoke-polygon observations on each complete requested day.",
+      purpose: smokeEntry.role.replace(/^Credential-free historical/u, "Historical"),
+      selectionReason: "Historical smoke-polygon observations on each requested day with available fire and smoke records.",
       contributedObservationIds: smokeIds,
       retrievalStatus,
       keyLimitation: smokeEntry.requiredLimitations[0],
@@ -866,7 +869,7 @@ function buildEvidence(
     ...(wfigsIds.length > 0 ? [{
       missionName: wfigsEntry.displayName,
       agency: wfigsEntry.agency,
-      purpose: wfigsEntry.role,
+      purpose: wfigsEntry.role.replace(/\bWFIGS perimeter service\b/u, "official perimeter service"),
       selectionReason: "Official perimeter features were requested only for the exact selected geometry and each completed requested date from 2020 onward.",
       contributedObservationIds: wfigsIds,
       retrievalStatus: wfigsResults.some((result) => result.kind === "source_failure")
@@ -890,13 +893,13 @@ function buildEvidence(
       ? {
           level: "low",
           rationale:
-            "Complete daily NOAA HMS Fire and Smoke source pairs were validated. Satellite and historical-data limitations still apply.",
+            "NOAA fire and smoke information is available for every requested date, but satellite and historical-data limits still apply.",
         }
       : {
           level: "insufficient",
           rationale: coverage.status === "partial"
-            ? "At least one requested UTC day lacks a complete Fire and Smoke source pair."
-            : "Validated sources returned zero in-box counts; zero observations do not imply safety.",
+            ? "Fire or smoke information is unavailable for at least one requested date."
+            : "The sources returned no detections inside the selected area. That does not mean conditions were safe.",
         },
     limitations: limitationsFor(evidenceState, coverage.status, wfigsResults),
     explanations: [],
@@ -922,7 +925,7 @@ function buildSourceFailureEvidence(
       missionName: "NOAA HMS (Live Retrieval — Failed)",
       agency: "NOAA / NESDIS / OSPO",
       purpose: "Historical Fire and Smoke daily-source retrieval.",
-      selectionReason: "Registered source retrieval failed closed.",
+      selectionReason: "The source was checked for the requested area and date but could not return usable information.",
       contributedObservationIds: [],
       retrievalStatus: "failed",
       keyLimitation: "Source failure is not proof of no fire or no danger.",
@@ -932,24 +935,24 @@ function buildSourceFailureEvidence(
       status: "unknown",
       classificationBasis: "no_observation_time",
       evaluatedAt,
-      note: `Source failure (${reason}); no observation freshness is available.`,
+      note: "No usable date or time is available because the source could not be checked.",
     },
     confidence: {
       level: "insufficient",
-      rationale: "The query failed closed; no stale, cached, partial, or fixture result was substituted.",
+      rationale: "The source could not be checked, and the app did not substitute sample information or older saved information.",
     },
     limitations: [
       {
         limitationId: "hms-live-failure",
         source: "live-adapter",
         description:
-          `Live retrieval failed (${reason}). No stale, cached, partial, or fixture result was substituted.`,
+          "The source could not be checked. The app did not substitute sample information or older saved information.",
         required: true,
       },
       {
         limitationId: "hms-live-failure-not-safety",
         source: "live-adapter",
-        description: "Source failure is not proof of no fire or no danger; use official current alerts and local authorities.",
+        description: "A source being unavailable does not prove there was no fire or danger. Use current official alerts and guidance from local authorities.",
         required: true,
       },
     ],
@@ -1003,8 +1006,7 @@ export async function queryLiveFireEvidence(
       return {
         kind: "unsupported_place",
         rejectionReason:
-          "The selected map area is not a valid query area (west/south/east/north " +
-          "within WGS-84, bounded span). Re-select the location.",
+          "The selected map area could not be used. Please choose the location again.",
       };
     }
   } else {

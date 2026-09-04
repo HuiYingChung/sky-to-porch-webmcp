@@ -176,7 +176,7 @@ export async function queryFirmsEvidence(
   } catch {
     return {
       kind: "unsupported_place",
-      rejectionReason: "The selected FIRMS query area is invalid. No upstream request was made.",
+      rejectionReason: "The selected map area could not be used. Please choose the location again.",
     };
   }
   const mapKey = deps.mapKey ?? process.env.FIRMS_MAP_KEY;

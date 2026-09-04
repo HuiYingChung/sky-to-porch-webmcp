@@ -20,6 +20,7 @@ import {
   buildGeocodedPlaceSelection,
   type PlaceSelection,
 } from "@/lib/location/selection";
+import { createAgentPlaceLookupFeedbackCoordinator } from "@/components/webmcp/webmcp-bridge";
 
 const NOW = new Date("2026-08-26T18:00:00.000Z");
 
@@ -139,6 +140,40 @@ describe("look_up_place_location WebMCP tool", () => {
     });
   });
 
+  it("keeps map revision counters behind the public place-tool boundary", async () => {
+    const fetchImpl = vi.fn(async () => geocodeResponse([{
+      id: "osm-r-2688911",
+      label: "Houston, Texas, United States",
+      lon: -95.3676974,
+      lat: 29.7589382,
+      adminContext: {
+        city: "Houston",
+        state: "Texas",
+        country: "United States",
+      },
+    }]));
+    const testHarness = harness(fetchImpl);
+    const tool = createLookUpPlaceLocationTool(testHarness.dependencies);
+
+    const output = await tool.execute(
+      { place: "Houston" },
+      toolOptions()
+    ) as Record<string, unknown>;
+
+    expect(output).toMatchObject({
+      status: "success",
+      canonical_label: "Houston, Texas, United States",
+      source: {
+        geocoder: "Photon",
+        data: "OpenStreetMap",
+      },
+      ui_updated: true,
+    });
+    expect(output).not.toHaveProperty("map_state_revision");
+    expect(output).not.toHaveProperty("map_focus_revision");
+    expect(JSON.stringify(output)).not.toMatch(/WGS84|photon\.komoot\.io/u);
+  });
+
   it("selects a unique result on the shared map and publishes the visible success", async () => {
     const fetchImpl = vi.fn(async () => geocodeResponse([{
       id: "osm-r-2688911",
@@ -200,14 +235,12 @@ describe("look_up_place_location WebMCP tool", () => {
       representative_point: {
         longitude: -95.3676974,
         latitude: 29.7589382,
-        crs: "WGS84",
       },
       bounding_box: {
         west: -95.9,
         south: 29.5,
         east: -95,
         north: 30.1,
-        crs: "WGS84",
       },
       admin_context: {
         city: "Houston",
@@ -220,7 +253,6 @@ describe("look_up_place_location WebMCP tool", () => {
       source: {
         geocoder: "Photon",
         data: "OpenStreetMap",
-        url: "https://photon.komoot.io/",
       },
       ui_updated: true,
       map_updated: true,
@@ -358,13 +390,12 @@ describe("look_up_place_location WebMCP tool", () => {
         {
           choice_id: "place-osm-il",
           label: "Springfield, Illinois, United States",
-          representative_point: { longitude: -89.65, latitude: 39.78, crs: "WGS84" },
+          representative_point: { longitude: -89.65, latitude: 39.78 },
           bounding_box: {
             west: -89.8,
             south: 39.65,
             east: -89.5,
             north: 39.9,
-            crs: "WGS84",
           },
           admin_context: {
             city: "Springfield",
@@ -399,9 +430,13 @@ describe("look_up_place_location WebMCP tool", () => {
         representative_point: {
           longitude: expect.any(Number),
           latitude: expect.any(Number),
-          crs: "WGS84",
         },
-        bounding_box: expect.objectContaining({ crs: "WGS84" }),
+        bounding_box: expect.objectContaining({
+          west: expect.any(Number),
+          south: expect.any(Number),
+          east: expect.any(Number),
+          north: expect.any(Number),
+        }),
         admin_context: expect.any(Object),
       }));
     }
@@ -727,6 +762,106 @@ describe("look_up_place_location WebMCP tool", () => {
         ? input.place.trim()
         : null,
     });
+  });
+
+  it("does not expose an unexpected geocoder error in the place result or visible feedback", async () => {
+    const privateError =
+      "C:\\services\\private-geocoder.ts 123e4567-e89b-12d3-a456-426614174000 deadbeefcafebabe";
+    const fetchImpl = vi.fn(async () => {
+      throw new Error(privateError);
+    });
+    const testHarness = harness(fetchImpl);
+    const receipts: AgentPlaceLookupReceiptPayload[] = [];
+    const beginPlaceLookupFeedback = createAgentPlaceLookupFeedbackCoordinator(
+      async (receipt) => {
+        receipts.push(receipt);
+      }
+    );
+    const tool = createLookUpPlaceLocationTool({
+      ...testHarness.dependencies,
+      beginPlaceLookupFeedback,
+    });
+
+    const output = await tool.execute(
+      { place: "Houston" },
+      toolOptions()
+    );
+
+    expect(output).toMatchObject({
+      status: "place_lookup_failed",
+      message: "Place search is temporarily unavailable. Please try again in a moment. Your current map and results are unchanged.",
+      ui_updated: true,
+      map_updated: false,
+      map_unchanged: true,
+    });
+    expect(receipts.map((receipt) => receipt.status)).toEqual([
+      "lookup_pending",
+      "place_lookup_failed",
+    ]);
+    expect(receipts.at(-1)).toMatchObject({
+      status: "place_lookup_failed",
+      query: "Houston",
+      operation: "place_lookup",
+    });
+    for (const exposedValue of [output, receipts.at(-1)]) {
+      const publicText = JSON.stringify(exposedValue);
+      expect(publicText).not.toContain("private-geocoder.ts");
+      expect(publicText).not.toContain("123e4567-e89b-12d3-a456-426614174000");
+      expect(publicText).not.toContain("deadbeefcafebabe");
+    }
+    expect(testHarness.applyUpdate).not.toHaveBeenCalled();
+    expect(testHarness.publishFeedback).not.toHaveBeenCalled();
+  });
+
+  it("keeps a newer invalid receipt ahead of an older pending lookup", async () => {
+    let resolveFetch: ((response: Response) => void) | undefined;
+    const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    }));
+    const testHarness = harness(fetchImpl);
+    const receipts: AgentPlaceLookupReceiptPayload[] = [];
+    const beginPlaceLookupFeedback = createAgentPlaceLookupFeedbackCoordinator(
+      async (receipt) => {
+        receipts.push(receipt);
+      }
+    );
+    const dependencies = {
+      ...testHarness.dependencies,
+      beginPlaceLookupFeedback,
+    };
+
+    const older = executeLookUpPlaceLocationTool(
+      { place: "Houston" },
+      toolOptions(),
+      dependencies
+    );
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    await expect(executeLookUpPlaceLocationTool(
+      { place: "H" },
+      toolOptions(),
+      dependencies
+    )).resolves.toMatchObject({ status: "invalid_input" });
+
+    expect(receipts.map((receipt) => receipt.status)).toEqual([
+      "lookup_pending",
+      "superseded",
+      "invalid_input",
+    ]);
+    resolveFetch?.(geocodeResponse([{
+      id: "osm-houston",
+      label: "Houston, Texas, United States",
+      lon: -95.3698,
+      lat: 29.7604,
+    }]));
+    await expect(older).resolves.toMatchObject({ status: "superseded" });
+
+    expect(receipts.at(-1)).toMatchObject({
+      status: "invalid_input",
+      query: "H",
+      operation: "place_lookup",
+    });
+    expect(testHarness.applyUpdate).not.toHaveBeenCalled();
+    expect(testHarness.publishFeedback).not.toHaveBeenCalled();
   });
 
   it("lets only the latest overlapping lookup update the map or visible feedback", async () => {

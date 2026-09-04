@@ -27,6 +27,7 @@ export const COVERAGE_STATUS_LABELS: Record<
 const PROFILES: SourceCoverageProfile[] = [
   {
     sourceId: "nasa_firms",
+    publicName: "NASA FIRMS Active Fire Data",
     hazardIds: ["fire_smoke"],
     level: "global",
     kind: "satellite",
@@ -43,6 +44,7 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "noaa_hms_fire_points",
+    publicName: "NOAA HMS Fire Detection Points",
     hazardIds: ["fire_smoke"],
     level: "north_america",
     kind: "satellite",
@@ -56,9 +58,11 @@ const PROFILES: SourceCoverageProfile[] = [
     coverageNote: "Credential-free North American fire detections; not tactical fire truth.",
     liveGateNote: "Integrated with deterministic KML validation and bounded requests.",
     satellite: { platform: "Multiple polar and geostationary satellites", sensor: "HMS contributing sensors", product: "HMS fire detection points" },
+    lastVerifiedDate: "2026-08-27",
   },
   {
     sourceId: "noaa_hms_smoke_polygons",
+    publicName: "NOAA HMS Smoke Polygons",
     hazardIds: ["fire_smoke"],
     level: "north_america",
     kind: "satellite",
@@ -72,9 +76,11 @@ const PROFILES: SourceCoverageProfile[] = [
     coverageNote: "Smoke density context, not AQI or indoor air quality.",
     liveGateNote: "Integrated with deterministic KML validation and separated smoke claims.",
     satellite: { platform: "Multiple satellites", sensor: "HMS contributing imagery", product: "HMS smoke polygons" },
+    lastVerifiedDate: "2026-08-27",
   },
   {
     sourceId: "canada_cwfis_fire",
+    publicName: "Canadian Wildland Fire Information System",
     hazardIds: ["fire_smoke"],
     level: "national",
     kind: "blended_official",
@@ -90,6 +96,7 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "nifc_wfigs_fire_perimeters",
+    publicName: "NIFC WFIGS Interagency Fire Perimeters",
     hazardIds: ["fire_smoke"],
     level: "national",
     kind: "official_event",
@@ -102,9 +109,11 @@ const PROFILES: SourceCoverageProfile[] = [
     spatialResolution: "Official incident perimeter polygons",
     coverageNote: "Perimeter context is separate from satellite detections, smoke, parcel damage, and tactical truth.",
     liveGateNote: "Integrated with exact selected-envelope intersection, incident-date filtering, record caps, and fail-closed ArcGIS validation.",
+    lastVerifiedDate: "2026-08-30",
   },
   {
     sourceId: "mexico_conabio_satif",
+    publicName: "Mexico CONABIO Early Fire Warning System",
     hazardIds: ["fire_smoke"],
     level: "national",
     kind: "satellite",
@@ -115,12 +124,13 @@ const PROFILES: SourceCoverageProfile[] = [
     temporalCoverage: "Near-real-time program",
     updateCadence: "Near-real-time when satellite reception and processing permit",
     spatialResolution: "MODIS, VIIRS, and AVHRR detection scales",
-    coverageNote: "Official Mexican satellite-fire program; supported machine access is not yet locked.",
+    coverageNote: "Official Mexican satellite-fire program; this app cannot check it automatically yet.",
     liveGateNote: "Needs a stable documented endpoint, schema, and reuse policy.",
     satellite: { platform: "Terra / Aqua / Suomi-NPP / NOAA-20", sensor: "MODIS / VIIRS / AVHRR", product: "SATIF active-fire monitoring" },
   },
   {
     sourceId: "nasa_lance_flood_extent",
+    publicName: "NASA LANCE MODIS/VIIRS Global Flood Extent",
     hazardIds: ["flood_storm"],
     level: "global",
     kind: "satellite",
@@ -134,9 +144,11 @@ const PROFILES: SourceCoverageProfile[] = [
     coverageNote: "Regional flood-extent visualization, distinct from rain and river-gage evidence; colors are not converted into depth or property impact.",
     liveGateNote: "The exact VIIRS 3-day WMS path and transparent no-observation state passed the bounded live gate; legend colors remain uninterpreted.",
     satellite: { platform: "NOAA-20 / NOAA-21", sensor: "VIIRS", product: "VCDWD 3-day global flood composite" },
+    lastVerifiedDate: "2026-08-30",
   },
   {
     sourceId: "nws_tropical_cyclone_report",
+    publicName: "NWS Post-Tropical Cyclone Report: Hurricane Beryl",
     hazardIds: ["wind_storm"],
     level: "regional",
     kind: "official_event",
@@ -151,13 +163,14 @@ const PROFILES: SourceCoverageProfile[] = [
       "Official Beryl event context and named regional gust observations. The report does not " +
       "establish wind or damage at a selected home.",
     liveGateNote:
-      "The pinned NWS Houston report and event page were verified on 2026-08-26. The adapter " +
+      "The pinned NWS Houston report and event page were verified on 2026-08-27. The adapter " +
       "adds this historical context only when the selected geometry overlaps the governed " +
       "Southeast Texas reporting box and the requested date is 2024-07-08.",
-    lastVerifiedDate: "2026-08-26",
+    lastVerifiedDate: "2026-08-27",
   },
   {
     sourceId: "nhc_hurdat2",
+    publicName: "NHC HURDAT2 Best Track",
     hazardIds: ["wind_storm"],
     level: "regional",
     kind: "official_event",
@@ -170,9 +183,11 @@ const PROFILES: SourceCoverageProfile[] = [
     spatialResolution: "Six-hour tropical-cyclone center track points",
     coverageNote: "A best-track center point is not a storm wind footprint or property observation.",
     liveGateNote: "Integrated with dynamic official-file discovery, bounded text parsing, exact date and in-area center-point filtering.",
+    lastVerifiedDate: "2026-08-30",
   },
   {
     sourceId: "nasa_gibs_imerg",
+    publicName: "NASA GIBS IMERG Precipitation Rate Visualization",
     hazardIds: ["flood_storm"],
     level: "global",
     kind: "satellite",
@@ -186,9 +201,11 @@ const PROFILES: SourceCoverageProfile[] = [
     coverageNote: "Rain context only. It is never labelled flood extent.",
     liveGateNote: "Integrated with visual-only claims and transparent/no-data handling.",
     satellite: { platform: "GPM constellation", sensor: "Multiple precipitation sensors", product: "IMERG precipitation rate" },
+    lastVerifiedDate: "2026-08-30",
   },
   {
     sourceId: "noaa_mrms_qpe",
+    publicName: "NOAA MRMS Quantitative Precipitation Estimate",
     hazardIds: ["flood_storm"],
     level: "national",
     kind: "blended_official",
@@ -201,9 +218,11 @@ const PROFILES: SourceCoverageProfile[] = [
     spatialResolution: "Approximately 1 km source raster; application samples the selected-area center",
     coverageNote: "Numeric radar-only precipitation estimate, not a historical archive or flood-depth observation.",
     liveGateNote: "Integrated with declared-valid-period overlap, locked raster ID, finite-value checks, and explicit NoData handling.",
+    lastVerifiedDate: "2026-08-30",
   },
   {
     sourceId: "usgs_instantaneous_values",
+    publicName: "USGS Water Data Continuous Values",
     hazardIds: ["flood_storm"],
     level: "national",
     kind: "ground_station",
@@ -216,9 +235,11 @@ const PROFILES: SourceCoverageProfile[] = [
     spatialResolution: "Named monitoring stations",
     coverageNote: "Gage height is evidence, not a flood polygon or universal threshold.",
     liveGateNote: "Integrated with station discovery, units, time, provenance, and provisional-data limits.",
+    lastVerifiedDate: "2026-08-30",
   },
   {
     sourceId: "noaa_ncei_storm_events",
+    publicName: "NOAA NCEI Storm Events Database",
     hazardIds: ["flood_storm", "wind_storm"],
     level: "national",
     kind: "official_event",
@@ -235,9 +256,11 @@ const PROFILES: SourceCoverageProfile[] = [
       "one property.",
     liveGateNote:
       "The adapter discovers the latest official annual details publication, bounds compressed and decompressed bytes, parses quoted CSV, and accepts only matching event dates and reported coordinates inside the selected geometry.",
+    lastVerifiedDate: "2026-09-04",
   },
   {
     sourceId: "nws_local_storm_reports",
+    publicName: "NWS Preliminary Local Storm Reports",
     hazardIds: ["flood_storm", "wind_storm"],
     level: "national",
     kind: "official_event",
@@ -252,10 +275,11 @@ const PROFILES: SourceCoverageProfile[] = [
       "Preliminary official event reports, separated by water versus wind/severe-weather type and filtered to the exact selected area.",
     liveGateNote:
       "The bounded points → office → LSR products path and the Houston 2026-08-28 Flash Flood report passed the live schema smoke. Empty recent indexes remain no observation, never no storm.",
-    lastVerifiedDate: "2026-08-29",
+    lastVerifiedDate: "2026-08-30",
   },
   {
     sourceId: "canada_geomet",
+    publicName: "Environment and Climate Change Canada MSC GeoMet",
     hazardIds: ["flood_storm"],
     level: "national",
     kind: "ground_station",
@@ -274,6 +298,7 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "mexico_conagua_hydrology",
+    publicName: "Mexico CONAGUA Hydrologic and Flood Data",
     hazardIds: ["flood_storm", "extreme_heat"],
     level: "national",
     kind: "ground_station",
@@ -289,6 +314,7 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "nasa_gibs_modis_lst_day",
+    publicName: "NASA GIBS MODIS Terra Daytime Land-Surface Temperature",
     hazardIds: ["extreme_heat"],
     level: "global",
     kind: "satellite",
@@ -302,9 +328,11 @@ const PROFILES: SourceCoverageProfile[] = [
     coverageNote: "Land-surface temperature visualization, not air or indoor temperature.",
     liveGateNote: "Integrated for arbitrary selected areas with visual-only safeguards.",
     satellite: { platform: "Terra", sensor: "MODIS", product: "Daytime land-surface temperature" },
+    lastVerifiedDate: "2026-08-27",
   },
   {
     sourceId: "noaa_uscrn_heat_exposure",
+    publicName: "NOAA USCRN Heat Exposure",
     hazardIds: ["extreme_heat"],
     level: "national",
     kind: "ground_station",
@@ -325,9 +353,11 @@ const PROFILES: SourceCoverageProfile[] = [
       "(generated from the official station registry; closed stations keep stale files and are " +
       "excluded). The station nearest to the selected area center is retrieved when its " +
       "coordinate lies inside the area; otherwise the no-station limitation stays visible.",
+    lastVerifiedDate: "2026-08-27",
   },
   {
     sourceId: "nws_station_observations",
+    publicName: "NWS Station Observations",
     hazardIds: ["extreme_heat"],
     level: "national",
     kind: "ground_station",
@@ -348,9 +378,11 @@ const PROFILES: SourceCoverageProfile[] = [
       "ADR-0038: consulted only when no operational USCRN station lies inside the selected " +
       "area and the requested date is within the observation window; dates outside the window " +
       "carry an explicit retention limitation.",
+    lastVerifiedDate: "2026-08-19",
   },
   {
     sourceId: "noaa_ncei_global_hourly",
+    publicName: "NOAA NCEI Global Historical Climatology Network-hourly (GHCNh)",
     hazardIds: ["extreme_heat", "wind_storm"],
     level: "global",
     kind: "ground_station",
@@ -371,9 +403,11 @@ const PROFILES: SourceCoverageProfile[] = [
       "derived. One station is never property-level or individual evidence.",
     liveGateNote:
       "The global official station inventory is parsed with bounded in-area selection and exact-field validation; Heat and Wind & Storm share the same coordinate-authoritative fallback.",
+    lastVerifiedDate: "2026-08-30",
   },
   {
     sourceId: "nasa_gibs_modis_ndvi_16day",
+    publicName: "NASA GIBS MODIS Terra 16-Day NDVI Visualization",
     hazardIds: ["drought_land"],
     level: "global",
     kind: "satellite",
@@ -387,9 +421,11 @@ const PROFILES: SourceCoverageProfile[] = [
     coverageNote: "Vegetation visualization only; it is not a numeric drought or property assessment.",
     liveGateNote: "Custom-area request path is integrated; the fixed New York smoke passed, but it is not universal date/area proof.",
     satellite: { platform: "Terra", sensor: "MODIS", product: "L3 NDVI 16-day v6.1" },
+    lastVerifiedDate: "2026-08-27",
   },
   {
     sourceId: "us_drought_monitor_rest",
+    publicName: "U.S. Drought Monitor",
     hazardIds: ["drought_land"],
     level: "national",
     kind: "blended_official",
@@ -402,9 +438,11 @@ const PROFILES: SourceCoverageProfile[] = [
     spatialResolution: "State or territory percent-of-area; never property scale",
     coverageNote: "Weekly state or territory percent-of-area context resolved from the canonical selection; it is never property-scale evidence.",
     liveGateNote: "Census geometry resolution and a non-Arizona territory request passed the bounded live gate; no returned row remains no observation, not no drought.",
+    lastVerifiedDate: "2026-08-27",
   },
   {
     sourceId: "canada_drought_monitor",
+    publicName: "Canadian Drought Monitor",
     hazardIds: ["drought_land"],
     level: "national",
     kind: "blended_official",
@@ -417,9 +455,11 @@ const PROFILES: SourceCoverageProfile[] = [
     spatialResolution: "5 km image-service pixels",
     coverageNote: "Official Canadian national drought classification.",
     liveGateNote: "Integrated with official monthly catalog selection, locked-raster center sampling, and source class-code preservation without guessing an unverified label mapping.",
+    lastVerifiedDate: "2026-08-30",
   },
   {
     sourceId: "mexico_drought_monitor",
+    publicName: "Mexico Drought Monitor",
     hazardIds: ["drought_land"],
     level: "national",
     kind: "blended_official",
@@ -435,6 +475,7 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "nasa_gibs_modis_aod",
+    publicName: "NASA GIBS MODIS MAIAC Aerosol Optical Depth",
     hazardIds: ["air_quality", "fire_smoke"],
     level: "global",
     kind: "satellite",
@@ -449,9 +490,11 @@ const PROFILES: SourceCoverageProfile[] = [
     liveGateNote:
       "The exact MAIAC WMS path passed the bounded live gate and is queried through the canonical-area route with bounded cache and concurrency; image colors are not converted to AQI.",
     satellite: { platform: "Terra and Aqua", sensor: "MODIS", product: "MAIAC aerosol optical depth" },
+    lastVerifiedDate: "2026-08-27",
   },
   {
     sourceId: "airnow",
+    publicName: "AirNow Current Air Quality",
     hazardIds: ["air_quality", "fire_smoke"],
     level: "national",
     kind: "ground_station",
@@ -459,7 +502,7 @@ const PROFILES: SourceCoverageProfile[] = [
     evidenceRole: "supporting",
     regionLabel: "United States and participating North American reporting areas",
     countryCodes: ["US"],
-    temporalCoverage: "Current and historical services by endpoint",
+    temporalCoverage: "Current and historical records",
     updateCadence: "Observations hourly; forecasts generally daily",
     spatialResolution: "Monitoring sites and reporting areas",
     coverageNote: "Official outdoor AQI source; reporting areas are not property or indoor measurements.",
@@ -468,25 +511,27 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "airnow_daily_data",
+    publicName: "AirNow Daily Air Quality Data",
     hazardIds: ["air_quality", "fire_smoke"],
     level: "national",
     kind: "ground_station",
     integrationStatus: "live_integrated",
     evidenceRole: "supporting",
-    regionLabel: "United States and participating international monitoring sites; product path retains U.S. rows only",
+    regionLabel: "United States and participating international monitoring sites; this app uses U.S. records",
     countryCodes: ["US"],
-    temporalCoverage: "Historical daily directories plus a separately documented today directory",
-    updateCadence: "Current and previous days update twice hourly; historical date directories retain the last daily file",
+    temporalCoverage: "Historical daily records, with a separate source for today",
+    updateCadence: "Current and previous days update twice hourly; older dates retain the last daily publication",
     spatialResolution: "Outdoor monitoring sites",
     coverageNote: "Preliminary daily outdoor AQI summaries. Site data are not indoor, personal-exposure, medical, or regulatory findings.",
     liveGateNote:
       "One Houston historical-date cell passed the bounded live gate. The product route queries " +
       "the nationwide daily file and reports geographically filtered observations, no observation, " +
       "or source failure; it does not treat the Houston pass as nationwide station coverage proof.",
-    lastVerifiedDate: "2026-08-15",
+    lastVerifiedDate: "2026-08-27",
   },
   {
     sourceId: "epa_aqs",
+    publicName: "EPA Air Quality System",
     hazardIds: ["air_quality"],
     level: "national",
     kind: "ground_station",
@@ -502,6 +547,7 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "mexico_sinaica",
+    publicName: "Mexico SINAICA Air Quality Information",
     hazardIds: ["air_quality"],
     level: "national",
     kind: "ground_station",
@@ -512,11 +558,12 @@ const PROFILES: SourceCoverageProfile[] = [
     temporalCoverage: "Preliminary real-time and validated historical data",
     updateCadence: "Network-dependent",
     spatialResolution: "State and municipal monitoring stations",
-    coverageNote: "Official national system, but coverage is uneven and machine API support is unclear.",
+    coverageNote: "Official national system, but coverage is uneven and automated access is not yet available.",
     liveGateNote: "Needs a documented stable machine contract and preliminary/validated state separation.",
   },
   {
     sourceId: "nasa_gibs_omps_so2",
+    publicName: "NASA GIBS NOAA-20 OMPS Sulfur Dioxide",
     hazardIds: ["earth_volcanoes", "air_quality"],
     level: "global",
     kind: "satellite",
@@ -534,6 +581,7 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "usgs_earthquake_geojson",
+    publicName: "USGS Earthquake Catalog",
     hazardIds: ["earth_volcanoes"],
     level: "national",
     kind: "official_event",
@@ -553,6 +601,7 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "usgs_volcano_hans",
+    publicName: "USGS Volcano Hazards Notification System (HANS)",
     hazardIds: ["earth_volcanoes"],
     level: "national",
     kind: "official_alert",
@@ -572,6 +621,7 @@ const PROFILES: SourceCoverageProfile[] = [
   },
   {
     sourceId: "smithsonian_gvp_eruptions",
+    publicName: "Smithsonian Global Volcanism Program Eruptions",
     hazardIds: ["earth_volcanoes"],
     level: "global",
     kind: "official_event",
@@ -584,6 +634,7 @@ const PROFILES: SourceCoverageProfile[] = [
     spatialResolution: "Volcano point and eruption-record interval",
     coverageNote: "Historical eruption evidence is not a real-time alert, exposure finding, or prediction.",
     liveGateNote: "Integrated through bounded GVP WFS GeoJSON with exact geometry and conservative incomplete-date interval handling.",
+    lastVerifiedDate: "2026-08-30",
   },
 ];
 

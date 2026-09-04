@@ -388,7 +388,7 @@ function unsupportedDateResult(
     sourceOutcomes,
     meaning: meaning(hazardId, input.concern, input.optionalQuestion, "unsupported_date"),
     limitations: ["Only real completed UTC dates are accepted."],
-    rejectionReason: "No upstream request was made because the date is outside the live contract.",
+    rejectionReason: "This date is outside the available range, so no source check was made.",
   };
 }
 

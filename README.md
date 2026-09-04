@@ -64,6 +64,11 @@ The Agent does not replace the interface. It removes repetitive operation while
 making the evidence easier to inspect. Both paths use the same analysis service
 and result contract, and the application needs no site-owned model API key.
 
+**Shared-interface principle.** People and Agents use one UI and synchronized
+state. Public copy is written for people, while stable structured fields guide
+Agent decisions. The UI never exposes internal IDs, codes, or file details, and
+Agent control never depends on parsing prose.
+
 ## Judge quick start
 
 Open the live site in ChatGPT's in-app browser, or in a WebMCP-compatible

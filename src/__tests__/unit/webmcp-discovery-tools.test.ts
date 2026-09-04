@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONCERN_TYPES, HAZARD_IDS } from "@/contracts/common";
+import { HAZARD_IDS } from "@/contracts/common";
 import { WEBMCP_DEMO_SCENARIOS } from "@/data/places/demo-stories";
 import { SOURCE_COVERAGE_PROFILES } from "@/data/source-coverage";
 import {
@@ -18,14 +18,15 @@ describe("WebMCP discovery tools", () => {
   it("lists every governed hazard and related-context default without updating the UI", async () => {
     const tool = createEnvironmentalCapabilitiesTool();
     const output = await tool.execute({}, options) as {
-      hazards: Array<{ hazard: string; default_related_hazards: string[] }>;
-      concerns: string[];
-      demo_scenarios: Array<{
-        id: string;
-        title: string;
-        analysis_input: Record<string, unknown>;
+      hazards: Array<{
+        label: string;
+        tool_input: { hazard: string; related_hazards: string[] };
       }>;
-      missing_hazard_request: string;
+      demo_scenarios: Array<{
+        title: string;
+        tool_input: Record<string, unknown>;
+      }>;
+      missing_hazard_guidance: string;
     };
 
     expect(tool.name).toBe(CAPABILITIES_TOOL_NAME);
@@ -33,36 +34,44 @@ describe("WebMCP discovery tools", () => {
     expect(tool.annotations).toEqual({ readOnlyHint: true, untrustedContentHint: false });
     expect(output).toMatchObject({
       status: "hazard_catalog",
-      default_analysis_scope: "related_context",
-      relationship: "related_evidence_for_assessment",
-      missing_hazard_request:
-        "ask_person_to_choose_hazard_and_wait; do_not_analyze_or_guess",
+      status_label: "Supported environmental hazards",
+      display_summary: expect.stringMatching(/seven environmental hazard groups/iu),
+      missing_hazard_guidance: "Ask which hazard they mean, then wait.",
       ui_updated: false,
     });
-    expect(output.hazards.map((item) => item.hazard)).toEqual(HAZARD_IDS);
-    expect(output.concerns).toEqual(CONCERN_TYPES);
-    expect(output.concerns[0]).toBe("general");
+    expect(output.hazards.map((item) => item.tool_input.hazard)).toEqual(HAZARD_IDS);
     expect(output.demo_scenarios).toHaveLength(3);
     for (const scenario of WEBMCP_DEMO_SCENARIOS) {
       const { start_date: startDate, end_date: endDate, ...analysisInput } =
         scenario.analysisInput;
-      expect(output.demo_scenarios.find((item) => item.id === scenario.id))
+      expect(output.demo_scenarios.find((item) => item.title === scenario.title))
         .toMatchObject({
           title: scenario.title,
-          analysis_input: {
+          tool_input: {
             ...analysisInput,
             time: startDate === endDate ? startDate : `${startDate}/${endDate}`,
             analysis_scope: "related_context",
           },
         });
       expect(String(output.demo_scenarios.find(
-        (item) => item.id === scenario.id
-      )?.analysis_input.question).length).toBeLessThanOrEqual(100);
+        (item) => item.title === scenario.title
+      )?.tool_input.question).length).toBeLessThanOrEqual(35);
     }
-    expect(output.hazards.find((item) => item.hazard === "wind_storm"))
-      .toMatchObject({ default_related_hazards: ["flood_storm"] });
-    expect(output.hazards.find((item) => item.hazard === "earth_volcanoes"))
-      .toMatchObject({ default_related_hazards: ["air_quality", "extreme_heat"] });
+    expect(output.hazards.find((item) => item.tool_input.hazard === "wind_storm"))
+      .toMatchObject({ tool_input: { related_hazards: ["flood_storm"] } });
+    expect(output.hazards.find((item) => item.tool_input.hazard === "earth_volcanoes"))
+      .toMatchObject({ tool_input: { related_hazards: ["air_quality", "extreme_heat"] } });
+    expect(output.hazards.map((item) => item.label)).toEqual([
+      "Fire & Smoke",
+      "Flood & Heavy Rain",
+      "Wind & Storm",
+      "Extreme Heat",
+      "Drought & Land",
+      "Air Quality",
+      "Earth & Volcanoes",
+    ]);
+    const serialized = JSON.stringify(output);
+    expect(serialized).not.toMatch(/missing_hazard_request|default_analysis_scope|ask_person_to_choose_hazard_and_wait|do_not_analyze_or_guess|analysis_input|demo_id/u);
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(
       MAX_DISCOVERY_TOOL_OUTPUT_CHARACTERS
     );
@@ -100,10 +109,13 @@ describe("WebMCP discovery tools", () => {
 
     for (const hazard of HAZARD_IDS) {
       const output = await tool.execute({ hazard }, options) as {
+        hazard_label: string;
         source_count: number;
         sources: Array<{
-          source_id: string;
-          temporal_coverage: string;
+          source_name: string;
+          availability: string;
+          region: string;
+          time_range: string;
         }>;
       };
       const expected = SOURCE_COVERAGE_PROFILES.filter((profile) =>
@@ -111,17 +123,23 @@ describe("WebMCP discovery tools", () => {
       );
       expect(output).toMatchObject({
         status: "coverage_catalog",
-        hazard,
+        status_label: expect.any(String),
+        display_summary: expect.stringMatching(/sources|coverage/iu),
         source_count: expected.length,
-        coverage_scope: "pipeline_eligibility_not_observation",
-        live_sources_queried: false,
-        actual_observation_not_established: true,
       });
-      expect(output.sources.map((item) => item.source_id)).toEqual(
-        expected.map((profile) => profile.sourceId)
+      expect(output.sources.map((item) => item.source_name)).toEqual(
+        expected.map((profile) => profile.publicName)
       );
-      expect(output.sources.every((item) => item.temporal_coverage.length > 0)).toBe(true);
-      expect(JSON.stringify(output).length).toBeLessThanOrEqual(
+      expect(output.sources.every((item) => item.time_range.length > 0)).toBe(true);
+      expect(output.sources.every((item) => item.region.length > 0)).toBe(true);
+      expect(output.sources.every((item) => item.availability.length > 0)).toBe(true);
+      expect(output.sources.every((item) => !item.source_name.includes("_"))).toBe(true);
+      const serialized = JSON.stringify(output);
+      expect(serialized).not.toMatch(/"(?:hazard|source_id|integration_status|evidence_role|coverage_scope|live_sources_queried|actual_observation_not_established|next_step)"\s*:/u);
+      for (const profile of expected) {
+        expect(serialized).not.toContain(profile.sourceId);
+      }
+      expect(serialized.length).toBeLessThanOrEqual(
         MAX_DISCOVERY_TOOL_OUTPUT_CHARACTERS
       );
     }
@@ -129,10 +147,18 @@ describe("WebMCP discovery tools", () => {
 
   it("fails closed for missing, unknown, or unexpected coverage input", async () => {
     const tool = createGetEnvironmentalSourceCoverageTool();
-    await expect(tool.execute({}, options)).resolves.toMatchObject({ status: "invalid_input" });
-    await expect(tool.execute({ hazard: "tornado" }, options))
-      .resolves.toMatchObject({ status: "invalid_input" });
-    await expect(tool.execute({ hazard: "fire_smoke", extra: true }, options))
-      .resolves.toMatchObject({ status: "invalid_input" });
+    const rejected = await Promise.all([
+      tool.execute({}, options),
+      tool.execute({ hazard: "tornado" }, options),
+      tool.execute({ hazard: "fire_smoke", internal_debug_code: true }, options),
+    ]);
+    for (const output of rejected) {
+      expect(output).toMatchObject({
+        status: "invalid_input",
+        status_label: "Request could not be used",
+      });
+      const serialized = JSON.stringify(output);
+      expect(serialized).not.toMatch(/tornado|internal_debug_code|Unexpected input field|hazard must be one of/u);
+    }
   });
 });

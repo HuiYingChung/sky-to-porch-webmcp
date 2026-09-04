@@ -228,10 +228,38 @@ describe("MissionDashboardCore", () => {
     cleanup(container);
   });
 
-  it("shows dataset ID for GPM entry but not for GOES-West", () => {
+  it("keeps dataset IDs, source IDs, and payload hashes out of visible text", () => {
     const container = renderToDOM(<MissionDashboardCore {...defaultProps()} />);
     const text = container.textContent ?? "";
-    expect(text).toContain("GPM_3IMERGHH_v07");
+    expect(text).not.toContain("GPM_3IMERGHH_v07");
+    expect(text).not.toContain("GOES-18_ABI_L2");
+    expect(text).not.toContain("nasa_gibs_imerg");
+    expect(text).not.toContain("nasa_lance_flood_extent");
+    expect(text).not.toContain("a".repeat(64));
+    expect(text).not.toContain("b".repeat(64));
+    cleanup(container);
+  });
+
+  it("replaces ID-only mission names and filename-shaped agencies with non-empty public text", () => {
+    const privateMissionName = "evd-private-mission";
+    const privateAgency = "internal-agency-record.json";
+    const evidence: EvidenceObject = {
+      ...BASE_EVIDENCE,
+      missionAttributions: [{
+        ...BASE_EVIDENCE.missionAttributions[0],
+        missionName: privateMissionName,
+        agency: privateAgency,
+      }],
+    };
+    const container = renderToDOM(
+      <MissionDashboardCore {...defaultProps({ evidence })} />
+    );
+    const text = container.textContent ?? "";
+
+    expect(text).toContain("Details are not available.");
+    expect(text).toContain("Official source organization");
+    expect(text).not.toContain(privateMissionName);
+    expect(text).not.toContain(privateAgency);
     cleanup(container);
   });
 
@@ -241,7 +269,8 @@ describe("MissionDashboardCore", () => {
     const container = renderToDOM(<MissionDashboardCore {...defaultProps()} />);
     // GPM contributes obs-001 which has observedAt 2024-06-01T06:00:00Z
     const text = container.textContent ?? "";
-    expect(text).toContain("2024-06-01T06:00:00Z");
+    expect(text).toContain("Jun 1, 2024, 6:00 AM UTC");
+    expect(text).not.toContain("2024-06-01T06:00:00Z");
     cleanup(container);
   });
 
@@ -264,7 +293,8 @@ describe("MissionDashboardCore", () => {
       <MissionDashboardCore {...defaultProps({ evidence })} />
     );
     // obs-002 has 2024-06-01T10:30:00Z (later than obs-001 2024-06-01T06:00:00Z)
-    expect(container.textContent).toContain("2024-06-01T10:30:00Z");
+    expect(container.textContent).toContain("Jun 1, 2024, 10:30 AM UTC");
+    expect(container.textContent).not.toContain("2024-06-01T10:30:00Z");
     cleanup(container);
   });
 
@@ -308,7 +338,7 @@ describe("MissionDashboardCore", () => {
       (element) => element.textContent === "Latest known observation"
     );
     expect(latestLabel?.nextElementSibling?.textContent).toBe(
-      "2024-06-01T09:00:00Z"
+      "Jun 1, 2024, 9:00 AM UTC"
     );
     cleanup(container);
   });
@@ -341,7 +371,7 @@ describe("MissionDashboardCore", () => {
       ...BASE_EVIDENCE,
       missionAttributions: [
         {
-          missionName: "FAILED-MISSION",
+          missionName: "Unavailable weather source",
           agency: "TEST",
           purpose: "Failed retrieval test",
           selectionReason: "Test",
@@ -380,6 +410,67 @@ describe("MissionDashboardCore", () => {
     expect(text).toContain("Cloud-top temperature");
     expect(text).not.toContain("obs-001");
     expect(text).not.toContain("obs-002");
+    expect(text).not.toContain("GPM_3IMERGHH_v07");
+    expect(text).not.toContain("a".repeat(64));
+    cleanup(container);
+  });
+
+  it("preserves official fire product names while hiding internal dataset identifiers", () => {
+    const fireObservations = [
+      {
+        ...BASE_EVIDENCE.observations[0],
+        observationId: "obs-fire",
+        provenance: {
+          ...BASE_EVIDENCE.observations[0].provenance,
+          sourceId: "noaa_hms_fire_points" as const,
+        },
+      },
+      {
+        ...BASE_EVIDENCE.observations[1],
+        observationId: "obs-perimeter",
+        provenance: {
+          ...BASE_EVIDENCE.observations[1].provenance,
+          sourceId: "nifc_wfigs_fire_perimeters" as const,
+        },
+      },
+    ];
+    const evidence: EvidenceObject = {
+      ...BASE_EVIDENCE,
+      hazardId: "fire_smoke",
+      observations: fireObservations,
+      missionAttributions: [
+        {
+          ...BASE_EVIDENCE.missionAttributions[0],
+          missionName: "NOAA HMS Fire Detection Points",
+          agency: "NOAA",
+          contributedObservationIds: ["obs-fire"],
+        },
+        {
+          ...BASE_EVIDENCE.missionAttributions[1],
+          missionName: "NIFC WFIGS Interagency Fire Perimeters",
+          agency: "NIFC",
+          contributedObservationIds: ["obs-perimeter"],
+        },
+        {
+          missionName: "NOAA HMS (Live Retrieval — Failed)",
+          agency: "NOAA",
+          purpose: "Check daily fire and smoke information",
+          selectionReason: "Requested fire and smoke information",
+          contributedObservationIds: [],
+          retrievalStatus: "failed",
+          keyLimitation: "The source could not be checked",
+        },
+      ],
+    };
+
+    const container = renderToDOM(<MissionDashboardCore {...defaultProps({ evidence })} />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("NOAA HMS Fire Detection Points");
+    expect(text).toContain("NIFC WFIGS Interagency Fire Perimeters");
+    expect(text).toContain("NOAA HMS (Live Retrieval — Failed)");
+    for (const attribution of evidence.missionAttributions) {
+      if (attribution.datasetId) expect(text).not.toContain(attribution.datasetId);
+    }
     cleanup(container);
   });
 

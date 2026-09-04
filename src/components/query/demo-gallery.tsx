@@ -146,7 +146,7 @@ export function DemoGallery({
       {devPlaces.length > 0 && (
         <div>
           <p style={{ fontSize: "14px", color: "var(--text-muted)", margin: "0 0 4px" }}>
-            Dev test scenarios
+            Test examples
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
             {devPlaces.map((place) => (

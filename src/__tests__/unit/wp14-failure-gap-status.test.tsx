@@ -216,13 +216,14 @@ describe("deterministic copy and structure", () => {
     cleanup(container);
   });
 
-  it("upstream_schema_change shows no unvalidated content", () => {
+  it("explains a source format change without engineering terms", () => {
     const container = renderToDOM(
       <FailureGapStatus state={{ kind: "upstream_schema_change" }} />
     );
     const el = container.querySelector("[data-testid='failure-gap-status']");
-    expect(el?.textContent).toContain("No unvalidated upstream content is shown");
-    expect(el?.textContent).toContain("Separately validated evidence remains available");
+    expect(el?.textContent).toContain("Information that could not be verified is not shown");
+    expect(el?.textContent).toContain("Other verified evidence remains available");
+    expect(el?.textContent).not.toMatch(/schema|upstream/iu);
     cleanup(container);
   });
 

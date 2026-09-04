@@ -42,7 +42,36 @@ import { publicSourceUrl } from "@/data/public-source-links";
 // PR4b batch 1: fire previously carried its own state vocabulary
 // ("Observations returned" / "No observation" / "Source failure"); it now
 // uses the same shared labels as every other hazard.
-import { dataModeLabel, evidenceStateLabel } from "@/lib/ui/evidence-labels";
+import {
+  confidenceLevelLabel,
+  dataModeLabel,
+  evidenceStateLabel,
+  freshnessStatusLabel,
+} from "@/lib/ui/evidence-labels";
+import {
+  formatUtcTimestamp,
+  publicErrorMessage,
+  publicNarrativeText,
+  publicObservationValue,
+  publicSourceName,
+  publicUnitName,
+} from "@/lib/ui/public-presentation";
+
+const INTERNAL_DISPLAY_VALUE = /(?:\b(?:obs|evd|intent|lim|src)-[a-z0-9_-]+\b|\b(?:analysis|place)-[a-z0-9_-]{8,}\b|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b|\b[0-9a-f]{32,}\b|[a-z]:\\|\\\\[^\\\s]+\\|(?:^|\s)\/(?:[^/\s]+\/)+[^/\s]+|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b|\.(?:csv|json|geojson|png|tiff?|kml|xml|psv|txt|zip|gz|pdf|nc|grib2?|hdf5?|parquet)\b)/iu;
+
+function sourceDetail(value: string): string {
+  const safeValue = publicNarrativeText(value);
+  return INTERNAL_DISPLAY_VALUE.test(safeValue) ? "Source details unavailable" : safeValue;
+}
+
+function rejectionMessage(result: FireQueryResult): string {
+  const fallback = "The check could not be completed. No evidence was returned.";
+  if (!result.rejectionReason) return fallback;
+  if (result.kind === "source_failure" || INTERNAL_DISPLAY_VALUE.test(result.rejectionReason)) {
+    return publicErrorMessage(result.rejectionReason);
+  }
+  return result.rejectionReason;
+}
 
 // ---------------------------------------------------------------------------
 // Badge — evidence-driven mode / historical label (WP-05-004)
@@ -52,7 +81,7 @@ function evidenceModeText(dataMode: string): string {
   if (dataMode === "live") return "LIVE RETRIEVAL · HISTORICAL OBSERVATION";
   if (dataMode === "fixture") return "FIXTURE · HISTORICAL";
   if (dataMode === "failed") return "FAILED RETRIEVAL";
-  return dataMode.toUpperCase();
+  return "DATA MODE UNAVAILABLE";
 }
 
 function EvidenceModeBadge({ dataMode }: { dataMode: string }) {
@@ -80,6 +109,29 @@ function EvidenceModeBadge({ dataMode }: { dataMode: string }) {
   );
 }
 
+function coverageStatusLabel(status: FireTemporalCoverage["status"]): string {
+  if (status === "complete") return "All selected dates were checked";
+  if (status === "partial") return "Some selected dates could not be checked";
+  if (status === "unsupported") return "The selected date is not available";
+  return "The selected dates could not be checked";
+}
+
+function coverageDayStatusLabel(status: FireTemporalCoverage["days"][number]["status"]): string {
+  if (status === "complete") return "Checked";
+  if (status === "unsupported") return "Not available";
+  return "Could not be checked";
+}
+
+function coverageSourceStatusLabel(
+  status: FireTemporalCoverage["days"][number]["fireStatus"]
+): string {
+  if (status === "complete") return "checked";
+  if (status === "missing") return "no matching information";
+  if (status === "incomplete") return "some information missing";
+  if (status === "failed") return "could not be checked";
+  return "not checked";
+}
+
 function TemporalCoverageSummary({ coverage }: { coverage?: FireTemporalCoverage }) {
   if (!coverage) return null;
   const resolved = coverage.resolvedStartDate
@@ -104,7 +156,7 @@ function TemporalCoverageSummary({ coverage }: { coverage?: FireTemporalCoverage
     >
       <div>
         <strong>UTC date coverage:</strong>{" "}
-        <span data-testid="fire-coverage-status">{coverage.status}</span>
+        <span data-testid="fire-coverage-status">{coverageStatusLabel(coverage.status)}</span>
         {" · "}resolved {resolved}
       </div>
       {coverage.days.length > 0 && (
@@ -117,7 +169,7 @@ function TemporalCoverageSummary({ coverage }: { coverage?: FireTemporalCoverage
             <ul style={{ margin: 0, paddingLeft: "18px" }}>
               {coverage.days.map((day) => (
                 <li key={day.date} data-testid={`fire-coverage-day-${day.date}`}>
-                  {day.date}: {day.status} (Fire {day.fireStatus}; Smoke {day.smokeStatus})
+                  {day.date}: {coverageDayStatusLabel(day.status)} (Fire {coverageSourceStatusLabel(day.fireStatus)}; Smoke {coverageSourceStatusLabel(day.smokeStatus)})
                 </li>
               ))}
             </ul>
@@ -161,7 +213,7 @@ function RequiredLimitations({ evidence }: { evidence: EvidenceObject }) {
       <ul style={{ margin: 0, paddingLeft: "16px" }}>
         {required.map((l) => (
           <li key={l.limitationId} style={{ marginBottom: "2px" }}>
-            {l.description}
+            {publicNarrativeText(l.description)}
           </li>
         ))}
       </ul>
@@ -287,11 +339,8 @@ function EvidencePanel({
       <RequiredLimitations evidence={evidence} />
       <ExplanationAudit explanation={evidence.explanations[0]} />
 
-      {/* Provenance / source */}
+      {/* Public result details. Stable internal IDs stay in the data model. */}
       <div style={{ marginBottom: "8px", fontSize: "14px" }}>
-        <strong>Evidence ID:</strong>{" "}
-        <span data-testid="evidence-id">{evidence.evidenceId}</span>
-        <br />
         <strong>Evidence state:</strong>{" "}
         <span data-testid="evidence-state">{evidenceStateLabel(evidence.evidenceState)}</span>
         <br />
@@ -299,17 +348,17 @@ function EvidencePanel({
         <span data-testid="evidence-data-mode">{dataModeLabel(evidence.dataMode)}</span>
         <br />
         <strong>Confidence:</strong>{" "}
-        <span data-testid="evidence-confidence">{evidence.confidence.level}</span>
+        <span data-testid="evidence-confidence">{confidenceLevelLabel(evidence.confidence.level)}</span>
         {" — "}
-        <span style={{ color: "var(--text-muted)" }}>{evidence.confidence.rationale}</span>
+        <span style={{ color: "var(--text-muted)" }}>{publicNarrativeText(evidence.confidence.rationale)}</span>
         <br />
         <strong>Freshness:</strong>{" "}
-        <span data-testid="evidence-freshness">{evidence.freshness.status}</span>
+        <span data-testid="evidence-freshness">{freshnessStatusLabel(evidence.freshness.status)}</span>
         {" — "}
-        <span style={{ color: "var(--text-muted)" }}>{evidence.freshness.note}</span>
+        <span style={{ color: "var(--text-muted)" }}>{publicNarrativeText(evidence.freshness.note)}</span>
         <br />
         <strong>Assembled at:</strong>{" "}
-        <span data-testid="evidence-assembled-at">{evidence.assembledAt}</span>
+        <span data-testid="evidence-assembled-at">{formatUtcTimestamp(evidence.assembledAt)}</span>
       </div>
 
       {/* Observations */}
@@ -335,8 +384,8 @@ function EvidencePanel({
                 missionSelection={missionSelection}
                 onMissionSelectionChange={onMissionSelectionChange}
               />
-              <div><strong>Source:</strong> {obs.provenance.sourceId}</div>
-              <div><strong>Product:</strong> {obs.provenance.product}</div>
+              <div><strong>Source:</strong> {publicSourceName(obs.provenance.sourceId)}</div>
+              <div><strong>Product:</strong> {sourceDetail(obs.provenance.product)}</div>
               {publicSourceUrl(obs.provenance.sourceId) && (
                 <div>
                   <strong>Public source:</strong>{" "}
@@ -351,25 +400,18 @@ function EvidencePanel({
                   </a>
                 </div>
               )}
-              <div><strong>Observed at:</strong> {obs.provenance.observedAt}</div>
-              <div><strong>Retrieved at:</strong> {obs.provenance.retrievedAt}</div>
-              <div>
-                <strong>Hash:</strong>{" "}
-                <span data-testid={`obs-hash-${obs.observationId}`}
-                  style={{ fontFamily: "monospace", fontSize: "14px" }}>
-                  {obs.provenance.payloadHash}
-                </span>
-              </div>
+              <div><strong>Observed at:</strong> {formatUtcTimestamp(obs.provenance.observedAt)}</div>
+              <div><strong>Retrieved at:</strong> {formatUtcTimestamp(obs.provenance.retrievedAt)}</div>
               {obs.value !== undefined && (
                 <div>
-                  <strong>Value:</strong> {obs.value} {obs.unit ?? ""}
+                  <strong>Value:</strong> {publicObservationValue(obs.value, obs.unit)}
                 </div>
               )}
               {obs.metadata && (
                 <div>
                   <strong>Daily counts:</strong>{" "}
                   {String(obs.metadata["inBoxCount"] ?? obs.value ?? "unknown")} in box /{" "}
-                  {String(obs.metadata["totalCount"] ?? "unknown")} total ({String(obs.metadata["countUnit"] ?? obs.unit ?? "count")})
+                  {String(obs.metadata["totalCount"] ?? "unknown")} total ({publicUnitName(String(obs.metadata["countUnit"] ?? obs.unit ?? "count"))})
                 </div>
               )}
             </div>
@@ -444,7 +486,7 @@ function MissionsPanel({
           data-testid={`mission-${ma.missionName.replace(/\s+/g, "-").toLowerCase()}`}
           style={{ marginBottom: "8px", fontSize: "14px" }}
         >
-          <div style={{ fontWeight: 600, marginBottom: "2px" }}>{ma.missionName}</div>
+          <div style={{ fontWeight: 600, marginBottom: "2px" }}>{publicNarrativeText(ma.missionName)}</div>
           <MissionReferenceDetails datasetId={ma.datasetId} missionName={ma.missionName} />
         </div>
       ))}
@@ -478,7 +520,9 @@ function RejectionPanel({ result }: { result: FireQueryResult }) {
             ? "Source failure"
             : "Unsupported date"}
       </strong>
-      <p style={{ margin: 0 }}>{result.rejectionReason}</p>
+      <p style={{ margin: 0 }}>
+        {rejectionMessage(result)}
+      </p>
       <p data-testid="explanation-provider-status" style={{ margin: "6px 0 0", color: "var(--text-muted)" }}>
         No AI was used because there was no validated evidence to explain.
       </p>
@@ -515,7 +559,7 @@ export function FireEvidenceInsightPanel({
       ? <RejectionPanel result={result} />
       : (
           <div data-testid="fire-no-evidence" style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
-            No evidence object available.
+            No verified evidence is available.
           </div>
         );
   }

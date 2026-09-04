@@ -118,20 +118,30 @@ test("expanded details survive tab switches and reset only on a new query (ADR-0
     .toHaveAttribute("aria-expanded", "false");
 });
 
-test("Evidence owns the claim audit, exact observations, provenance, and product URL", async ({ page }) => {
+test("Evidence owns the claim audit, exact observations, provenance, and product URL without internal IDs", async ({ page }) => {
   await submitFireFixture(page);
   const evidence = await insight(page, "evidence");
   await expect(evidence.getByTestId("fire-evidence-summary")).toBeVisible();
   await expect(evidence.getByTestId("explanation-audit")).not.toBeVisible();
   await evidence.getByTestId("fire-evidence-details-toggle").click();
   await expect(evidence.getByTestId("explanation-audit")).toBeVisible();
-  await expect(evidence.getByTestId("evidence-id")).not.toBeEmpty();
+  await expect(evidence.getByTestId("evidence-id")).toHaveCount(0);
   await expect(evidence.locator('[data-testid^="observation-"]')).toHaveCount(2);
-  await expect(evidence.locator('[data-testid^="obs-hash-"]')).toHaveCount(2);
-  await expect(evidence.locator('[data-testid^="obs-hash-"]').first()).toHaveText(/^[a-f0-9]{64}$/iu);
+  await expect(evidence.locator('[data-testid^="obs-hash-"]')).toHaveCount(0);
+  await expect(evidence).toContainText("NOAA HMS Fire Detection Points");
+  await expect(evidence).toContainText("NOAA HMS Smoke Polygons");
+  await expect(evidence).toContainText("Jan 8, 2025, 12:00 AM UTC");
+  await expect(evidence).toContainText("Value: 4942 source map points");
+  await expect(evidence).toContainText("Value: 83 source map points");
   await expect(evidence.locator('[data-testid^="obs-source-url-"]').first())
     .toHaveAttribute("href", /ospo\.noaa\.gov/iu);
-  await expect(evidence).not.toContainText("Official mission/product overview");
+  const visibleText = await evidence.innerText();
+  expect(visibleText).not.toMatch(/\b(?:evd|obs)-[a-z0-9-]+\b/iu);
+  expect(visibleText).not.toMatch(/\b[a-f0-9]{64}\b/iu);
+  expect(visibleText).not.toMatch(/noaa_hms|payload hash|evidence id/iu);
+  expect(visibleText).not.toMatch(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/u);
+  expect(visibleText).not.toMatch(/\.(?:csv|json|geojson|png|tiff?|kml|xml|psv|txt|zip|gz)\b/iu);
+  expect(visibleText).not.toContain("Official mission/product overview");
 });
 
 test("Missions is clearly background imagery, not this result's exact observation", async ({ page }) => {
@@ -143,7 +153,8 @@ test("Missions is clearly background imagery, not this result's exact observatio
   await missions.getByTestId("fire-missions-details-toggle").click();
   await expect(missions.getByTestId("mission-reference-details")).toBeVisible();
   await expect(missions.getByText("Official mission/product overview", { exact: false })).toBeVisible();
-  await expect(missions).not.toContainText("Evidence ID:");
+  const visibleText = await missions.innerText();
+  expect(visibleText).not.toMatch(/Evidence ID|Observation ID|payload hash|\b[a-f0-9]{64}\b/iu);
 });
 
 test("no-observation and source-failure results never become a no-danger claim", async ({ page }) => {

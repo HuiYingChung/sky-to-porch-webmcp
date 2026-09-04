@@ -6,6 +6,7 @@ import type { MeaningSectionKind } from "@/contracts/meaning";
 import { getVerificationSource } from "@/data/verification-sources";
 import type { EvidenceExplanationStatus } from "@/lib/ai/evidence-explainer";
 import { explanationStatusLabel } from "@/lib/ui/explanation-status";
+import { publicNarrativeText } from "@/lib/ui/public-presentation";
 
 const SECTION_ACCENTS: Record<MeaningSectionKind, string> = {
   observed: "#2563eb",
@@ -44,7 +45,9 @@ export function AdaptiveMeaningPanel({
   explanationStatus,
 }: AdaptiveMeaningPanelProps) {
   const meaning = explanation.meaning;
-  const directAnswer = meaning?.directAnswer ?? explanation.plainSummary ?? explanation.observed;
+  const directAnswer = publicNarrativeText(
+    meaning?.directAnswer ?? explanation.plainSummary ?? explanation.observed
+  );
   const answerPreview = conciseAnswer(directAnswer);
   const sections = meaning?.sections ?? [];
   const verificationSources = (meaning?.verificationSourceIds ?? []).map(getVerificationSource);
@@ -93,10 +96,10 @@ export function AdaptiveMeaningPanel({
                   }}
                 >
                   <h3 style={{ margin: "0 0 3px", fontSize: "15px", color: "var(--text-primary)" }}>
-                    {section.heading}
+                    {publicNarrativeText(section.heading)}
                   </h3>
                   <p style={{ margin: 0, fontSize: "14px", lineHeight: 1.55, color: "var(--text-secondary)" }}>
-                    {section.body}
+                    {publicNarrativeText(section.body)}
                   </p>
                 </section>
               ))}

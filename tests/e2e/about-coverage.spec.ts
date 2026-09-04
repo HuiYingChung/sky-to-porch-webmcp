@@ -43,8 +43,12 @@ test("About keeps coverage compact and exposes Satellite data with keyboard-safe
 
   const dialog = page.getByRole("dialog", { name: "About Sky to Porch" });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByTestId("about-source-link")).toHaveAttribute(
+    "href",
+    "https://github.com/HuiYingChung/sky-to-porch-webmcp"
+  );
   await expect(dialog).toContainText("It does not mean no danger");
-  await expect(dialog).toContainText("Current primary gaps");
+  await expect(dialog).toContainText("Availability at a glance");
   await expect(dialog.locator(".about-hazard-card")).toHaveCount(7);
   await expect(dialog.locator(".about-hazard-card[open]")).toHaveCount(0);
 
@@ -52,6 +56,32 @@ test("About keeps coverage compact and exposes Satellite data with keyboard-safe
   // (asserted further down) must keep working afterwards.
   await dialog.getByTestId("about-expand-all").click();
   await expect(dialog.locator(".about-hazard-card[open]")).toHaveCount(7);
+  const readableCatalog = await dialog.innerText();
+  expect(readableCatalog).toContain("Live integrated");
+  expect(readableCatalog).toContain("Live · server key required");
+  expect(readableCatalog).toContain("Prepared · live smoke pending");
+  expect(readableCatalog).toContain("Registered candidate");
+  expect(readableCatalog).toContain("Supporting only");
+  expect(readableCatalog).toContain("Needs setup");
+  expect(readableCatalog).toContain("Not available yet");
+  expect(readableCatalog).toContain("Background information");
+  expect(await dialog.locator(".about-hazard-card > summary").allInnerTexts()).toEqual([
+    "Fire & Smoke\n6 live paths",
+    "Flood & Heavy Rain\n7 live paths",
+    "Wind & Storm\n4 live paths",
+    "Extreme Heat\n4 live paths",
+    "Drought & Land\n3 live paths",
+    "Air Quality\n4 live paths",
+    "Earth & Volcanoes\n4 live paths",
+  ]);
+  expect(readableCatalog).not.toContain("available now");
+  expect(readableCatalog).not.toMatch(/nasa_gibs|usgs_instantaneous|Observation IDs?|Evidence ID|Hash:/i);
+  expect(readableCatalog).not.toMatch(/\b(?:Sources?|Observation IDs?|Evidence IDs?|Hash)\s*:/i);
+  expect(readableCatalog).not.toMatch(/\b(?:obs|evd|intent|lim|src)-[a-z0-9_-]+\b/i);
+  expect(readableCatalog).not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i);
+  expect(readableCatalog).not.toMatch(/\b[0-9a-f]{32,}\b/i);
+  expect(readableCatalog).not.toMatch(/\.(?:csv|json|geojson|png|tiff?|kml|xml|psv|txt|zip|gz)\b/i);
+  expect(readableCatalog).not.toMatch(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/u);
   await dialog.getByTestId("about-collapse-all").click();
   await expect(dialog.locator(".about-hazard-card[open]")).toHaveCount(0);
   await expectSingleAboutScrollOwner(dialog);

@@ -24,6 +24,7 @@ import type { WildfirePointProperties } from "@/contracts/wildfire-layer";
 import type { FloodExtentLayerResult } from "@/contracts/flood-extent-layer";
 import { shouldSelectMapClick } from "@/lib/location/map-click";
 import { FailureGapStatus } from "@/components/states/failure-gap-status";
+import { formatUtcTimestamp, publicErrorMessage } from "@/lib/ui/public-presentation";
 import type { LayerState } from "./layer-manager";
 
 interface MaplibreMapCanvasProps {
@@ -116,13 +117,14 @@ const WILDFIRE_HALO_LAYER_ID = "firms-wildfire-nrt-halo";
 const WILDFIRE_POINT_LAYER_ID = "firms-wildfire-nrt-points";
 const FLOOD_EXTENT_SOURCE_PREFIX = "viirs-flood-extent-image";
 const FLOOD_EXTENT_LAYER_ID = "viirs-flood-extent-raster";
+
 function wildfirePopupContent(properties: WildfirePointProperties): HTMLElement {
   const container = document.createElement("div");
   const title = document.createElement("strong");
   title.textContent = "NASA FIRMS hotspot pixel";
   const details = document.createElement("div");
   details.textContent =
-    `Acquired ${properties.acquiredAt.replace("T", " ").replace("Z", " UTC")} · ` +
+    `Acquired ${formatUtcTimestamp(properties.acquiredAt)} · ` +
     `${properties.confidence} confidence · FRP ${properties.frpMw} MW`;
   const limitation = document.createElement("div");
   limitation.textContent = "Thermal anomaly only — not a wildfire perimeter or official incident.";
@@ -676,9 +678,7 @@ export function MaplibreMapCanvas({
         setPlaceSelection(sel);
       } catch (err) {
         // Coordinate validation error (e.g. out of bounds) — show persistent alert
-        setMapSelectionError(
-          err instanceof Error ? err.message : "Map click location is not valid for selection."
-        );
+        setMapSelectionError(publicErrorMessage(err));
       }
     });
 
@@ -830,8 +830,7 @@ export function MaplibreMapCanvas({
       >
         <FailureGapStatus state={{ kind: "map_failure" }} onRecover={onUseWithoutMap} />
         <p style={{ margin: 0, color: "var(--text-muted)" }}>
-          WebGL is unavailable in this browser environment. The validated non-map
-          selection and evidence path remains operable.
+          This browser cannot show the map. You can still choose a place and check the information without it.
         </p>
       </div>
     );
@@ -852,8 +851,8 @@ export function MaplibreMapCanvas({
       >
         <FailureGapStatus state={{ kind: "map_failure" }} onRecover={onUseWithoutMap} />
         <p style={{ margin: 0, color: "var(--text-muted)" }}>
-          Basemap tiles could not be loaded ({OSM_ATTRIBUTION}). Selection controls
-          and the validated non-map evidence path remain operable.
+          The base map could not be loaded ({OSM_ATTRIBUTION}). You can still choose a place and check the
+          information without it.
         </p>
       </div>
     );

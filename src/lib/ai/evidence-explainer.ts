@@ -26,8 +26,14 @@ import {
   type Observation,
 } from "@/contracts/evidence";
 import type { EvidenceEvaluationResult } from "@/lib/evidence/evaluator";
-import { getRegistryEntry } from "@/data/dataset-registry";
 import { normalizeOptionalQuestion } from "@/lib/ai/optional-question";
+import {
+  formatUtcTimestamp,
+  publicNarrativeText,
+  publicObservationValue,
+  publicSourceName,
+  publicVariableName,
+} from "@/lib/ui/public-presentation";
 import {
   defaultVerificationSourceIds,
   eligibleVerificationSources,
@@ -715,10 +721,9 @@ export function deterministicPlainSummary(
   if (airSummary) return airSummary;
   const earthSummary = earthDeterministicSummary(evidence, concern);
   if (earthSummary) return earthSummary;
-  const sources = [...new Set(evidence.observations.map((observation) => {
-    const entry = getRegistryEntry(observation.provenance.sourceId);
-    return entry?.displayName ?? observation.provenance.sourceId;
-  }))];
+  const sources = [...new Set(evidence.observations.map((observation) =>
+    publicSourceName(observation.provenance.sourceId)
+  ))];
   const sourceSentence = sources.length > 0
     ? `This comes from ${sources.join(" and ")}.`
     : "";
@@ -1108,9 +1113,8 @@ export function buildEvidenceSelectionContext(
     observations: evidence.observations.map((observation) => ({
       observationId: observation.observationId,
       sourceId: observation.provenance.sourceId,
-      sourceName: getRegistryEntry(observation.provenance.sourceId)?.displayName ??
-        observation.provenance.sourceId,
-      variableName: observation.variableName,
+      sourceName: publicSourceName(observation.provenance.sourceId),
+      variableName: publicVariableName(observation.variableName),
       ...(observation.value !== undefined ? { value: observation.value } : {}),
       ...(observation.textValue !== undefined ? { textValue: observation.textValue } : {}),
       ...(observation.unit !== undefined ? { unit: observation.unit } : {}),
@@ -1123,7 +1127,7 @@ export function buildEvidenceSelectionContext(
     })),
     metrics: evidence.derivedMetrics.map((metric) => ({
       metricId: metric.metricId,
-      variableName: metric.metricName,
+      variableName: publicVariableName(metric.metricName),
       value: metric.value,
       unit: metric.unit,
     })),
@@ -1460,12 +1464,12 @@ export function parseSelectionCandidate(
 
 function formatObservation(observation: Observation): string {
   const value = observation.value !== undefined
-    ? `${observation.value} ${observation.unit ?? "units"}`
-    : observation.textValue ?? "validated value unavailable";
-  const source = getRegistryEntry(observation.provenance.sourceId);
-  const sourceLabel = source?.displayName ?? observation.provenance.sourceId;
-  const variableLabel = observation.variableName.replaceAll("_", " ");
-  return `Validated ${variableLabel}: ${value} from ${sourceLabel}, observed at ${observation.provenance.observedAt}.`;
+    ? publicObservationValue(observation.value, observation.unit)
+    : publicNarrativeText(observation.textValue ?? "Value unavailable");
+  const sourceLabel = publicSourceName(observation.provenance.sourceId);
+  const variableLabel = publicVariableName(observation.variableName);
+  const observedAt = formatUtcTimestamp(observation.provenance.observedAt);
+  return `Validated ${variableLabel}: ${value} from ${sourceLabel}, observed at ${observedAt}.`;
 }
 
 const CONCERN_LABELS: Record<ConcernType, string> = {
@@ -1587,19 +1591,25 @@ function conflictSummary(evaluation: EvidenceEvaluationResult): string | undefin
     }
     return undefined;
   }
-  const labels = evaluation.conflicts.map((conflict) =>
-    conflict.code === "source_disagreement"
-      ? `source disagreement (${conflict.observationIds.join(", ")})`
-      : `required source gap (${conflict.observationIds.join(", ")})`
-  );
-  return `Deterministic evaluation found: ${labels.join("; ")}.`;
+  const labels = conflictPublicLabels(evaluation);
+  return `Some information still needs checking: ${labels.join("; ")}.`;
 }
 
 /**
- * PR4b batch 1: the Meaning tab states conflicts as counts in plain words.
- * Raw observation ids stay in the Evidence tab's audit (conflictSummary
- * above), which is also why a 306-observation swarm day stays readable here.
+ * Both the Meaning and Evidence views state conflicts as counts in plain
+ * words. Stable record identifiers remain in the validated evidence object
+ * for internal linking and auditing, but are not placed in explanatory prose.
  */
+function conflictPublicLabels(evaluation: EvidenceEvaluationResult): string[] {
+  const recordCount = (ids: readonly string[]) =>
+    ids.length === 1 ? "1 record" : `${ids.length} records`;
+  return evaluation.conflicts.map((conflict) =>
+    conflict.code === "source_disagreement"
+      ? `sources disagree about ${recordCount(conflict.observationIds)}`
+      : `a needed source is missing for ${recordCount(conflict.observationIds)}`
+  );
+}
+
 function conflictMeaningSummary(evaluation: EvidenceEvaluationResult): string | undefined {
   if (evaluation.conflicts.length === 0) {
     if (evaluation.evidence.freshness.status === "stale") {
@@ -1657,7 +1667,7 @@ function renderExplanation(
   const factSentences = [
     ...selectedObservations.map(formatObservation),
     ...selectedMetrics.map((metric) =>
-      `Validated derived ${metric.metricName.replaceAll("_", " ")}: ${metric.value} ${metric.unit}.`
+      `Validated derived ${publicVariableName(metric.metricName)}: ${publicObservationValue(metric.value, metric.unit)}.`
     ),
   ];
   const observed = factSentences.length > 0

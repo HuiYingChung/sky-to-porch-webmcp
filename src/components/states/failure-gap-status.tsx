@@ -138,11 +138,11 @@ const KIND_META: Record<FailureGapKind, KindMeta> = {
     recoveryLabel: "Try again",
   },
   upstream_schema_change: {
-    title: "Upstream format change",
+    title: "Source format changed",
     explanation:
-      "An upstream source returned a response that does not match the validated schema.",
+      "A data source returned information in a format this app cannot read.",
     boundary:
-      "No unvalidated upstream content is shown. Separately validated evidence remains available; the affected source stays unresolved until its schema is re-validated.",
+      "Information that could not be verified is not shown. Other verified evidence remains available; conditions from the affected source remain unknown until it can be checked again.",
     tone: "alert",
     recoveryLabel: "Try again",
   },

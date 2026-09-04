@@ -34,6 +34,8 @@ export interface SatelliteIdentity {
  */
 export interface SourceCoverageProfile {
   sourceId: SourceId;
+  /** Plain-language source name for people reading the coverage catalog. */
+  publicName: string;
   hazardIds: readonly HazardId[];
   level: CoverageLevel;
   kind: CoverageSourceKind;

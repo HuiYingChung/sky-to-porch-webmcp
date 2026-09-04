@@ -53,4 +53,36 @@ describe("deterministic evidence explanation", () => {
     expect(requiredSafetyStatements("earth_volcanoes", "observations_returned").join(" "))
       .toMatch(/prediction/iu);
   });
+
+  it("keeps internal source and observation identifiers out of explanation prose", async () => {
+    const evaluation = evaluatedFire();
+    const internalObservationId = evaluation.evidence.observations[0].observationId;
+    const conflicted: EvidenceEvaluationResult = {
+      evidence: {
+        ...evaluation.evidence,
+        evidenceState: "inconclusive_evidence",
+        confidence: {
+          level: "insufficient",
+          rationale: "The available sources disagree.",
+        },
+      },
+      conflicts: [{
+        code: "source_disagreement",
+        observationIds: [internalObservationId, "obs-private-record"],
+      }],
+      inferenceAllowed: false,
+    };
+
+    const result = await explainEvaluatedEvidence(conflicted, "home");
+    const visibleText = [
+      result.explanation.observed,
+      result.explanation.conflictsOrGaps,
+      result.explanation.meaning?.sections.map((section) => section.body).join(" "),
+    ].join(" ");
+
+    expect(visibleText).toContain("sources disagree about 2 records");
+    expect(visibleText).not.toContain(internalObservationId);
+    expect(visibleText).not.toContain("obs-private-record");
+    expect(visibleText).not.toContain("noaa_hms_fire_points");
+  });
 });

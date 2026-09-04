@@ -20,7 +20,10 @@ import {
 } from "@/lib/webmcp/discovery-tools";
 import {
   createLookUpPlaceLocationTool,
+  placeLookupPendingReceipt,
+  placeLookupSupersededReceipt,
   type AgentPlaceLookupReceiptPayload,
+  type BeginAgentPlaceLookupFeedback,
 } from "@/lib/webmcp/place-tool";
 import {
   createSetEnvironmentalMapLayersTool,
@@ -95,6 +98,56 @@ const NOOP_ENVIRONMENTAL_MAP_UPDATE = (): EnvironmentalMapToolUpdateResult => ({
   analysisCleared: false,
 });
 const NOOP_PLACE_LOOKUP_RECEIPT = () => {};
+
+/**
+ * Coordinates the one visible place-search notice shared by every WebMCP
+ * tool. Older async searches may still finish, but can no longer replace the
+ * notice for the latest search.
+ */
+export function createAgentPlaceLookupFeedbackCoordinator(
+  publish: (feedback: AgentPlaceLookupReceiptPayload) => void | Promise<void>
+): BeginAgentPlaceLookupFeedback {
+  let generation = 0;
+  let active: {
+    context: Parameters<BeginAgentPlaceLookupFeedback>[0];
+    finish: () => void;
+  } | null = null;
+
+  return async (context, options) => {
+    const sessionGeneration = ++generation;
+    let finished = false;
+    const previous = active;
+    previous?.finish();
+    active = {
+      context,
+      finish: () => {
+        finished = true;
+      },
+    };
+
+    if (previous) {
+      await publish(placeLookupSupersededReceipt(previous.context));
+    }
+    if (
+      options?.announcePending !== false &&
+      sessionGeneration === generation &&
+      !finished
+    ) {
+      await publish(placeLookupPendingReceipt(context, previous?.context.query));
+    }
+
+    return {
+      isCurrent: () => sessionGeneration === generation && !finished,
+      publish: async (feedback) => {
+        if (sessionGeneration !== generation || finished) return false;
+        finished = true;
+        if (active?.context === context) active = null;
+        await publish(feedback);
+        return true;
+      },
+    };
+  };
+}
 
 /** Registers browser-native WebMCP against the same application service as the UI. */
 export function WebMcpBridge({
@@ -225,10 +278,15 @@ export function WebMcpBridge({
         });
         await committed!;
       };
+      const beginPlaceLookupFeedback =
+        createAgentPlaceLookupFeedbackCoordinator(
+          publishCurrentPlaceLookupReceipt
+        );
       const analysisDependencies = {
         runAnalysis: runCurrentAnalysis,
         runAnalysisBundle: runCurrentAnalysisBundle,
         beginInvocation: beginCurrentContextMutation,
+        beginPlaceLookupFeedback,
       };
       return [
         createAnalyzeHazardTool(analysisDependencies),
@@ -242,6 +300,7 @@ export function WebMcpBridge({
           publishFeedback: publishCurrentPlaceLookupReceipt,
           beginContextInvocation: reserveCurrentContext,
           beginContextMutationInvocation: beginCurrentContextMutation,
+          beginPlaceLookupFeedback,
         }),
         createSetEnvironmentalMapLayersTool({
           readState: () =>
@@ -249,6 +308,7 @@ export function WebMcpBridge({
           applyUpdate: applyCurrentMapUpdate,
           beginContextInvocation: reserveCurrentContext,
           beginContextMutationInvocation: beginCurrentContextMutation,
+          beginPlaceLookupFeedback,
         }),
         createStateBackedInspectEvidenceTool(() => runtimeStateRef.current),
         createStateBackedStormClaimDiscussionTool(() => runtimeStateRef.current),

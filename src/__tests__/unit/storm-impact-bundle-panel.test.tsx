@@ -40,6 +40,11 @@ describe("storm-impact shared view", () => {
     expect(water?.textContent).toContain("Collected automatically");
     expect(water?.textContent).toContain("separate water-only chain");
     expect(water?.textContent).toContain("not wind or roof-causation evidence");
+    for (const observation of floodResult.evidence?.observations ?? []) {
+      expect(water?.textContent).not.toContain(observation.observationId);
+      expect(water?.textContent).not.toContain(observation.provenance.sourceId);
+      expect(water?.textContent).not.toContain(observation.provenance.payloadHash);
+    }
 
     act(() => root.unmount());
     container.remove();

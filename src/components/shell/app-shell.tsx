@@ -74,22 +74,22 @@ function HeaderControls({ onOpenAbout }: { onOpenAbout: () => void }) {
   const agentStatus = webMcpStatus === "ready"
     ? {
         label: "Agent ready",
-        title: "Sky to Porch WebMCP tools are registered and ready for an Agent",
+        title: "Sky to Porch is ready to work with your Agent",
         color: "var(--status-success-fg)",
       }
     : webMcpStatus === "checking" || webMcpStatus === "registering"
       ? {
           label: "Waiting for Agent",
           title: webMcpStatus === "checking"
-            ? "Checking whether this browser exposes WebMCP"
-            : "Registering Sky to Porch WebMCP tools",
+            ? "Checking whether an Agent can connect"
+            : "Preparing Sky to Porch for your Agent",
           color: "var(--status-loading-fg)",
         }
       : {
           label: "Agent unavailable",
           title: webMcpStatus === "unsupported"
-            ? "This browser does not expose WebMCP to Sky to Porch"
-            : "Sky to Porch could not register its WebMCP tools",
+            ? "An Agent cannot connect from this browser"
+            : "Sky to Porch could not prepare the Agent connection",
           color: "var(--status-loading-fg)",
         };
 
@@ -165,7 +165,7 @@ function AnnouncementSlots({
   );
 }
 
-function AgentPlaceLookupNotice({
+export function AgentPlaceLookupNotice({
   receipt,
 }: {
   receipt: AgentPlaceLookupReceipt | null;
@@ -186,19 +186,43 @@ function AgentPlaceLookupNotice({
     receipt.status === "place_lookup_failed";
   const title = receipt.status === "success"
     ? "Map moved to this place"
-    : receipt.status === "needs_place_choice"
-      ? "Which place did you mean?"
-      : receipt.status === "invalid_input"
-        ? "We couldn’t use that place search"
-        : receipt.status === "place_lookup_failed"
-          ? "Place search isn’t available right now"
-          : "We couldn’t find that place";
+    : receipt.status === "place_resolved"
+      ? receipt.map_updated
+        ? "Map moved to this place"
+        : "Place found"
+      : receipt.status === "lookup_pending"
+        ? "Finding the place"
+        : receipt.status === "superseded"
+          ? "Earlier place search stopped"
+          : receipt.status === "needs_place_choice"
+            ? "Which place did you mean?"
+            : receipt.status === "invalid_input"
+              ? receipt.operation === "analysis"
+                ? "We couldn’t start that check"
+                : receipt.operation === "comparison"
+                  ? "We couldn’t start that comparison"
+                  : receipt.operation === "map"
+                    ? "We couldn’t update the map"
+                    : "We couldn’t use that place search"
+              : receipt.status === "place_lookup_failed"
+                ? "Place search isn’t available right now"
+                : "We couldn’t find that place";
   const announcementSlot = (receipt.receipt_revision % 2) as 0 | 1;
+  const errorMessage = receipt.status === "invalid_input"
+    ? "Enter a place name or choose a point on the map. Your current map and results have not changed."
+    : receipt.status === "place_lookup_failed"
+      ? "Try the search again in a moment, or choose a point on the map. Your current map and results have not changed."
+      : "Try a more specific place name or choose a point on the map. Your current map and results have not changed.";
 
   const content = (
     <>
       <div style={{ display: "flex", gap: "8px", alignItems: "baseline", flexWrap: "wrap" }}>
         <strong>{title}</strong>
+        {receipt.context_label && (
+          <span style={{ color: "var(--text-secondary)", fontSize: "14px" }}>
+            {receipt.context_label}
+          </span>
+        )}
         {receipt.query && (
           <span style={{ color: "var(--text-secondary)", fontSize: "14px" }}>
             Searched for: {receipt.query}
@@ -213,10 +237,22 @@ function AgentPlaceLookupNotice({
         </p>
       )}
 
+      {receipt.status === "place_resolved" && (
+        <p style={{ margin: "4px 0 0", fontSize: "14px" }}>
+          {receipt.canonical_label} · Latitude {readableCoordinate(receipt.representative_point.latitude)}, longitude {readableCoordinate(receipt.representative_point.longitude)}. {receipt.message}
+        </p>
+      )}
+
+      {(receipt.status === "lookup_pending" || receipt.status === "superseded") && (
+        <p style={{ margin: "4px 0 0", fontSize: "14px" }}>
+          {receipt.message}
+        </p>
+      )}
+
       {receipt.status === "needs_place_choice" && (
         <>
           <p style={{ margin: "4px 0 8px", fontSize: "14px" }}>
-            {receipt.message} Your current map and results have not changed.
+            {receipt.message}
           </p>
           <ol
             data-testid="agent-place-lookup-choices"
@@ -263,7 +299,9 @@ function AgentPlaceLookupNotice({
       )}
 
       {isError && (
-        <p style={{ margin: "4px 0 0", fontSize: "14px" }}>{receipt.message}</p>
+        <p style={{ margin: "4px 0 0", fontSize: "14px" }}>
+          {receipt.message || errorMessage}
+        </p>
       )}
     </>
   );
@@ -272,6 +310,8 @@ function AgentPlaceLookupNotice({
     <section
       data-testid="agent-place-lookup-notice"
       data-status={receipt.status}
+      tabIndex={receipt.status === "needs_place_choice" ? 0 : undefined}
+      aria-label={receipt.status === "needs_place_choice" ? "Place search choices" : undefined}
       style={{
         padding: "10px 14px",
         borderBottom: "1px solid var(--border-default)",
@@ -279,6 +319,10 @@ function AgentPlaceLookupNotice({
         color: "var(--text-primary)",
         fontSize: "14px",
         flexShrink: 0,
+        maxHeight: "min(42vh, 360px)",
+        overflowY: "auto",
+        overflowWrap: "anywhere",
+        overscrollBehavior: "contain",
       }}
     >
       <AnnouncementSlots
