@@ -21,6 +21,14 @@ async function mapPanel(page: Page): Promise<Locator> {
 test("a failing GIBS overlay never removes the basemap", async ({ page }) => {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/map/gibs-availability") {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, error: "source_failure" }),
+      });
+      return;
+    }
     if (url.hostname === "tile.openstreetmap.org") {
       await route.fulfill({ status: 200, contentType: "image/png", body: TRANSPARENT_PNG });
       return;
@@ -35,6 +43,12 @@ test("a failing GIBS overlay never removes the basemap", async ({ page }) => {
     await route.continue();
   });
   await gotoHydrated(page, "/?dev=1");
+
+  // Give the overlay an explicit selected analysis area and one resolved UTC
+  // date so this test reaches the browser tile path it is intended to cover.
+  await page.getByTestId(/^(desktop|mobile)-gq-place-demo-houston$/)
+    .filter({ visible: true })
+    .click();
 
   const map = await mapPanel(page);
   await expect(map.getByTestId("map-canvas")).toBeVisible();
@@ -60,6 +74,14 @@ test("a failing GIBS overlay never removes the basemap", async ({ page }) => {
 test("a failing OSM basemap still shows the basemap-unavailable panel", async ({ page }) => {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/map/gibs-availability") {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, error: "source_failure" }),
+      });
+      return;
+    }
     if (url.hostname === "tile.openstreetmap.org") {
       await route.abort();
       return;

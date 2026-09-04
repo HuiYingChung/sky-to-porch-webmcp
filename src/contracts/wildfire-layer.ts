@@ -45,6 +45,7 @@ export interface WildfireLayerResult {
 
 export type WildfireLayerErrorCode =
   | "invalid_input"
+  | "unsupported_date"
   | "unconfigured"
   | "source_failure"
   | "rate_limited"
@@ -123,7 +124,7 @@ export function parseWildfireLayerEnvelope(value: unknown): WildfireLayerEnvelop
   if (value.ok === false) {
     if (!hasExactKeys(value, ["ok", "error"])) return null;
     const allowedErrors: WildfireLayerErrorCode[] = [
-      "invalid_input", "unconfigured", "source_failure", "rate_limited",
+      "invalid_input", "unsupported_date", "unconfigured", "source_failure", "rate_limited",
       "schema_validation", "response_too_large",
     ];
     return allowedErrors.includes(value.error as WildfireLayerErrorCode)

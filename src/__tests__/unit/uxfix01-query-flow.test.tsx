@@ -133,19 +133,32 @@ interface RecordedCall {
 
 const recordedCalls: RecordedCall[] = [];
 
+function isEvidenceQueryUrl(url: string): boolean {
+  return /^\/api\/(?:air|drought|fire|flood|heat|storm|volcano)\/query$/u.test(url);
+}
+
 beforeEach(() => {
   recordedCalls.length = 0;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
-      recordedCalls.push({
-        url: String(url),
-        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
-      });
+      const requestUrl = String(url);
+      // Environmental-map overlays now probe availability from the shared
+      // QueryProvider. Those background reads are intentionally outside the
+      // evidence-submission assertions in this query-flow suite.
+      if (isEvidenceQueryUrl(requestUrl)) {
+        recordedCalls.push({
+          url: requestUrl,
+          body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+        });
+      }
       return {
+        ok: true,
         json: async () => ({
           ok: true,
-          result: { kind: "unsupported_place", rejectionReason: "test stub" },
+          result: requestUrl.startsWith("/api/map/gibs-availability")
+            ? { visiblePixelsDetected: false }
+            : { kind: "unsupported_place", rejectionReason: "test stub" },
         }),
       } as unknown as Response;
     })
@@ -234,9 +247,18 @@ describe("UXFIX-01 guided query flow", () => {
 
   it("shows the required loading semantics on the same primary CTA", async () => {
     let resolveRequest: ((response: Response) => void) | undefined;
-    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => {
-      resolveRequest = resolve;
-    }));
+    vi.mocked(fetch).mockImplementation((url: string | URL | Request) => {
+      const requestUrl = String(url);
+      if (requestUrl === "/api/flood/query") {
+        return new Promise<Response>((resolve) => {
+          resolveRequest = resolve;
+        });
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        ok: true,
+        result: { visiblePixelsDetected: false },
+      }), { headers: { "Content-Type": "application/json" } }));
+    });
     renderGuidedQuery();
     click(byTestId("t-gq-place-demo-houston"));
     setSelectValue(byTestId("hazard-select") as HTMLSelectElement, "flood_storm");

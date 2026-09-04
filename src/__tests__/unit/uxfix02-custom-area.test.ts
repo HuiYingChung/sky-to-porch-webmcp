@@ -684,7 +684,13 @@ describe("Photon geocode parsing", () => {
         },
       ],
     });
-    expect(results).toEqual([{ label: "Taipei, Taiwan", lon: 121.56, lat: 25.03 }]);
+    expect(results).toEqual([{
+      label: "Taipei, Taiwan",
+      lon: 121.56,
+      lat: 25.03,
+      boundingBox: null,
+      adminContext: { country: "Taiwan" },
+    }]);
   });
 
   it("keeps stable OSM identities and distinguishes a city from a same-name county", () => {
@@ -725,13 +731,99 @@ describe("Photon geocode parsing", () => {
         label: "Houston (city), Harris, Texas, United States",
         lon: -95.3676974,
         lat: 29.7589382,
+        boundingBox: null,
+        adminContext: {
+          county: "Harris",
+          state: "Texas",
+          country: "United States",
+        },
       },
       {
         id: "osm-r-1840945",
         label: "Houston (county), Texas, United States",
         lon: -95.390805,
         lat: 31.3378465,
+        boundingBox: null,
+        adminContext: {
+          state: "Texas",
+          country: "United States",
+        },
       },
+    ]);
+  });
+
+  it("normalizes Photon's upper-left/lower-right extent and returns only supplied admin context", () => {
+    const results = parsePhotonResponse({
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        properties: {
+          name: "Paris",
+          type: "city",
+          city: "Paris",
+          state: "Île-de-France",
+          country: "France",
+          countrycode: "fr",
+          extent: [2.2241, 48.9022, 2.4699, 48.8156],
+        },
+        geometry: { type: "Point", coordinates: [2.3522, 48.8566] },
+      }],
+    });
+
+    expect(results[0]).toMatchObject({
+      boundingBox: {
+        west: 2.2241,
+        south: 48.8156,
+        east: 2.4699,
+        north: 48.9022,
+      },
+      adminContext: {
+        city: "Paris",
+        state: "Île-de-France",
+        country: "France",
+        countryCode: "FR",
+      },
+    });
+    expect(results[0].adminContext).not.toHaveProperty("county");
+  });
+
+  it("drops a provider extent that does not contain its representative point", () => {
+    const results = parsePhotonResponse({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {
+            name: "Houston",
+            extent: [2, 49, 3, 48],
+          },
+          geometry: { type: "Point", coordinates: [-95.3677, 29.7589] },
+        },
+        {
+          type: "Feature",
+          properties: {
+            name: "Dateline place",
+            extent: [176, -15, -178, -19],
+          },
+          geometry: { type: "Point", coordinates: [179, -17] },
+        },
+        {
+          type: "Feature",
+          properties: {
+            name: "Corrupt wrapped extent",
+            extent: [176, -15, -178, -19],
+          },
+          // This point would fall inside an incorrect min/max expansion.
+          geometry: { type: "Point", coordinates: [0, -17] },
+        },
+      ],
+    });
+
+    expect(results).toHaveLength(3);
+    expect(results.map((result) => result.boundingBox)).toEqual([
+      null,
+      null,
+      null,
     ]);
   });
 

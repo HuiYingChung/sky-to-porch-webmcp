@@ -47,7 +47,9 @@ async function insight(page: Page, tab: "meaning" | "evidence" | "missions"): Pr
 async function mapPanel(page: Page): Promise<Locator> {
   const mobileMap = page.getByTestId("mobile-nav-map");
   if (await mobileMap.isVisible()) await mobileMap.click();
-  return page.getByTestId("analysis-map").filter({ visible: true });
+  const map = page.getByTestId("analysis-map").filter({ visible: true });
+  await expect(map.getByTestId("map-canvas")).toBeVisible();
+  return map;
 }
 
 test("Heat Meaning is adaptive while Evidence owns six claim assessments", async ({ page }) => {

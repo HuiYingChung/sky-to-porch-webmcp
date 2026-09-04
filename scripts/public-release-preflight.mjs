@@ -107,6 +107,18 @@ const CONTENT_RULES = [
 const reviewedLiteral = (...parts) => parts.join("");
 
 const REVIEWED_PUBLIC_MATCHES = new Map([
+  // Documented placeholder contact for local-only diagnostic request headers.
+  [".env.example", new Set([reviewedLiteral("you", "@", "example.com")])],
+  // Public ArcGIS item URL for the reviewed World Bank flood dataset catalog entry.
+  [
+    "src/data/dataset-registry.ts",
+    new Set([
+      reviewedLiteral(
+        "/ho",
+        "me/item.html?id=5e72b1699bf74eefb3f3aff6f4ba5511"
+      ),
+    ]),
+  ],
   // npm's own lockfile metadata for a deprecated transitive package.
   ["package-lock.json", new Set([reviewedLiteral("i", "@", "izs.me")])],
   // A deliberately credential-shaped, non-routable test fixture in old commits.

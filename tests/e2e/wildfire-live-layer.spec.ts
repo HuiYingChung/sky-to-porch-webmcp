@@ -94,7 +94,12 @@ async function visibleMap(page: Page) {
     .filter({ visible: true }).click();
   const mobileMap = page.getByTestId("mobile-nav-map");
   if (await mobileMap.isVisible()) await mobileMap.click();
-  return page.getByTestId("analysis-map").filter({ visible: true });
+  const map = page.getByTestId("analysis-map").filter({ visible: true });
+  // Under full-suite load the lazy MapLibre boundary can still be replacing
+  // its fallback. Settle that boundary before asking Playwright to verify a
+  // checkbox on the sibling layer card through one atomic check() action.
+  await expect(map.getByTestId("map-canvas")).toBeVisible();
+  return map;
 }
 
 test("FIRMS toggle is always available, off by default, and loads the visible viewport only on request", async ({ page }) => {

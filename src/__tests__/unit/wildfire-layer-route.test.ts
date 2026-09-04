@@ -60,6 +60,7 @@ describe("GET /api/map/wildfire", () => {
   });
 
   it.each([
+    ["unsupported_date", 422],
     ["unconfigured", 503],
     ["source_failure", 502],
     ["rate_limited", 429],

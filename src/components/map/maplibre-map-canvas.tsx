@@ -32,6 +32,8 @@ interface MaplibreMapCanvasProps {
   osmAttribution: string;
   /** UXFIX-02: UTC date (YYYY-MM-DD) for the NASA GIBS satellite overlays. */
   overlayDate: string;
+  /** Source-request generation for the current selected area and map date. */
+  overlayContextRevision: number;
   circlePolygon: (
     lon: number,
     lat: number,
@@ -47,7 +49,22 @@ interface MaplibreMapCanvasProps {
    */
   onGibsOverlayStatus?: (
     layerId: "gibs_precipitation" | "gibs_surface_temp",
-    status: "ready" | "error"
+    status: "ready" | "error" | "detached",
+    date: string,
+    contextRevision: number
+  ) => void;
+  /** Renderer confirmation for fetched FIRMS and flood-extent data. */
+  onDataOverlayStatus?: (
+    layerId: "wildfire_nrt" | "flood_extent",
+    status: "ready" | "error" | "detached",
+    date: string,
+    contextRevision: number
+  ) => void;
+  /** Whole-renderer lifecycle, separate from source-specific failures. */
+  onRendererStatus?: (
+    status: "attached" | "unavailable",
+    date: string,
+    contextRevision: number
   ) => void;
 }
 
@@ -75,17 +92,28 @@ const GIBS_OVERLAYS = [
   },
 ];
 
+type GibsOverlay = (typeof GIBS_OVERLAYS)[number];
+type GibsLayerId = GibsOverlay["layerId"];
+
+interface GibsSourceContext {
+  layerId: GibsLayerId;
+  date: string;
+  contextRevision: number;
+}
+
+interface DataOverlayContext {
+  layerId: "wildfire_nrt" | "flood_extent";
+  date: string;
+  contextRevision: number;
+  renderedCount?: number;
+}
+
 const GIBS_ATTRIBUTION = "Imagery courtesy of NASA GIBS / Worldview";
-const WILDFIRE_SOURCE_ID = "firms-wildfire-nrt";
+const WILDFIRE_SOURCE_PREFIX = "firms-wildfire-nrt";
 const WILDFIRE_HALO_LAYER_ID = "firms-wildfire-nrt-halo";
 const WILDFIRE_POINT_LAYER_ID = "firms-wildfire-nrt-points";
-const FLOOD_EXTENT_SOURCE_ID = "viirs-flood-extent-image";
+const FLOOD_EXTENT_SOURCE_PREFIX = "viirs-flood-extent-image";
 const FLOOD_EXTENT_LAYER_ID = "viirs-flood-extent-raster";
-const EMPTY_WILDFIRE_DATA: GeoJSON.FeatureCollection<GeoJSON.Point, WildfirePointProperties> = {
-  type: "FeatureCollection",
-  features: [],
-};
-
 function wildfirePopupContent(properties: WildfirePointProperties): HTMLElement {
   const container = document.createElement("div");
   const title = document.createElement("strong");
@@ -117,11 +145,14 @@ export function MaplibreMapCanvas({
   osmTileUrl,
   osmAttribution,
   overlayDate,
+  overlayContextRevision,
   circlePolygon,
   wildfireData,
   floodExtentData,
   onUseWithoutMap,
   onGibsOverlayStatus,
+  onDataOverlayStatus,
+  onRendererStatus,
 }: MaplibreMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -140,60 +171,189 @@ export function MaplibreMapCanvas({
   // inside long-lived map event handlers.
   const onGibsOverlayStatusRef = useRef(onGibsOverlayStatus);
   useEffect(() => { onGibsOverlayStatusRef.current = onGibsOverlayStatus; }, [onGibsOverlayStatus]);
+  const onDataOverlayStatusRef = useRef(onDataOverlayStatus);
+  useEffect(() => {
+    onDataOverlayStatusRef.current = onDataOverlayStatus;
+  }, [onDataOverlayStatus]);
+  const onRendererStatusRef = useRef(onRendererStatus);
+  useEffect(() => {
+    onRendererStatusRef.current = onRendererStatus;
+  }, [onRendererStatus]);
+  const layersRef = useRef(layers);
+  useEffect(() => { layersRef.current = layers; }, [layers]);
 
-  // UXFIX-02: keep the latest overlay date available to the load callback,
-  // and rebuild the GIBS sources when the date changes.
+  // Each installed raster source has a unique date generation. Keep the
+  // source-to-request mapping after replacement so a late event from a removed
+  // source is still attributed to its original date and rejected by the owner.
   const overlayDateRef = useRef(overlayDate);
   useEffect(() => { overlayDateRef.current = overlayDate; }, [overlayDate]);
+  const overlayContextRevisionRef = useRef(overlayContextRevision);
+  useEffect(() => {
+    overlayContextRevisionRef.current = overlayContextRevision;
+  }, [overlayContextRevision]);
+  const gibsSourceGenerationRef = useRef(0);
+  const activeGibsSourceIdsRef = useRef<Partial<Record<GibsLayerId, string>>>({});
+  const gibsSourceContextsRef = useRef(new Map<string, GibsSourceContext>());
+  const dataSourceGenerationRef = useRef(0);
+  const activeDataSourceIdsRef = useRef<Partial<
+    Record<DataOverlayContext["layerId"], string>
+  >>({});
+  const dataOverlayContextsRef = useRef(new Map<string, DataOverlayContext>());
+
+  function installGibsOverlay(
+    map: maplibregl.Map,
+    overlay: GibsOverlay,
+    date: string,
+    contextRevision: number,
+    visible: boolean
+  ) {
+    const generation = ++gibsSourceGenerationRef.current;
+    const sourceId = `${overlay.sourceId}-${date}-${generation}`;
+    activeGibsSourceIdsRef.current[overlay.layerId] = sourceId;
+    gibsSourceContextsRef.current.set(sourceId, {
+      layerId: overlay.layerId,
+      date,
+      contextRevision,
+    });
+    map.addSource(sourceId, {
+      type: "raster",
+      tiles: [gibsTileUrl(overlay.product, overlay.matrixSet, date)],
+      tileSize: 256,
+      maxzoom: overlay.maxzoom,
+      attribution: GIBS_ATTRIBUTION,
+    });
+    map.addLayer(
+      {
+        id: overlay.mapLayerId,
+        type: "raster",
+        source: sourceId,
+        layout: { visibility: visible ? "visible" : "none" },
+        paint: { "raster-opacity": 0.65 },
+      },
+      map.getLayer("analysis-area-fill") ? "analysis-area-fill" : undefined
+    );
+  }
+
+  // Rebuild when the requested date or source-request area generation changes.
+  // A status-only render keeps the current generation; visibility is handled
+  // independently.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || status !== "ready") return;
     for (const overlay of GIBS_OVERLAYS) {
-      if (!map.getSource(overlay.sourceId)) continue;
       const visible = layers.find((l) => l.id === overlay.layerId)?.visible ?? false;
-      map.removeLayer(overlay.mapLayerId);
-      map.removeSource(overlay.sourceId);
-      map.addSource(overlay.sourceId, {
-        type: "raster",
-        tiles: [gibsTileUrl(overlay.product, overlay.matrixSet, overlayDate)],
-        tileSize: 256,
-        maxzoom: overlay.maxzoom,
-        attribution: GIBS_ATTRIBUTION,
-      });
-      map.addLayer(
-        {
-          id: overlay.mapLayerId,
-          type: "raster",
-          source: overlay.sourceId,
-          layout: { visibility: visible ? "visible" : "none" },
-          paint: { "raster-opacity": 0.65 },
-        },
-        map.getLayer("analysis-area-fill") ? "analysis-area-fill" : undefined
+      const currentSourceId = activeGibsSourceIdsRef.current[overlay.layerId];
+      const currentContext = currentSourceId
+        ? gibsSourceContextsRef.current.get(currentSourceId)
+        : undefined;
+      if (
+        currentSourceId &&
+        currentContext?.date === overlayDate &&
+        currentContext.contextRevision === overlayContextRevision
+      ) continue;
+      if (map.getLayer(overlay.mapLayerId)) map.removeLayer(overlay.mapLayerId);
+      if (currentSourceId && map.getSource(currentSourceId)) {
+        map.removeSource(currentSourceId);
+      }
+      if (currentSourceId) gibsSourceContextsRef.current.delete(currentSourceId);
+      installGibsOverlay(
+        map,
+        overlay,
+        overlayDate,
+        overlayContextRevision,
+        visible
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlayDate, status]);
-
-  const wildfireDataRef = useRef(wildfireData);
-  useEffect(() => { wildfireDataRef.current = wildfireData; }, [wildfireData]);
+  }, [overlayContextRevision, overlayDate, status]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || status !== "ready") return;
-    const source = map.getSource(WILDFIRE_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-    if (!source) {
-      setWildfireRenderedCount(0);
-      return;
+    const previousSourceId = activeDataSourceIdsRef.current.wildfire_nrt;
+    if (map.getLayer(WILDFIRE_HALO_LAYER_ID)) {
+      map.removeLayer(WILDFIRE_HALO_LAYER_ID);
     }
-    source.setData(wildfireData ?? EMPTY_WILDFIRE_DATA);
-    setWildfireRenderedCount(wildfireData?.features.length ?? 0);
-  }, [wildfireData, status]);
+    if (map.getLayer(WILDFIRE_POINT_LAYER_ID)) {
+      map.removeLayer(WILDFIRE_POINT_LAYER_ID);
+    }
+    if (previousSourceId && map.getSource(previousSourceId)) {
+      map.removeSource(previousSourceId);
+    }
+    if (previousSourceId) dataOverlayContextsRef.current.delete(previousSourceId);
+    delete activeDataSourceIdsRef.current.wildfire_nrt;
+    setWildfireRenderedCount(0);
+    if (!wildfireData) return;
+
+    const sourceId = `${WILDFIRE_SOURCE_PREFIX}-${overlayDate}-${
+      overlayContextRevision
+    }-${++dataSourceGenerationRef.current}`;
+    activeDataSourceIdsRef.current.wildfire_nrt = sourceId;
+    dataOverlayContextsRef.current.set(sourceId, {
+      layerId: "wildfire_nrt",
+      date: overlayDate,
+      contextRevision: overlayContextRevision,
+      renderedCount: wildfireData.features.length,
+    });
+    try {
+      map.addSource(sourceId, {
+        type: "geojson",
+        data: wildfireData,
+      });
+      map.addLayer({
+        id: WILDFIRE_HALO_LAYER_ID,
+        type: "circle",
+        source: sourceId,
+        layout: { visibility: "visible" },
+        paint: {
+          "circle-radius": 12,
+          "circle-color": "#f97316",
+          "circle-opacity": 0.2,
+        },
+      });
+      map.addLayer({
+        id: WILDFIRE_POINT_LAYER_ID,
+        type: "circle",
+        source: sourceId,
+        layout: { visibility: "visible" },
+        paint: {
+          "circle-radius": 6,
+          "circle-color": "#f97316",
+          "circle-opacity": 0.9,
+          "circle-stroke-color": "#7c2d12",
+          "circle-stroke-width": 1.5,
+        },
+      });
+    } catch {
+      if (map.getLayer(WILDFIRE_HALO_LAYER_ID)) {
+        map.removeLayer(WILDFIRE_HALO_LAYER_ID);
+      }
+      if (map.getLayer(WILDFIRE_POINT_LAYER_ID)) {
+        map.removeLayer(WILDFIRE_POINT_LAYER_ID);
+      }
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+      dataOverlayContextsRef.current.delete(sourceId);
+      delete activeDataSourceIdsRef.current.wildfire_nrt;
+      onDataOverlayStatusRef.current?.(
+        "wildfire_nrt",
+        "error",
+        overlayDate,
+        overlayContextRevision
+      );
+    }
+  }, [wildfireData, status, overlayDate, overlayContextRevision]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || status !== "ready") return;
+    const previousSourceId = activeDataSourceIdsRef.current.flood_extent;
     if (map.getLayer(FLOOD_EXTENT_LAYER_ID)) map.removeLayer(FLOOD_EXTENT_LAYER_ID);
-    if (map.getSource(FLOOD_EXTENT_SOURCE_ID)) map.removeSource(FLOOD_EXTENT_SOURCE_ID);
+    if (previousSourceId && map.getSource(previousSourceId)) {
+      map.removeSource(previousSourceId);
+    }
+    if (previousSourceId) dataOverlayContextsRef.current.delete(previousSourceId);
+    delete activeDataSourceIdsRef.current.flood_extent;
+    setFloodExtentRendered(false);
     if (
       !floodExtentData ||
       floodExtentData.evidenceState !== "observations_returned" ||
@@ -203,36 +363,68 @@ export function MaplibreMapCanvas({
       return;
     }
     const { west, south, east, north } = floodExtentData.requestArea;
-    map.addSource(FLOOD_EXTENT_SOURCE_ID, {
-      type: "image",
-      url: floodExtentData.imageDataUrl,
-      coordinates: [
-        [west, north],
-        [east, north],
-        [east, south],
-        [west, south],
-      ],
+    const sourceId = `${FLOOD_EXTENT_SOURCE_PREFIX}-${overlayDate}-${
+      overlayContextRevision
+    }-${++dataSourceGenerationRef.current}`;
+    activeDataSourceIdsRef.current.flood_extent = sourceId;
+    dataOverlayContextsRef.current.set(sourceId, {
+      layerId: "flood_extent",
+      date: overlayDate,
+      contextRevision: overlayContextRevision,
     });
-    map.addLayer(
-      {
-        id: FLOOD_EXTENT_LAYER_ID,
-        type: "raster",
-        source: FLOOD_EXTENT_SOURCE_ID,
-        layout: {
-          visibility: layers.find((layer) => layer.id === "flood_extent")?.visible
-            ? "visible"
-            : "none",
+    try {
+      map.addSource(sourceId, {
+        type: "image",
+        url: floodExtentData.imageDataUrl,
+        coordinates: [
+          [west, north],
+          [east, north],
+          [east, south],
+          [west, south],
+        ],
+      });
+      map.addLayer(
+        {
+          id: FLOOD_EXTENT_LAYER_ID,
+          type: "raster",
+          source: sourceId,
+          layout: { visibility: "visible" },
+          paint: { "raster-opacity": 0.72 },
         },
-        paint: { "raster-opacity": 0.72 },
-      },
-      map.getLayer("analysis-area-fill") ? "analysis-area-fill" : undefined
-    );
-    setFloodExtentRendered(true);
-  }, [floodExtentData, layers, status]);
+        map.getLayer("analysis-area-fill") ? "analysis-area-fill" : undefined
+      );
+    } catch {
+      if (map.getLayer(FLOOD_EXTENT_LAYER_ID)) {
+        map.removeLayer(FLOOD_EXTENT_LAYER_ID);
+      }
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+      dataOverlayContextsRef.current.delete(sourceId);
+      delete activeDataSourceIdsRef.current.flood_extent;
+      onDataOverlayStatusRef.current?.(
+        "flood_extent",
+        "error",
+        overlayDate,
+        overlayContextRevision
+      );
+    }
+  }, [
+    floodExtentData,
+    status,
+    overlayDate,
+    overlayContextRevision,
+  ]);
 
   // Initialize map
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+
+    const initialDate = overlayDateRef.current;
+    const initialContextRevision = overlayContextRevisionRef.current;
+    onRendererStatusRef.current?.(
+      "attached",
+      initialDate,
+      initialContextRevision
+    );
 
     let map: maplibregl.Map;
     try {
@@ -263,12 +455,35 @@ export function MaplibreMapCanvas({
         // attributionControl defaults to showing OSM attribution when not set to false
       });
     } catch {
+      onRendererStatusRef.current?.(
+        "unavailable",
+        initialDate,
+        initialContextRevision
+      );
       setStatus("webgl_error");
       return;
     }
 
     mapRef.current = map;
     let basemapReady = false;
+    const installedGibsSourceContexts = gibsSourceContextsRef.current;
+    const installedDataOverlayContexts = dataOverlayContextsRef.current;
+    let rendererTerminated = false;
+
+    const terminateRenderer = (terminalStatus: "tile_error") => {
+      if (rendererTerminated) return;
+      rendererTerminated = true;
+      setWildfireRenderedCount(0);
+      setFloodExtentRendered(false);
+      onRendererStatusRef.current?.(
+        "unavailable",
+        overlayDateRef.current,
+        overlayContextRevisionRef.current
+      );
+      map.remove();
+      mapRef.current = null;
+      setStatus(terminalStatus);
+    };
 
     map.on("load", () => {
       basemapReady = true;
@@ -276,20 +491,16 @@ export function MaplibreMapCanvas({
 
       // UXFIX-02: NASA GIBS satellite overlays (hidden until toggled on).
       for (const overlay of GIBS_OVERLAYS) {
-        map.addSource(overlay.sourceId, {
-          type: "raster",
-          tiles: [gibsTileUrl(overlay.product, overlay.matrixSet, overlayDateRef.current)],
-          tileSize: 256,
-          maxzoom: overlay.maxzoom,
-          attribution: GIBS_ATTRIBUTION,
-        });
-        map.addLayer({
-          id: overlay.mapLayerId,
-          type: "raster",
-          source: overlay.sourceId,
-          layout: { visibility: "none" },
-          paint: { "raster-opacity": 0.65 },
-        });
+        const visible = layersRef.current.find(
+          (layer) => layer.id === overlay.layerId
+        )?.visible ?? false;
+        installGibsOverlay(
+          map,
+          overlay,
+          overlayDateRef.current,
+          overlayContextRevisionRef.current,
+          visible
+        );
       }
 
       // Add analysis area source and layers
@@ -316,35 +527,6 @@ export function MaplibreMapCanvas({
         },
       });
 
-      map.addSource(WILDFIRE_SOURCE_ID, {
-        type: "geojson",
-        data: wildfireDataRef.current ?? EMPTY_WILDFIRE_DATA,
-      });
-      map.addLayer({
-        id: WILDFIRE_HALO_LAYER_ID,
-        type: "circle",
-        source: WILDFIRE_SOURCE_ID,
-        layout: { visibility: "none" },
-        paint: {
-          "circle-radius": 12,
-          "circle-color": "#f97316",
-          "circle-opacity": 0.2,
-        },
-      });
-      map.addLayer({
-        id: WILDFIRE_POINT_LAYER_ID,
-        type: "circle",
-        source: WILDFIRE_SOURCE_ID,
-        layout: { visibility: "none" },
-        paint: {
-          "circle-radius": 6,
-          "circle-color": "#f97316",
-          "circle-opacity": 0.9,
-          "circle-stroke-color": "#7c2d12",
-          "circle-stroke-width": 1.5,
-        },
-      });
-
       map.on("mouseenter", WILDFIRE_POINT_LAYER_ID, () => {
         map.getCanvas().style.cursor = "pointer";
       });
@@ -363,13 +545,54 @@ export function MaplibreMapCanvas({
       });
     });
 
-    // ADR-0040 (Bug E): a fully loaded GIBS source reports "ready" so the
-    // layer card can distinguish rendered imagery from a silent failure.
-    map.on("sourcedata", (event) => {
-      const data = event as { sourceId?: string; isSourceLoaded?: boolean; dataType?: string };
-      if (data.dataType !== "source" || data.isSourceLoaded !== true) return;
-      const overlay = GIBS_OVERLAYS.find((entry) => entry.sourceId === data.sourceId);
-      if (overlay) onGibsOverlayStatusRef.current?.(overlay.layerId, "ready");
+    // Source `visibility` events can report loaded before newly visible tiles
+    // are scheduled. MapLibre emits `idle` only after the current view has no
+    // outstanding source/tile work, so renderer-ready claims are made there.
+    map.on("idle", () => {
+      for (const overlay of GIBS_OVERLAYS) {
+        const sourceId = activeGibsSourceIdsRef.current[overlay.layerId];
+        const sourceContext = sourceId
+          ? installedGibsSourceContexts.get(sourceId)
+          : undefined;
+        if (
+          !sourceId ||
+          !sourceContext ||
+          !map.getLayer(overlay.mapLayerId) ||
+          map.getLayoutProperty(overlay.mapLayerId, "visibility") === "none" ||
+          !map.isSourceLoaded(sourceId)
+        ) continue;
+        onGibsOverlayStatusRef.current?.(
+          sourceContext.layerId,
+          "ready",
+          sourceContext.date,
+          sourceContext.contextRevision
+        );
+      }
+      for (const [layerId, sourceId] of Object.entries(
+        activeDataSourceIdsRef.current
+      ) as Array<[DataOverlayContext["layerId"], string]>) {
+        const dataContext = installedDataOverlayContexts.get(sourceId);
+        const mapLayerId = layerId === "wildfire_nrt"
+          ? WILDFIRE_POINT_LAYER_ID
+          : FLOOD_EXTENT_LAYER_ID;
+        if (
+          !dataContext ||
+          !map.getLayer(mapLayerId) ||
+          map.getLayoutProperty(mapLayerId, "visibility") === "none" ||
+          !map.isSourceLoaded(sourceId)
+        ) continue;
+        if (layerId === "wildfire_nrt") {
+          setWildfireRenderedCount(dataContext.renderedCount ?? 0);
+        } else {
+          setFloodExtentRendered(true);
+        }
+        onDataOverlayStatusRef.current?.(
+          layerId,
+          "ready",
+          dataContext.date,
+          dataContext.contextRevision
+        );
+      }
     });
 
     map.on("error", (event) => {
@@ -379,11 +602,41 @@ export function MaplibreMapCanvas({
       // never replace a working basemap with the unavailable panel.
       const sourceId = (event as { sourceId?: string }).sourceId;
       if (sourceId !== undefined) {
-        if (sourceId === "osm") setStatus("tile_error");
+        if (sourceId === "osm") {
+          terminateRenderer("tile_error");
+          return;
+        }
         // ADR-0040 (Bug E): overlay tile failures surface per-layer status
         // instead of being swallowed.
-        const overlay = GIBS_OVERLAYS.find((entry) => entry.sourceId === sourceId);
-        if (overlay) onGibsOverlayStatusRef.current?.(overlay.layerId, "error");
+        const sourceContext = installedGibsSourceContexts.get(sourceId);
+        if (
+          sourceContext &&
+          activeGibsSourceIdsRef.current[sourceContext.layerId] === sourceId
+        ) {
+          onGibsOverlayStatusRef.current?.(
+            sourceContext.layerId,
+            "error",
+            sourceContext.date,
+            sourceContext.contextRevision
+          );
+        }
+        const dataContext = installedDataOverlayContexts.get(sourceId);
+        if (
+          dataContext &&
+          activeDataSourceIdsRef.current[dataContext.layerId] === sourceId
+        ) {
+          if (dataContext.layerId === "wildfire_nrt") {
+            setWildfireRenderedCount(0);
+          } else {
+            setFloodExtentRendered(false);
+          }
+          onDataOverlayStatusRef.current?.(
+            dataContext.layerId,
+            "error",
+            dataContext.date,
+            dataContext.contextRevision
+          );
+        }
         return;
       }
       // No sourceId means a style/runtime error. Before the style loads that
@@ -391,7 +644,7 @@ export function MaplibreMapCanvas({
       // map is ready the basemap is already rendering; nuking the canvas for
       // a non-source runtime error would destroy working functionality, so
       // ignore it here (per-layer status UI is a later phase).
-      if (!basemapReady) setStatus("tile_error");
+      if (!basemapReady) terminateRenderer("tile_error");
     });
 
     // Map click → coordinate selection (labeled "Map point", not geocoded)
@@ -427,11 +680,46 @@ export function MaplibreMapCanvas({
     });
 
     return () => {
-      map.remove();
-      mapRef.current = null;
+      for (const [layerId, sourceId] of Object.entries(
+        activeGibsSourceIdsRef.current
+      ) as Array<[GibsLayerId, string]>) {
+        const sourceContext = installedGibsSourceContexts.get(sourceId);
+        if (sourceContext) {
+          onGibsOverlayStatusRef.current?.(
+            layerId,
+            "detached",
+            sourceContext.date,
+            sourceContext.contextRevision
+          );
+        }
+      }
+      for (const dataContext of installedDataOverlayContexts.values()) {
+        onDataOverlayStatusRef.current?.(
+          dataContext.layerId,
+          "detached",
+          dataContext.date,
+          dataContext.contextRevision
+        );
+      }
+      activeGibsSourceIdsRef.current = {};
+      activeDataSourceIdsRef.current = {};
+      installedGibsSourceContexts.clear();
+      installedDataOverlayContexts.clear();
+      if (!rendererTerminated) {
+        map.remove();
+        mapRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [osmTileUrl, osmAttribution]);
+
+  // A failed canvas remains mounted as an explicit recovery panel. Reassert
+  // renderer unavailability when the selected date/area context changes so a
+  // new desired-state transaction cannot strand layers in `loading`.
+  useEffect(() => {
+    if (status !== "webgl_error" && status !== "tile_error") return;
+    onRendererStatus?.("unavailable", overlayDate, overlayContextRevision);
+  }, [status, overlayDate, overlayContextRevision, onRendererStatus]);
 
   // The desktop shell sidebars can change the map column without changing the
   // browser viewport. Keep MapLibre's canvas synchronized with its container.
@@ -462,9 +750,6 @@ export function MaplibreMapCanvas({
           map.setLayoutProperty("analysis-area-fill", "visibility", visibility);
           map.setLayoutProperty("analysis-area-outline", "visibility", visibility);
         }
-      } else if (layer.id === "selected_place" && markerRef.current) {
-        if (layer.visible) markerRef.current.addTo(map);
-        else markerRef.current.remove();
       } else if (layer.id === "wildfire_nrt") {
         if (map.getLayer(WILDFIRE_HALO_LAYER_ID)) {
           map.setLayoutProperty(WILDFIRE_HALO_LAYER_ID, "visibility", visibility);
@@ -494,16 +779,13 @@ export function MaplibreMapCanvas({
     }
 
     const { coordinate, analysisArea } = placeSelection;
-    const selectedPlaceVisible =
-      layers.find((l) => l.id === "selected_place")?.visible ?? true;
-
     const marker = new maplibregl.Marker({ color: "#3b82d4" })
       .setLngLat([coordinate.lon, coordinate.lat]);
     // This marker is visual communication only. It must not intercept a click
     // intended for a validated hotspot rendered at the same coordinate.
     marker.getElement().style.pointerEvents = "none";
     marker.getElement().setAttribute("aria-hidden", "true");
-    if (selectedPlaceVisible) marker.addTo(map);
+    marker.addTo(map);
     markerRef.current = marker;
 
     // Update analysis area polygon
@@ -513,13 +795,22 @@ export function MaplibreMapCanvas({
       src.setData({ type: "FeatureCollection", features: [feature] });
     }
 
-    // Fly to selection
-    map.flyTo({
-      center: [coordinate.lon, coordinate.lat],
-      zoom: Math.max(7, map.getZoom()),
-      duration: 800,
-    });
-  }, [placeSelection, status, layers, circlePolygon]);
+    // A geocoder-supplied place extent frames the actual place. Coordinate
+    // selections have no authoritative extent and keep the point-centred path.
+    if (placeSelection.placeBoundingBox) {
+      const { west, south, east, north } = placeSelection.placeBoundingBox;
+      map.fitBounds(
+        [[west, south], [east, north]],
+        { padding: 48, maxZoom: 12, duration: 800 }
+      );
+    } else {
+      map.flyTo({
+        center: [coordinate.lon, coordinate.lat],
+        zoom: Math.max(7, map.getZoom()),
+        duration: 800,
+      });
+    }
+  }, [placeSelection, status, circlePolygon]);
 
   if (status === "webgl_error") {
     return (

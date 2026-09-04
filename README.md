@@ -49,6 +49,11 @@ together. The Agent can:
 - ask for a place choice when a name is ambiguous, then resume the exact
   unfinished request;
 - compare two places or time windows without changing either selected radius;
+- look up a named place without running an environmental analysis, returning
+  only Photon/OpenStreetMap coordinates, available bounds, administrative
+  context, and attribution;
+- show or hide supported environmental imagery on the shared map for one UTC
+  date, using the same desired layer state on desktop and mobile;
 - inspect exact observations, sources, failures, limitations, and missing
   evidence without rerunning the analysis;
 - summarize the validated result in summary-first, plain English while the
@@ -96,24 +101,47 @@ The normal human map workflow remains functional in browsers without WebMCP.
 | `get_environmental_source_coverage` | Explains whether a source is eligible for a region and date; it is not itself an observation. |
 | `get_sky_to_porch_help_and_demos` | Returns capabilities and ready-to-run demo inputs. |
 | `prepare_storm_claim_discussion` | Opens a bounded evidence and property-document checklist after a Home + Wind result. |
+| `look_up_place_location` | Resolves a place to its canonical label, WGS84 representative point, available bounding box and administrative context, with Photon/OpenStreetMap attribution; it does not change the UI. |
+| `set_environmental_map_layers` | Applies an idempotent desired-state patch to rain, land-surface heat, recent FIRMS thermal-anomaly, and flood-extent visualizations on the shared map. |
 
-The six tool definitions stay registered for the page lifetime so Agent tool
+The eight tool definitions stay registered for the page lifetime so Agent tool
 handles remain stable across analyses. State-dependent tools fail closed with a
 clear availability status until the required result exists.
 
 Concrete questions go directly to analysis. Named places are resolved by
 deterministic application code; the Agent cannot inject guessed coordinates.
-Every user-specified radius remains authoritative.
+Ambiguous lookups pause for a person-selected stable choice ID, and stale IDs
+are revalidated instead of guessed. Every user-specified radius remains
+authoritative.
+
+Map-layer input is desired state: `true` means show, `false` means hide, and an
+omitted layer stays unchanged. Repeating the same request is safe. A pure layer
+change does not discard an analysis; changing the selected place, date, or
+radius clears evidence that no longer matches that context. Agent updates use
+the same state as the desktop and mobile controls and reveal the Map view on
+mobile.
+
+Each imagery request uses exactly one UTC calendar date. A multi-day analysis
+range is never silently reduced to its end date; the caller must provide a
+single map date. Photon bounds, when published, frame the place, while the
+representative point and selected radius remain the analysis-area contract.
+Use place lookup for coordinates or bounds, map layers for visualization,
+analysis for conditions, amounts, severity, impact, or safety questions, and
+source coverage only for eligibility—not proof of an observation.
 
 ## Evidence and engineering
 
 ```mermaid
 flowchart LR
   Human[Human UI] --> Service[Validated analysis service]
-  Agent[WebMCP tools] --> Service
+  Evidence[Evidence tools] --> Service
   Service --> Contract[Shared evidence contract]
   Contract --> UI[Map + Meaning + Evidence]
   Contract --> Summary[Compact Agent result]
+  MapTool[Map-layer tool] --> MapState[Shared map state]
+  Human --> MapState
+  MapState --> UI
+  PlaceTool[Place lookup tool] --> Resolver[Bounded Photon resolver]
 ```
 
 Deterministic code owns location and time validation, source coverage,
@@ -136,6 +164,13 @@ Important engineering boundaries:
   bounded;
 - numeric precipitation is reported only when an official source returns a
   finite validated value—an imagery pixel is never relabelled as millimetres;
+- map imagery is visualization-only: IMERG precipitation rate is not flood
+  amount or extent, MODIS land-surface temperature is not air temperature,
+  FIRMS thermal-anomaly pixels are not fire perimeters, and VIIRS 3-day flood
+  extent is not water depth;
+- the FIRMS map route is explicitly near-real-time. Dates older than today or
+  the previous UTC day return `unsupported_date` without a source request;
+  historical fire evidence remains available through the analysis pipeline;
 - optional sources retain their no-observation, failure, and credential states
   without weakening supported core evidence;
 - EPA AQS credentials remain server-only and are never written to provenance;

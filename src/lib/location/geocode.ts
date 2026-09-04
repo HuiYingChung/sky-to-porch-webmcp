@@ -14,7 +14,11 @@
  *   - For production-scale use, self-host Photon or move to a keyed provider.
  */
 
-import { ValidationError } from "@/contracts/common";
+import {
+  ValidationError,
+  validateBoundingBox,
+  type BoundingBox,
+} from "@/contracts/common";
 
 export const PHOTON_HOST = "photon.komoot.io";
 export const GEOCODE_MAX_RESULTS = 5;
@@ -25,6 +29,17 @@ export const GEOCODE_MAX_QUEUED_REQUESTS = 4;
 export const GEOCODE_MAX_QUEUE_WAIT_MS = 10_000;
 export const GEOCODE_ATTRIBUTION =
   "Search results © OpenStreetMap contributors, via Photon (komoot)";
+const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/u;
+
+export interface GeocodeAdminContext {
+  locality?: string;
+  city?: string;
+  district?: string;
+  county?: string;
+  state?: string;
+  country?: string;
+  countryCode?: string;
+}
 
 export interface GeocodeResult {
   /** Stable upstream identity when Photon supplies an OSM feature id. */
@@ -33,6 +48,10 @@ export interface GeocodeResult {
   label: string;
   lon: number;
   lat: number;
+  /** Source-supplied place extent normalized to WGS84 west/south/east/north. */
+  boundingBox: BoundingBox | null;
+  /** Only administrative fields actually supplied by Photon are returned. */
+  adminContext: GeocodeAdminContext;
 }
 
 export type GeocodeScheduleResult<T> =
@@ -312,6 +331,81 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function optionalTrimmedString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 &&
+    trimmed.length <= 200 &&
+    !CONTROL_CHAR_RE.test(trimmed)
+    ? trimmed
+    : undefined;
+}
+
+/**
+ * Photon documents `extent` as upper-left then lower-right rather than a
+ * GeoJSON bbox. Normalizing each axis by min/max makes the public contract
+ * unambiguous; the canonical bounding-box validator rejects malformed or
+ * degenerate extents.
+ */
+function photonExtent(
+  value: unknown,
+  representativeLon: number,
+  representativeLat: number
+): BoundingBox | null {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 4 ||
+    !value.every((item) => typeof item === "number" && Number.isFinite(item))
+  ) return null;
+  const [firstLon, firstLat, secondLon, secondLat] = value as number[];
+  // The public BoundingBox contract does not represent antimeridian wrapping.
+  // Photon documents the first longitude as west and the second as east, so a
+  // reversed pair must be dropped instead of min/max-expanded across Earth.
+  if (firstLon > secondLon) return null;
+  const boundingBox: BoundingBox = {
+    west: Math.min(firstLon, secondLon),
+    south: Math.min(firstLat, secondLat),
+    east: Math.max(firstLon, secondLon),
+    north: Math.max(firstLat, secondLat),
+  };
+  try {
+    validateBoundingBox(boundingBox);
+    // `extent` and the representative Point are both untrusted provider data.
+    // Never let a mismatched extent frame a different region from the point
+    // used by the analysis pipeline.
+    if (
+      representativeLon < boundingBox.west ||
+      representativeLon > boundingBox.east ||
+      representativeLat < boundingBox.south ||
+      representativeLat > boundingBox.north
+    ) return null;
+    return boundingBox;
+  } catch {
+    return null;
+  }
+}
+
+function photonAdminContext(properties: Record<string, unknown>): GeocodeAdminContext {
+  const values: GeocodeAdminContext = {
+    locality: optionalTrimmedString(properties.locality),
+    city: optionalTrimmedString(properties.city),
+    district: optionalTrimmedString(properties.district),
+    county: optionalTrimmedString(properties.county),
+    state: optionalTrimmedString(properties.state),
+    country: optionalTrimmedString(properties.country),
+    countryCode: /^[A-Za-z]{2}$/u.test(
+      optionalTrimmedString(properties.countrycode) ?? ""
+    )
+      ? (properties.countrycode as string).trim().toUpperCase()
+      : undefined,
+  };
+  return Object.fromEntries(
+    Object.entries(values).filter((entry): entry is [keyof GeocodeAdminContext, string] =>
+      entry[1] !== undefined
+    )
+  );
+}
+
 /**
  * Parses a Photon GeoJSON response into bounded, validated results.
  * Throws ValidationError on structural problems; skips malformed features.
@@ -346,11 +440,10 @@ export function parsePhotonResponse(body: unknown): GeocodeResult[] {
       lat < -90 ||
       lat > 90
     ) continue;
-    const name = typeof properties.name === "string" ? properties.name.trim() : "";
+    const name = optionalTrimmedString(properties.name) ?? "";
     if (name.length === 0) continue;
-    const featureType = typeof properties.type === "string"
-      ? properties.type.trim().replaceAll("_", " ")
-      : "";
+    const featureType = (optionalTrimmedString(properties.type) ?? "")
+      .replaceAll("_", " ");
     const primaryLabel = featureType.length > 0 ? `${name} (${featureType})` : name;
     const context = [properties.city, properties.district, properties.county]
       .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
@@ -361,11 +454,12 @@ export function parsePhotonResponse(body: unknown): GeocodeResult[] {
       .map((part) => part.trim());
     const deduped = [...new Set(parts)];
     if (deduped.length === 0) continue;
-    const osmType = typeof properties.osm_type === "string"
-      ? properties.osm_type.trim().toLocaleLowerCase("en-US")
-      : "";
+    const label = deduped.join(", ");
+    if (label.length > 200 || CONTROL_CHAR_RE.test(label)) continue;
+    const osmType = (optionalTrimmedString(properties.osm_type) ?? "")
+      .toLocaleLowerCase("en-US");
     const osmId = properties.osm_id;
-    const id = osmType.length > 0 &&
+    const id = /^[nwr]$/u.test(osmType) &&
       typeof osmId === "number" &&
       Number.isSafeInteger(osmId) &&
       osmId >= 0
@@ -373,9 +467,11 @@ export function parsePhotonResponse(body: unknown): GeocodeResult[] {
       : undefined;
     results.push({
       ...(id ? { id } : {}),
-      label: deduped.join(", "),
+      label,
       lon,
       lat,
+      boundingBox: photonExtent(properties.extent, lon, lat),
+      adminContext: photonAdminContext(properties),
     });
   }
   return results;

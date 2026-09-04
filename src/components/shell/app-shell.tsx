@@ -192,7 +192,8 @@ function constrainPanelWidths(shellWidth: number, widths: DesktopPanelWidths) {
 
 export function AppShell() {
   const [mobileView, setMobileView] = useState<MobileView>("ask");
-  const { activeAnalysis } = useQueryDraft();
+  const [isDesktopLayout, setIsDesktopLayout] = useState(false);
+  const { activeAnalysis, environmentalMapState } = useQueryDraft();
   const [aboutOpen, setAboutOpen] = useState(false);
   const [desktopPanelWidths, setDesktopPanelWidths] =
     useState<DesktopPanelWidths>({
@@ -207,6 +208,18 @@ export function AppShell() {
     startX: number;
     startWidth: number;
   } | null>(null);
+
+  // CSS keeps both responsive shells in the DOM so query/insight controls
+  // retain their existing behavior. Mount only the active MapLibre instance,
+  // however, so one hidden viewport cannot overwrite shared render status.
+  useEffect(() => {
+    const synchronizeLayout = () => {
+      setIsDesktopLayout(window.innerWidth >= 1024);
+    };
+    synchronizeLayout();
+    window.addEventListener("resize", synchronizeLayout);
+    return () => window.removeEventListener("resize", synchronizeLayout);
+  }, []);
 
   useEffect(() => {
     const shell = desktopShellRef.current;
@@ -246,6 +259,12 @@ export function AppShell() {
       setMobileView("insight");
     }
   }, [activeAnalysis?.analysisId, activeAnalysis?.origin]);
+
+  useEffect(() => {
+    if (environmentalMapState.agentFocusRevision > 0) {
+      setMobileView("map");
+    }
+  }, [environmentalMapState.agentFocusRevision]);
 
   // Input events dispatched before hydration are silently dropped by React;
   // this attribute lets automation (tests/e2e/helpers.ts gotoHydrated) wait
@@ -505,7 +524,7 @@ export function AppShell() {
               overflow: "hidden",
             }}
           >
-            <AnalysisMap idPrefix="desktop-map-" />
+            {isDesktopLayout && <AnalysisMap idPrefix="desktop-map-" />}
           </section>
 
           {renderResizeHandle("insight")}
@@ -543,7 +562,7 @@ export function AppShell() {
                 <GuidedQuery idPrefix="mobile-" />
               </section>
             )}
-            {mobileView === "map" && (
+            {mobileView === "map" && !isDesktopLayout && (
               <section
                 aria-label="Map area"
                 data-testid="mobile-map-view"

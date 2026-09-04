@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { loadEnvConfig } from "@next/env";
 import type { ActiveAnalysis, AnalysisRequest } from "@/lib/analysis/types";
+import { createInitialEnvironmentalMapState } from "@/lib/map/environmental-map-state";
 import {
   createAnalyzeHazardTool,
   createCompareHazardTool,
@@ -15,6 +16,8 @@ import {
   createGetEnvironmentalSourceCoverageTool,
   createEnvironmentalCapabilitiesTool,
 } from "@/lib/webmcp/discovery-tools";
+import { createSetEnvironmentalMapLayersTool } from "@/lib/webmcp/map-tool";
+import { createLookUpPlaceLocationTool } from "@/lib/webmcp/place-tool";
 import {
   asksUserToChooseHazard,
   normalizeEvalPlace,
@@ -217,6 +220,7 @@ function modelEvalGeocoder(_url: RequestInfo | URL, init?: RequestInit): Promise
 }
 
 function availableTools(item?: EvalCase, executeAnalysis = false) {
+  const mapState = createInitialEnvironmentalMapState();
   const tools = [
     createAnalyzeHazardTool(executeAnalysis
       ? {
@@ -235,6 +239,13 @@ function availableTools(item?: EvalCase, executeAnalysis = false) {
       : { runAnalysis: async () => null }),
     createEnvironmentalCapabilitiesTool(),
     createGetEnvironmentalSourceCoverageTool(),
+    createSetEnvironmentalMapLayersTool({
+      readState: () => ({ placeSelection: null, mapState }),
+      applyUpdate: () => ({ mapState, analysisCleared: false }),
+      fetchImpl: modelEvalGeocoder,
+      now: () => new Date("2026-08-27T12:00:00.000Z"),
+    }),
+    createLookUpPlaceLocationTool({ fetchImpl: modelEvalGeocoder }),
   ];
   const activeAnalysis = item?.availableAfter ? sampleCompletedAnalysis() : null;
   if (activeAnalysis && item?.availableAfter === "completed_environmental_analysis") {

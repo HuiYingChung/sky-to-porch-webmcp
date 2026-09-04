@@ -17,6 +17,18 @@ import {
   createGetEnvironmentalSourceCoverageTool,
   createEnvironmentalCapabilitiesTool,
 } from "@/lib/webmcp/discovery-tools";
+import { createLookUpPlaceLocationTool } from "@/lib/webmcp/place-tool";
+import {
+  createSetEnvironmentalMapLayersTool,
+  type EnvironmentalMapToolSnapshot,
+  type EnvironmentalMapToolUpdate,
+  type EnvironmentalMapToolUpdateResult,
+} from "@/lib/webmcp/map-tool";
+import type { PlaceSelection } from "@/lib/location/selection";
+import {
+  createInitialEnvironmentalMapState,
+  type EnvironmentalMapState,
+} from "@/lib/map/environmental-map-state";
 
 interface WebMcpBridgeProps {
   runAnalysis: (
@@ -31,6 +43,13 @@ interface WebMcpBridgeProps {
   ) => Promise<ActiveAnalysis[] | null>;
   activeAnalysis?: ActiveAnalysis | null;
   relatedAnalyses?: ActiveAnalysis[];
+  placeSelection?: PlaceSelection | null;
+  environmentalMapState?: EnvironmentalMapState;
+  readEnvironmentalMapSnapshot?: () => EnvironmentalMapToolSnapshot;
+  applyEnvironmentalMapUpdate?: (
+    update: EnvironmentalMapToolUpdate
+  ) => EnvironmentalMapToolUpdateResult;
+  beginContextMutationInvocation?: () => () => boolean;
   onOpenStormClaimDiscussion?: () => void;
   onStatusChange?: (status: WebMcpStatus) => void;
 }
@@ -38,6 +57,15 @@ interface WebMcpBridgeProps {
 interface WebMcpRuntimeState extends ContextualToolState {
   runAnalysis: WebMcpBridgeProps["runAnalysis"];
   runAnalysisBundle: WebMcpBridgeProps["runAnalysisBundle"];
+  placeSelection: PlaceSelection | null;
+  environmentalMapState: EnvironmentalMapState;
+  readEnvironmentalMapSnapshot: () => EnvironmentalMapToolSnapshot;
+  applyEnvironmentalMapUpdate: NonNullable<
+    WebMcpBridgeProps["applyEnvironmentalMapUpdate"]
+  >;
+  beginContextMutationInvocation?: WebMcpBridgeProps[
+    "beginContextMutationInvocation"
+  ];
   onStatusChange: WebMcpBridgeProps["onStatusChange"];
 }
 
@@ -49,6 +77,11 @@ export type WebMcpStatus =
   | "error";
 
 const EMPTY_RELATED_ANALYSES: ActiveAnalysis[] = [];
+const EMPTY_ENVIRONMENTAL_MAP_STATE = createInitialEnvironmentalMapState();
+const NOOP_ENVIRONMENTAL_MAP_UPDATE = (): EnvironmentalMapToolUpdateResult => ({
+  mapState: EMPTY_ENVIRONMENTAL_MAP_STATE,
+  analysisCleared: false,
+});
 
 /** Registers browser-native WebMCP against the same application service as the UI. */
 export function WebMcpBridge({
@@ -56,6 +89,11 @@ export function WebMcpBridge({
   runAnalysisBundle,
   activeAnalysis = null,
   relatedAnalyses = EMPTY_RELATED_ANALYSES,
+  placeSelection = null,
+  environmentalMapState = EMPTY_ENVIRONMENTAL_MAP_STATE,
+  readEnvironmentalMapSnapshot,
+  applyEnvironmentalMapUpdate = NOOP_ENVIRONMENTAL_MAP_UPDATE,
+  beginContextMutationInvocation,
   onOpenStormClaimDiscussion = () => {},
   onStatusChange,
 }: WebMcpBridgeProps) {
@@ -64,6 +102,14 @@ export function WebMcpBridge({
     runAnalysisBundle,
     activeAnalysis,
     relatedAnalyses,
+    placeSelection,
+    environmentalMapState,
+    readEnvironmentalMapSnapshot: readEnvironmentalMapSnapshot ?? (() => ({
+      placeSelection,
+      mapState: environmentalMapState,
+    })),
+    applyEnvironmentalMapUpdate,
+    beginContextMutationInvocation,
     onOpenStormClaimDiscussion,
     onStatusChange,
   });
@@ -74,16 +120,29 @@ export function WebMcpBridge({
       runAnalysisBundle,
       activeAnalysis,
       relatedAnalyses,
+      placeSelection,
+      environmentalMapState,
+      readEnvironmentalMapSnapshot: readEnvironmentalMapSnapshot ?? (() => ({
+        placeSelection,
+        mapState: environmentalMapState,
+      })),
+      applyEnvironmentalMapUpdate,
+      beginContextMutationInvocation,
       onOpenStormClaimDiscussion,
       onStatusChange,
     };
   }, [
     activeAnalysis,
+    applyEnvironmentalMapUpdate,
+    environmentalMapState,
     onOpenStormClaimDiscussion,
     onStatusChange,
     relatedAnalyses,
     runAnalysis,
     runAnalysisBundle,
+    placeSelection,
+    readEnvironmentalMapSnapshot,
+    beginContextMutationInvocation,
   ]);
 
   const registeredTools = useMemo(
@@ -110,15 +169,31 @@ export function WebMcpBridge({
         }
         return analyses;
       };
+      let fallbackInvocation = 0;
+      const beginCurrentContextMutation = () => {
+        const current = runtimeStateRef.current.beginContextMutationInvocation;
+        if (current) return current();
+        const invocation = ++fallbackInvocation;
+        return () => invocation === fallbackInvocation;
+      };
       const analysisDependencies = {
         runAnalysis: runCurrentAnalysis,
         runAnalysisBundle: runCurrentAnalysisBundle,
+        beginInvocation: beginCurrentContextMutation,
       };
       return [
         createAnalyzeHazardTool(analysisDependencies),
         createCompareHazardTool(analysisDependencies),
         createEnvironmentalCapabilitiesTool(),
         createGetEnvironmentalSourceCoverageTool(),
+        createLookUpPlaceLocationTool(),
+        createSetEnvironmentalMapLayersTool({
+          readState: () =>
+            runtimeStateRef.current.readEnvironmentalMapSnapshot(),
+          applyUpdate: (update) =>
+            runtimeStateRef.current.applyEnvironmentalMapUpdate(update),
+          beginContextInvocation: beginCurrentContextMutation,
+        }),
         createStateBackedInspectEvidenceTool(() => runtimeStateRef.current),
         createStateBackedStormClaimDiscussionTool(() => runtimeStateRef.current),
       ];

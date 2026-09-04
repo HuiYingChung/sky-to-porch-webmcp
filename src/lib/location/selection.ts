@@ -17,8 +17,12 @@
  * Reuses validators from WP-02 contracts. No geocoder is called.
  */
 
-import type { Coordinate } from "@/contracts/common";
-import { validateCoordinate, ValidationError } from "@/contracts/common";
+import type { BoundingBox, Coordinate } from "@/contracts/common";
+import {
+  validateBoundingBox,
+  validateCoordinate,
+  ValidationError,
+} from "@/contracts/common";
 import type { AnalysisArea } from "./area";
 import { validateAndBuildArea, AREA_RADIUS_MIN_KM, AREA_RADIUS_MAX_KM } from "./area";
 import type { TimeSelection } from "./time";
@@ -51,6 +55,8 @@ export interface PlaceSelection {
   demoPlaceId?: string;
   /** WGS-84 coordinate. */
   coordinate: Coordinate;
+  /** Optional source-supplied place extent used only to frame the map. */
+  placeBoundingBox?: BoundingBox;
   /** Validated analysis area including derived bounding box. */
   analysisArea: AnalysisArea;
   /** Validated time selection. */
@@ -84,6 +90,9 @@ export function updateSelectionParams(
     selectionMethod: base.selectionMethod,
     ...(base.demoPlaceId !== undefined ? { demoPlaceId: base.demoPlaceId } : {}),
     coordinate: base.coordinate,
+    ...(base.placeBoundingBox !== undefined
+      ? { placeBoundingBox: base.placeBoundingBox }
+      : {}),
     analysisArea,
     timeSelection,
   };
@@ -131,12 +140,16 @@ export function buildGeocodedPlaceSelection(
   radiusKm: unknown,
   timeType: unknown,
   startTs?: unknown,
-  endTs?: unknown
+  endTs?: unknown,
+  placeBoundingBox?: unknown
 ): PlaceSelection {
   if (typeof label !== "string" || label.trim().length === 0 || label.length > 200) {
     throw new ValidationError("geocoded label must be a non-empty string");
   }
   validateCoordinate(coordinate);
+  if (placeBoundingBox !== undefined && placeBoundingBox !== null) {
+    validateBoundingBox(placeBoundingBox);
+  }
   const coord = coordinate as Coordinate;
   const analysisArea = validateAndBuildArea(coord, radiusKm);
   const timeSelection = validateAndBuildTimeSelection(timeType, startTs, endTs);
@@ -145,6 +158,9 @@ export function buildGeocodedPlaceSelection(
     isMapSelection: true,
     selectionMethod: "place_search",
     coordinate: coord,
+    ...(placeBoundingBox !== undefined && placeBoundingBox !== null
+      ? { placeBoundingBox: placeBoundingBox as BoundingBox }
+      : {}),
     analysisArea,
     timeSelection,
   };

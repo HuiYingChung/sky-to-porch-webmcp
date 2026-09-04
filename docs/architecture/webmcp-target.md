@@ -23,8 +23,8 @@ The service owns:
 
 ## Implemented tool surface
 
-Six tools are registered once whenever WebMCP is available. Four operate
-without page-result context. Two are state-dependent: their definitions and
+Eight tools are registered once whenever WebMCP is available. Five operate
+without page-result context. Three are state-dependent: their definitions and
 registered handles remain stable, while execution reads the latest committed
 page state and returns a deterministic availability status when its prerequisite
 does not exist.
@@ -92,6 +92,26 @@ The shared UI commits the comparison as one Agent investigation, shows bounded
 retrieval and synthesis progress, and retains a visible link to every result.
 No scenario or chain can silently replace another in the Agent receipt.
 
+### look_up_place_location
+
+Resolves a place name through the same bounded Photon/OpenStreetMap geocoder
+used by analysis. It returns only source-supplied representative coordinates,
+place bounds when available, administrative context, and provenance. It does
+not update the page, run environmental sources, or infer conditions. Ambiguous
+results use stable choice IDs and the same pause/choose/retry contract as
+analysis.
+
+### set_environmental_map_layers
+
+Applies one strict desired-state patch for rain satellite, surface-heat
+satellite, FIRMS thermal anomalies, and flood extent. Omitted layers remain
+unchanged and repeating the same visibility patch is idempotent. Optional
+place, one UTC date, and radius changes use the canonical shared selection;
+multi-day ranges are never silently collapsed. The result separates requested
+visibility from verified rendered visibility and labels every layer as
+visualization-only with its source, limitation, and runtime status. Place/date/
+radius changes clear stale analysis; a pure layer toggle preserves it.
+
 ### inspect_current_environmental_evidence
 
 Reads the strongest primary and related observations, confidence, structured
@@ -152,18 +172,18 @@ when retrieval returns no usable observation.
 ## Registration lifecycle
 
 Register the complete tool set from a client component after feature detection.
-All six definitions share one AbortController and one page-lifetime
+All eight definitions share one AbortController and one page-lifetime
 registration. Abort only when the bridge unmounts or group registration fails;
 ordinary analysis-state changes must not unregister or re-register tools.
 
-The two state-dependent execute callbacks take one snapshot of the latest
-committed analysis state through a stable getter. This keeps RegisteredTool
-handles valid across analysis and comparison turns without mixing state from
-different render generations.
+The three state-dependent execute callbacks read the latest authoritative
+analysis or map snapshot through stable getters. This keeps RegisteredTool
+handles valid across analysis, comparison, and back-to-back map turns without
+mixing state from different render generations.
 
 ## Security and failure behavior
 
-- The tool does not mutate persistent or external state, but its
+- Analysis and map tools do not mutate persistent or external state, but their
   `readOnlyHint` is false because synchronizing the visible page is an
   intentional state change.
 - Hazard and coverage discovery are accurately marked read-only and never
