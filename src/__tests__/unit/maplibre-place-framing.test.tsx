@@ -132,6 +132,7 @@ function canvas(
       osmAttribution="OpenStreetMap"
       overlayDate="2024-07-08"
       overlayContextRevision={0}
+      focusRevision={0}
       circlePolygon={circlePolygon}
       wildfireData={null}
       floodExtentData={null}
@@ -271,6 +272,28 @@ describe("MapLibre place framing", () => {
     });
 
     expect(map.fitBounds).toHaveBeenCalledTimes(initialFitCount);
+    expect(map.flyTo).not.toHaveBeenCalled();
+  });
+
+  it("reframes the same selection when the Agent requests focus again", async () => {
+    const selection = buildGeocodedPlaceSelection(
+      "Houston, Texas",
+      { lon: -95.3698, lat: 29.7604 },
+      25,
+      "custom",
+      "2024-07-08T00:00:00Z",
+      "2024-07-08T23:59:59Z",
+      { west: -95.91, south: 29.52, east: -95.01, north: 30.11 }
+    );
+    const map = await renderCanvas(selection);
+    const initialFitCount = map.fitBounds.mock.calls.length;
+
+    await act(async () => {
+      root.render(canvas(INITIAL_LAYERS, { focusRevision: 1 }));
+      await Promise.resolve();
+    });
+
+    expect(map.fitBounds).toHaveBeenCalledTimes(initialFitCount + 1);
     expect(map.flyTo).not.toHaveBeenCalled();
   });
 

@@ -32,6 +32,7 @@ import { GuidedQuery } from "@/components/query/guided-query";
 import { InsightNavigation } from "@/components/navigation/insight-navigation";
 import { AnalysisMap } from "@/components/map/analysis-map";
 import { useQueryDraft } from "@/components/query/query-provider";
+import type { AgentPlaceLookupReceipt } from "@/lib/webmcp/place-tool";
 
 const AboutDialog = dynamic(
   () => import("@/components/about/about-dialog").then((module) => module.AboutDialog),
@@ -130,6 +131,172 @@ function HeaderControls({ onOpenAbout }: { onOpenAbout: () => void }) {
   );
 }
 
+function readableCoordinate(value: number): string {
+  return Number(value.toFixed(5)).toString();
+}
+
+function AnnouncementSlots({
+  kind,
+  activeSlot,
+  children,
+}: {
+  kind: "status" | "alert";
+  activeSlot: 0 | 1 | null;
+  children?: React.ReactNode;
+}) {
+  const assertive = kind === "alert";
+  return (
+    <div data-testid={kind === "status"
+      ? "agent-place-lookup-live-region"
+      : "agent-place-lookup-alert-region"}>
+      {([0, 1] as const).map((slot) => (
+        <div
+          key={slot}
+          role={kind}
+          aria-live={assertive ? "assertive" : "polite"}
+          aria-atomic="true"
+          aria-relevant="additions text"
+          data-announcement-slot={slot}
+        >
+          {activeSlot === slot ? children : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AgentPlaceLookupNotice({
+  receipt,
+}: {
+  receipt: AgentPlaceLookupReceipt | null;
+}) {
+  if (!receipt) {
+    return (
+      <section
+        data-testid="agent-place-lookup-notice"
+        data-status=""
+      >
+        <AnnouncementSlots kind="status" activeSlot={null} />
+        <AnnouncementSlots kind="alert" activeSlot={null} />
+      </section>
+    );
+  }
+  const isError = receipt.status === "invalid_input" ||
+    receipt.status === "place_not_found" ||
+    receipt.status === "place_lookup_failed";
+  const title = receipt.status === "success"
+    ? "Map moved to this place"
+    : receipt.status === "needs_place_choice"
+      ? "Which place did you mean?"
+      : receipt.status === "invalid_input"
+        ? "We couldn’t use that place search"
+        : receipt.status === "place_lookup_failed"
+          ? "Place search isn’t available right now"
+          : "We couldn’t find that place";
+  const announcementSlot = (receipt.receipt_revision % 2) as 0 | 1;
+
+  const content = (
+    <>
+      <div style={{ display: "flex", gap: "8px", alignItems: "baseline", flexWrap: "wrap" }}>
+        <strong>{title}</strong>
+        {receipt.query && (
+          <span style={{ color: "var(--text-secondary)", fontSize: "14px" }}>
+            Searched for: {receipt.query}
+          </span>
+        )}
+      </div>
+
+      {receipt.status === "success" && (
+        <p style={{ margin: "4px 0 0", fontSize: "14px" }}>
+          {receipt.canonical_label} · Latitude {readableCoordinate(receipt.representative_point.latitude)}, longitude {readableCoordinate(receipt.representative_point.longitude)}
+          {" · "}{receipt.selected_place.radius_km} km around this point.
+        </p>
+      )}
+
+      {receipt.status === "needs_place_choice" && (
+        <>
+          <p style={{ margin: "4px 0 8px", fontSize: "14px" }}>
+            {receipt.message} Your current map and results have not changed.
+          </p>
+          <ol
+            data-testid="agent-place-lookup-choices"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 100%), 1fr))",
+              gap: "8px",
+              margin: 0,
+              paddingLeft: "22px",
+            }}
+          >
+            {receipt.choices.map((choice) => {
+              const admin = [...new Set(Object.entries(choice.admin_context)
+                .filter(([key, value]) => key !== "countryCode" && typeof value === "string")
+                .map(([, value]) => value as string))]
+                .join(" · ");
+              const bounds = choice.bounding_box
+                ? `latitude ${readableCoordinate(choice.bounding_box.south)} to ${readableCoordinate(choice.bounding_box.north)}; longitude ${readableCoordinate(choice.bounding_box.west)} to ${readableCoordinate(choice.bounding_box.east)}`
+                : "Not available";
+              return (
+                <li
+                  key={choice.choice_id}
+                  data-choice-id={choice.choice_id}
+                  style={{
+                    padding: "8px 10px",
+                    border: "1px solid var(--border-default)",
+                    borderRadius: "6px",
+                    background: "var(--surface-1)",
+                    fontSize: "14px",
+                  }}
+                >
+                  <strong>{choice.label}</strong>
+                  <div>Coordinates: {readableCoordinate(choice.representative_point.latitude)} latitude, {readableCoordinate(choice.representative_point.longitude)} longitude</div>
+                  <div>Located in: {admin || "No regional details available"}</div>
+                  <div>Approximate area: {bounds}</div>
+                </li>
+              );
+            })}
+          </ol>
+          <p style={{ margin: "8px 0 0", color: "var(--text-secondary)", fontSize: "14px" }}>
+            {receipt.attribution}
+          </p>
+        </>
+      )}
+
+      {isError && (
+        <p style={{ margin: "4px 0 0", fontSize: "14px" }}>{receipt.message}</p>
+      )}
+    </>
+  );
+
+  return (
+    <section
+      data-testid="agent-place-lookup-notice"
+      data-status={receipt.status}
+      style={{
+        padding: "10px 14px",
+        borderBottom: "1px solid var(--border-default)",
+        background: isError ? "var(--status-warning-bg)" : "var(--surface-2)",
+        color: "var(--text-primary)",
+        fontSize: "14px",
+        flexShrink: 0,
+      }}
+    >
+      <AnnouncementSlots
+        kind="status"
+        activeSlot={isError ? null : announcementSlot}
+      >
+        {content}
+      </AnnouncementSlots>
+      <AnnouncementSlots
+        kind="alert"
+        activeSlot={isError ? announcementSlot : null}
+      >
+        {content}
+      </AnnouncementSlots>
+    </section>
+  );
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -193,7 +360,11 @@ function constrainPanelWidths(shellWidth: number, widths: DesktopPanelWidths) {
 export function AppShell() {
   const [mobileView, setMobileView] = useState<MobileView>("ask");
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
-  const { activeAnalysis, environmentalMapState } = useQueryDraft();
+  const {
+    activeAnalysis,
+    agentPlaceLookupReceipt,
+    environmentalMapState,
+  } = useQueryDraft();
   const [aboutOpen, setAboutOpen] = useState(false);
   const [desktopPanelWidths, setDesktopPanelWidths] =
     useState<DesktopPanelWidths>({
@@ -489,6 +660,8 @@ export function AppShell() {
         tabIndex={-1}
         style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", outline: "none" }}
       >
+        <AgentPlaceLookupNotice receipt={agentPlaceLookupReceipt} />
+
         {/* Desktop three-area grid with two resize handles (hidden on mobile) */}
         <div
           ref={desktopShellRef}

@@ -321,7 +321,7 @@ describe("WebMCP environmental hazard tool", () => {
     expect(runAnalysis.mock.calls[0][0]).toMatchObject({
       hazardId: "fire_smoke",
       placeSelection: {
-        label: "Springfield, Illinois (OSM search)",
+        label: "Springfield, Illinois (place search result)",
         selectionMethod: "place_search",
       },
     });
@@ -404,7 +404,7 @@ describe("WebMCP environmental hazard tool", () => {
       hazardId: "wind_storm",
       concern: "home",
       placeSelection: {
-        label: "Houston, Texas, United States (OSM search)",
+        label: "Houston, Texas, United States (place search result)",
         coordinate: { lon: -95.3676974, lat: 29.7589382 },
         placeBoundingBox: {
           west: -95.9,

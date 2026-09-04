@@ -127,7 +127,7 @@ test("an Agent map-layer request updates the shared map and reveals Map on mobil
     analysis_cleared: true,
     map_date: "2024-07-08",
     selected_place: {
-      label: "Houston, Texas, United States (OSM search)",
+      label: "Houston, Texas, United States (place search result)",
       longitude: -95.3698,
       latitude: 29.7604,
       bounding_box: {
@@ -314,7 +314,7 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
     status: "success",
     ui_updated: true,
     request: {
-      place: "Albuquerque, New Mexico (OSM search)",
+      place: "Albuquerque, New Mexico (place search result)",
       hazard: "fire_smoke",
       concern: "general",
       radius_km: 30,
@@ -493,7 +493,7 @@ test("an identical-label place choice resumes by stable id and completes the sha
   expect(completed).toMatchObject({
     status: "unsupported_place",
     ui_updated: true,
-    request: { place: "Houston, Texas, United States (OSM search)" },
+    request: { place: "Houston, Texas, United States (place search result)" },
   });
   expect(analysisQueries).toBe(1);
   await expect(page.locator('[data-testid="agent-analysis-receipt"]:visible'))

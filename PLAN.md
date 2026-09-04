@@ -13,14 +13,16 @@
 - W2 shared client controller and state: complete with renderer compatibility
 - W3 WebMCP tools: eight page-lifetime tools implemented with stable handles;
   contextual tools read current state at execution and fail closed until their
-  prerequisites exist. The surface includes read-only place lookup and
+  prerequisites exist. The surface includes bounded place lookup with
+  shared-map synchronization and visible unresolved-result notices, plus
   idempotent shared-map imagery control alongside the six evidence tools;
   product commit `72f3a36` fixes the production-reported Houston
   ambiguity loop with distinguishable locality/type labels, stable upstream
   place IDs, original-query continuation, exact retry arguments, and stale-ID
   rejection. It is published in merge commit `90b8236`; the production native
-  tool journey now waits with no UI update, resumes by selected ID, completes
-  both Beryl evidence chains, and updates the shared UI
+  analysis journey now waits without changing the existing map or evidence,
+  resumes by selected ID, completes both Beryl evidence chains, and updates the
+  shared UI
 - W4 provider cleanup: complete; deterministic-only application runtime
 - W5 verification: exact local product commit `72f3a36` passes typecheck, lint,
   1,321 unit tests, 132 integration tests, a 14-page production build, a clean
@@ -190,8 +192,14 @@ Two bounded geography and map-interaction tools complete the fixed registry:
 - `look_up_place_location` reuses the deterministic Photon/OpenStreetMap
   resolver and ambiguity continuation. It returns the canonical label, WGS84
   representative point, only the bounding box and administrative context that
-  the source supplied, and attribution. It is read-only and does not imply
-  environmental conditions or source coverage.
+  the source supplied, and attribution. One clear result selects and frames the
+  shared map while preserving its current radius, date, and desired layers;
+  evidence is cleared only when the selected place changes. An ambiguous
+  result lists every validated candidate in the bounded response, up to five,
+  with its geographic details and asks the person to choose. Invalid input, no
+  match, and lookup failure also produce a visible plain-language notice. These
+  unfinished outcomes preserve the current map and evidence, and the tool does
+  not imply environmental conditions or source coverage.
 - `set_environmental_map_layers` applies a desired-state patch for rain,
   land-surface heat, recent FIRMS thermal-anomaly, and flood-extent imagery.
   Omitted layers remain unchanged, explicit booleans show or hide layers, and
@@ -285,7 +293,14 @@ point-and-radius analysis area.
   result; keep historical wildfire investigation in the analysis pipeline;
 - verify human/Agent parity, desktop/mobile synchronization, ambiguity
   continuation, bounding-box framing, one-date validation, idempotent repeats,
-  stale result protection, and truthful imagery failure states.
+  stale result protection, and truthful imagery failure states;
+- verify that a unique place lookup preserves radius, map date, and requested
+  layer visibility, and clears evidence only when the selected place changes;
+- verify that every bounded ambiguity candidate is shown with useful geography
+  and that no-match, invalid, and failure notices use ordinary language without
+  moving the map or clearing evidence;
+- verify that cancelled or superseded lookups remain silent and cannot replace
+  the current notice or map selection.
 
 ### W6 — Release and submission
 
@@ -326,7 +341,9 @@ The product owner has ruled on the first three checkpoints:
    assessment. No-data and failure are last-resort states, not demo features;
 9. panel switching, generic expansion, and Start over remain human UI actions.
    Map-layer controls are also available to the Agent through one bounded
-   desired-state tool; Agent map updates reveal the Map view on mobile.
+   desired-state tool. A unique geography lookup selects and frames the same
+   map; unresolved lookups explain the problem without changing it. Agent map
+   updates reveal the Map view on mobile.
 10. the demos are curated entrances, not privileged code paths. A supported
     custom question receives the same evidence-forward order: strongest
     assessment; observed values, times, and official citations; labelled

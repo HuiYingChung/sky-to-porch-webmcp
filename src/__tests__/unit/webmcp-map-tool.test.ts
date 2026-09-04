@@ -63,6 +63,7 @@ function harness(
           date: update.date,
           contextChanged,
           origin: update.origin,
+          focusPlace: update.focusPlace,
           now: NOW,
         }
       );
@@ -249,7 +250,7 @@ describe("set_environmental_map_layers WebMCP tool", () => {
       ui_updated: true,
       analysis_cleared: true,
       selected_place: {
-        label: "Houston, Texas, United States (OSM search)",
+        label: "Houston, Texas, United States (place search result)",
         longitude: -95.3676974,
         latitude: 29.7589382,
         radius_km: 40,
@@ -304,6 +305,7 @@ describe("set_environmental_map_layers WebMCP tool", () => {
       revision: 9,
       contextRevision: 3,
       agentFocusRevision: 4,
+      placeFocusRevision: 0,
       layers: {
         rain_satellite: { visible: true, status: "ready" },
         surface_heat_satellite: { visible: true, status: "no_imagery" },
@@ -369,6 +371,7 @@ describe("set_environmental_map_layers WebMCP tool", () => {
       revision: 12,
       contextRevision: 4,
       agentFocusRevision: 2,
+      placeFocusRevision: 0,
       layers: {
         rain_satellite: { visible: true, status: "no_imagery" },
         surface_heat_satellite: { visible: true, status: "no_imagery" },
@@ -446,7 +449,7 @@ describe("set_environmental_map_layers WebMCP tool", () => {
     expect(completed).toMatchObject({
       status: "success",
       selected_place: {
-        label: "Springfield, Missouri (OSM search)",
+        label: "Springfield, Missouri (place search result)",
         radius_km: 40,
       },
       map_date: "2026-08-25",
@@ -561,7 +564,7 @@ describe("set_environmental_map_layers WebMCP tool", () => {
     expect(applyUpdate).not.toHaveBeenCalled();
   });
 
-  it("lets a newer idempotent Agent request supersede a pending place lookup", async () => {
+  it("keeps a pending place lookup alive across a newer layer-only Agent request", async () => {
     let resolveFetch: ((response: Response) => void) | undefined;
     const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => {
       resolveFetch = resolve;
@@ -588,10 +591,11 @@ describe("set_environmental_map_layers WebMCP tool", () => {
     }), { headers: { "Content-Type": "application/json" } }));
 
     await expect(older).resolves.toMatchObject({
-      status: "superseded",
-      ui_updated: false,
+      status: "success",
+      ui_updated: true,
+      selected_place: { label: "Houston (place search result)" },
     });
-    expect(applyUpdate).toHaveBeenCalledTimes(1);
+    expect(applyUpdate).toHaveBeenCalledTimes(2);
   });
 
   it("reserves invocation order before lookup so an older result cannot beat a newer request", async () => {
@@ -641,7 +645,7 @@ describe("set_environmental_map_layers WebMCP tool", () => {
     }), { headers: { "Content-Type": "application/json" } }));
     await expect(newer).resolves.toMatchObject({
       status: "success",
-      selected_place: { label: "Dallas (OSM search)" },
+      selected_place: { label: "Dallas (place search result)" },
     });
     expect(applyUpdate).toHaveBeenCalledTimes(1);
   });

@@ -44,6 +44,7 @@ describe("environmental map state helpers", () => {
       revision: 0,
       contextRevision: 0,
       agentFocusRevision: 0,
+      placeFocusRevision: 0,
     });
   });
 
@@ -104,6 +105,7 @@ describe("environmental map state helpers", () => {
       date: "2026-08-25",
       revision: 1,
       agentFocusRevision: 0,
+      placeFocusRevision: 0,
       layers: {
         rain_satellite: { visible: true, status: "loading" },
         surface_heat_satellite: { visible: false, status: "hidden" },
@@ -137,6 +139,30 @@ describe("environmental map state helpers", () => {
     expect(retry.contextRevision).toBe(first.contextRevision);
     expect(retry.layers).toEqual(first.layers);
     expect(retry.agentFocusRevision).toBe(first.agentFocusRevision + 1);
+    expect(retry.placeFocusRevision).toBe(first.placeFocusRevision);
+  });
+
+  it("records place focus separately from ordinary Agent map updates", () => {
+    const current = applyEnvironmentalMapDesiredState(
+      createInitialEnvironmentalMapState(),
+      { rain_satellite: true },
+      {
+        date: "2026-08-25",
+        contextChanged: false,
+        origin: "agent",
+        now: NOW,
+      }
+    );
+    const focused = applyEnvironmentalMapDesiredState(current, {}, {
+      date: "2026-08-25",
+      contextChanged: false,
+      origin: "agent",
+      focusPlace: true,
+      now: NOW,
+    });
+
+    expect(focused.agentFocusRevision).toBe(current.agentFocusRevision + 1);
+    expect(focused.placeFocusRevision).toBe(current.placeFocusRevision + 1);
   });
 
   it("resets every visible layer on a changed place/date context", () => {

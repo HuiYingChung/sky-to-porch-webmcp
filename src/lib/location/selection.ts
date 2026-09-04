@@ -129,7 +129,7 @@ export function buildDemoPlaceSelection(
  */
 /**
  * UXFIX-02 (W8): Creates a PlaceSelection from a geocoder search result.
- * The label carries an explicit "(OSM search)" suffix so a search result is
+ * The label carries an explicit "(place search result)" suffix so a search result is
  * never mistaken for an authoritative or demo place. isMapSelection is true:
  * evidence queries route through the same validated custom-area path as a
  * map click.
@@ -154,7 +154,7 @@ export function buildGeocodedPlaceSelection(
   const analysisArea = validateAndBuildArea(coord, radiusKm);
   const timeSelection = validateAndBuildTimeSelection(timeType, startTs, endTs);
   return {
-    label: `${label.trim()} (OSM search)`,
+    label: `${label.trim()} (place search result)`,
     isMapSelection: true,
     selectionMethod: "place_search",
     coordinate: coord,

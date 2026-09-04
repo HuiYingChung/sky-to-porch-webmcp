@@ -28,10 +28,10 @@ interface SelectionSummaryProps {
 }
 
 const METHOD_LABELS = {
-  demo_place: "Registered place selection",
+  demo_place: "Example place",
   place_search: "Place search result",
-  map_click: "Direct map click",
-  agent_coordinate: "Agent-supplied coordinate",
+  map_click: "Point chosen on the map",
+  agent_coordinate: "Coordinates supplied by the assistant",
 } as const;
 
 export function SelectionSummary({
@@ -88,7 +88,7 @@ export function SelectionSummary({
       >
         {/*
           ADR-0052: no "(coordinate selection)" note here. A map click now
-          reads "Map point" and a search pick already carries "(OSM search)",
+          reads "Map point" and a search pick already carries a plain-language suffix,
           so the note only repeated the label. The detailed view keeps its
           badge, where the distinction from a registered place still earns
           its space.
@@ -114,15 +114,15 @@ export function SelectionSummary({
               color: "var(--text-muted)",
             }}
           >
-            Coordinates and bounds
+            Location details
           </summary>
           <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: "4px" }}>
             <span>
-              {coordinate.lon.toFixed(5)}° lon, {coordinate.lat.toFixed(5)}° lat
+              Latitude {coordinate.lat.toFixed(5)}°, longitude {coordinate.lon.toFixed(5)}°
             </span>
             <span style={{ color: "var(--text-muted)" }}>
-              Bounds: [{boundingBox.west.toFixed(3)}, {boundingBox.south.toFixed(3)},{" "}
-              {boundingBox.east.toFixed(3)}, {boundingBox.north.toFixed(3)}]
+              Approximate area: latitude {boundingBox.south.toFixed(3)}° to {boundingBox.north.toFixed(3)}°;
+              {" "}longitude {boundingBox.west.toFixed(3)}° to {boundingBox.east.toFixed(3)}°
             </span>
           </div>
         </details>
@@ -146,7 +146,7 @@ export function SelectionSummary({
       <div>
         {/*
           ADR-0052: the "coordinate selection" badge stood two lines above a
-          "Selection method: Direct map click" row that says the same thing
+          "How this place was chosen" row that says the same thing
           with more precision, so the label, the badge, and the row all
           repeated one another. The row is the one that survives.
         */}
@@ -157,32 +157,32 @@ export function SelectionSummary({
 
       <div>
         <span style={{ color: "var(--text-muted)" }}>Coordinates: </span>
-        {coordinate.lon.toFixed(5)}° lon, {coordinate.lat.toFixed(5)}° lat
+        Latitude {coordinate.lat.toFixed(5)}°, longitude {coordinate.lon.toFixed(5)}°
       </div>
 
       <div>
-        <span style={{ color: "var(--text-muted)" }}>Analysis area: </span>
+        <span style={{ color: "var(--text-muted)" }}>Area checked: </span>
         {radiusKm} km radius
       </div>
 
       <div style={{ fontSize: "14px", color: "var(--text-muted)" }}>
-        Bounds: [{boundingBox.west.toFixed(3)}, {boundingBox.south.toFixed(3)},{" "}
-        {boundingBox.east.toFixed(3)}, {boundingBox.north.toFixed(3)}]
+        Approximate area: latitude {boundingBox.south.toFixed(3)}° to {boundingBox.north.toFixed(3)}°;
+        {" "}longitude {boundingBox.west.toFixed(3)}° to {boundingBox.east.toFixed(3)}°
       </div>
 
       {showMethodDetails && (
         <>
           <div>
-            <span style={{ color: "var(--text-muted)" }}>Selection method: </span>
+            <span style={{ color: "var(--text-muted)" }}>How this place was chosen: </span>
             {METHOD_LABELS[selectionMethod]}
           </div>
           <div>
-            <span style={{ color: "var(--text-muted)" }}>Area model / resolution: </span>
-            Point-centred circular analysis area represented by the bounding box above.
+            <span style={{ color: "var(--text-muted)" }}>How the area is drawn: </span>
+            A circle around the point above, with its approximate outer edges shown above.
           </div>
           <div role="note" style={{ color: "var(--text-muted)" }}>
-            This area is an analysis approximation, not an administrative, property, evacuation,
-            flood, or incident boundary. Place-search labels depend on the search provider.
+            This circle is only the area checked. It is not a city, property, evacuation, flood,
+            or incident boundary. Place names depend on the search provider.
           </div>
         </>
       )}

@@ -52,10 +52,10 @@ describe("adaptive Meaning and map-alternative UX", () => {
     const html = renderToStaticMarkup(
       <SelectionSummary selection={selection} includeTime={false} showMethodDetails />
     );
-    expect(html).toContain("Direct map click");
+    expect(html).toContain("Point chosen on the map");
     expect(html).toContain("29.50000");
     expect(html).toContain("25 km radius");
-    expect(html).toContain("not an administrative, property");
+    expect(html).toContain("not a city, property");
     expect(html).not.toContain("Past 7 days");
   });
 

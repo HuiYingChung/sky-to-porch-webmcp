@@ -91,6 +91,8 @@ export interface EnvironmentalMapToolUpdate {
   date: string | null;
   layers: EnvironmentalMapLayerPatch;
   origin: "agent";
+  /** Reframe this place even when it is already selected. */
+  focusPlace: boolean;
 }
 
 export interface EnvironmentalMapToolUpdateResult {
@@ -109,6 +111,8 @@ export interface SetEnvironmentalMapLayersDependencies {
   beginInvocation?: () => () => boolean;
   /** Shared with analysis tools because a named-place map call changes place. */
   beginContextInvocation?: () => () => boolean;
+  /** Claim a real context change only after the next selection is known. */
+  beginContextMutationInvocation?: () => () => boolean;
 }
 
 interface LayerOutput {
@@ -332,7 +336,9 @@ export async function executeSetEnvironmentalMapLayersTool(
   if (signal.aborted) {
     throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
   }
-  const isCurrentInvocation = dependencies.beginInvocation?.() ?? (() => true);
+  const isCurrentInvocation = typeof rawInput.place === "string"
+    ? dependencies.beginInvocation?.() ?? (() => true)
+    : () => true;
   const isCurrentContext = typeof rawInput.place === "string"
     ? dependencies.beginContextInvocation?.() ?? (() => true)
     : () => true;
@@ -372,11 +378,10 @@ export async function executeSetEnvironmentalMapLayersTool(
       };
     }
     const latest = dependencies.readState();
-    if (
-      latest.mapState.revision !== current.mapState.revision ||
-      latest.mapState.agentFocusRevision !== current.mapState.agentFocusRevision ||
+    if (!dependencies.beginContextInvocation && (
+      latest.mapState.contextRevision !== current.mapState.contextRevision ||
       !sameMapSelection(latest.placeSelection, current.placeSelection)
-    ) {
+    )) {
       return {
         status: "superseded",
         message:
@@ -488,11 +493,24 @@ export async function executeSetEnvironmentalMapLayersTool(
       ui_updated: false,
     };
   }
+  const selectionChanged = !sameMapSelection(current.placeSelection, selection);
+  const isCurrentMutation = typeof rawInput.place === "string" || selectionChanged
+    ? dependencies.beginContextMutationInvocation?.() ?? (() => true)
+    : () => true;
+  if (!isCurrentInvocation() || !isCurrentMutation()) {
+    return {
+      status: "superseded",
+      message:
+        "A newer map request replaced this request before its update could be applied.",
+      ui_updated: false,
+    };
+  }
   const result = dependencies.applyUpdate({
     selection,
     date,
     layers: layerPatch,
     origin: "agent",
+    focusPlace: typeof rawInput.place === "string",
   });
   return {
     status: "success",
@@ -530,7 +548,7 @@ export function createSetEnvironmentalMapLayersTool(
     name: SET_ENVIRONMENTAL_MAP_LAYERS_TOOL_NAME,
     title: "Set environmental map layers",
     description:
-      "Show or hide Sky to Porch environmental map imagery for one place and one UTC date. Use for visual map requests involving rain imagery, land-surface heat imagery, recent FIRMS thermal-anomaly pixels, or 3-day flood-extent imagery. Inputs are desired-state patches: omitted layers remain unchanged and repeated identical calls are safe. Use look_up_place_location for read-only coordinates/bounds, environmental analysis for conditions, amounts, severity, impact or safety, and source coverage for eligibility. Imagery is visualization-only.",
+      "Show or hide Sky to Porch environmental map imagery for one place and one UTC date. Use for visual map requests involving rain imagery, land-surface heat imagery, recent FIRMS thermal-anomaly pixels, or 3-day flood-extent imagery. Inputs are desired-state patches: omitted layers remain unchanged and repeated identical calls are safe. Use look_up_place_location to select and frame a place while returning its coordinates and bounds, environmental analysis for conditions, amounts, severity, impact or safety, and source coverage for eligibility. Imagery is visualization-only.",
     inputSchema: SET_ENVIRONMENTAL_MAP_LAYERS_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,

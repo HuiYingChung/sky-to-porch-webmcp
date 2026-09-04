@@ -15,7 +15,8 @@ export const PLACE_CHOICE_ID_RE = new RegExp(PLACE_CHOICE_ID_PATTERN_SOURCE, "u"
 const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/u;
 const UPSTREAM_ID_RE = /^[A-Za-z0-9._-]{3,120}$/u;
 const MAX_UPSTREAM_CANDIDATES = 5;
-const MAX_PUBLIC_CHOICES = 3;
+const DEFAULT_PUBLIC_CHOICES = 3;
+export const MAX_PLACE_LOOKUP_CHOICES = MAX_UPSTREAM_CANDIDATES;
 
 export type ResolvedPlaceCandidate = GeocodeResult;
 
@@ -31,6 +32,8 @@ export type NamedPlaceResolution =
   | {
       status: "needs_place_choice";
       choices: AgentPlaceChoice[];
+      /** Validated candidates in the same order as choices, for rich UI. */
+      candidates: ResolvedPlaceCandidate[];
       refreshed: boolean;
     };
 
@@ -223,7 +226,8 @@ export async function resolveNamedPlace(
   place: string,
   placeChoiceIdInput: string | undefined,
   fetchImpl: typeof fetch,
-  signal: AbortSignal
+  signal: AbortSignal,
+  maxPublicChoices = DEFAULT_PUBLIC_CHOICES
 ): Promise<NamedPlaceResolution> {
   let response: Response;
   try {
@@ -266,23 +270,24 @@ export async function resolveNamedPlace(
   if (uniqueCandidates.length === 0) return { status: "place_not_found" };
   if (placeChoiceIdInput !== undefined) {
     // Reordered upstream results must not invalidate a choice that was
-    // previously offered. Search the full bounded unique set before capping
-    // refreshed display choices.
+    // previously offered. Search the full bounded unique set.
     const selected = uniqueCandidates.find(
       (candidate) => placeChoiceId(candidate) === placeChoiceIdInput
     );
     if (selected) return { status: "resolved", candidate: selected };
     return {
       status: "needs_place_choice",
-      choices: placeChoices(uniqueCandidates.slice(0, MAX_PUBLIC_CHOICES)),
+      choices: placeChoices(uniqueCandidates.slice(0, maxPublicChoices)),
+      candidates: uniqueCandidates.slice(0, maxPublicChoices),
       refreshed: true,
     };
   }
-  const candidates = uniqueCandidates.slice(0, MAX_PUBLIC_CHOICES);
+  const candidates = uniqueCandidates.slice(0, maxPublicChoices);
   if (candidates.length > 1) {
     return {
       status: "needs_place_choice",
       choices: placeChoices(candidates),
+      candidates,
       refreshed: false,
     };
   }

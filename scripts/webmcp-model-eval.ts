@@ -2,7 +2,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { loadEnvConfig } from "@next/env";
 import type { ActiveAnalysis, AnalysisRequest } from "@/lib/analysis/types";
-import { createInitialEnvironmentalMapState } from "@/lib/map/environmental-map-state";
+import {
+  applyEnvironmentalMapDesiredState,
+  createInitialEnvironmentalMapState,
+  sameMapSelection,
+} from "@/lib/map/environmental-map-state";
+import type { PlaceSelection } from "@/lib/location/selection";
 import {
   createAnalyzeHazardTool,
   createCompareHazardTool,
@@ -221,7 +226,24 @@ function modelEvalGeocoder(_url: RequestInfo | URL, init?: RequestInit): Promise
 }
 
 function availableTools(item?: EvalCase, executeAnalysis = false) {
-  const mapState = createInitialEnvironmentalMapState();
+  let mapState = createInitialEnvironmentalMapState();
+  let placeSelection: PlaceSelection | null = null;
+  const readMapState = () => ({ placeSelection, mapState });
+  const commitMapUpdate = (update: {
+    selection: PlaceSelection | null;
+    date: string | null;
+    layers: Parameters<typeof applyEnvironmentalMapDesiredState>[1];
+    origin: "agent";
+  }) => {
+    const selectionChanged = !sameMapSelection(placeSelection, update.selection);
+    placeSelection = update.selection;
+    mapState = applyEnvironmentalMapDesiredState(mapState, update.layers, {
+      date: update.date,
+      contextChanged: selectionChanged,
+      origin: update.origin,
+    });
+    return { mapState, analysisCleared: selectionChanged };
+  };
   const tools = [
     createAnalyzeHazardTool(executeAnalysis
       ? {
@@ -241,12 +263,18 @@ function availableTools(item?: EvalCase, executeAnalysis = false) {
     createEnvironmentalCapabilitiesTool(),
     createGetEnvironmentalSourceCoverageTool(),
     createSetEnvironmentalMapLayersTool({
-      readState: () => ({ placeSelection: null, mapState }),
-      applyUpdate: () => ({ mapState, analysisCleared: false }),
+      readState: readMapState,
+      applyUpdate: commitMapUpdate,
       fetchImpl: modelEvalGeocoder,
       now: () => new Date("2026-08-27T12:00:00.000Z"),
     }),
-    createLookUpPlaceLocationTool({ fetchImpl: modelEvalGeocoder }),
+    createLookUpPlaceLocationTool({
+      readState: readMapState,
+      applyUpdate: commitMapUpdate,
+      publishFeedback: () => {},
+      fetchImpl: modelEvalGeocoder,
+      now: () => new Date("2026-08-27T12:00:00.000Z"),
+    }),
   ];
   const activeAnalysis = item?.availableAfter ? sampleCompletedAnalysis() : null;
   if (activeAnalysis && item?.availableAfter === "completed_environmental_analysis") {

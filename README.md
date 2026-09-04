@@ -49,9 +49,10 @@ together. The Agent can:
 - ask for a place choice when a name is ambiguous, then resume the exact
   unfinished request;
 - compare two places or time windows without changing either selected radius;
-- look up a named place without running an environmental analysis, returning
-  only Photon/OpenStreetMap coordinates, available bounds, administrative
-  context, and attribution;
+- look up a named place without running an environmental analysis; one clear
+  match is selected and framed on the shared map, while an ambiguous name
+  shows every validated candidate, up to five, with the geographic details a
+  person needs to choose;
 - show or hide supported environmental imagery on the shared map for one UTC
   date, using the same desired layer state on desktop and mobile;
 - inspect exact observations, sources, failures, limitations, and missing
@@ -101,7 +102,7 @@ The normal human map workflow remains functional in browsers without WebMCP.
 | `get_environmental_source_coverage` | Explains whether a source is eligible for a region and date; it is not itself an observation. |
 | `get_sky_to_porch_help_and_demos` | Returns capabilities and ready-to-run demo inputs. |
 | `prepare_storm_claim_discussion` | Opens a bounded evidence and property-document checklist after a Home + Wind result. |
-| `look_up_place_location` | Resolves a place to its canonical label, WGS84 representative point, available bounding box and administrative context, with Photon/OpenStreetMap attribution; it does not change the UI. |
+| `look_up_place_location` | Resolves a place to its canonical label, WGS84 representative point, available bounding box, and administrative context, with Photon/OpenStreetMap attribution. One clear match selects and frames the shared map; ambiguity or failure leaves the map and evidence unchanged but shows a plain-language notice. |
 | `set_environmental_map_layers` | Applies an idempotent desired-state patch to rain, land-surface heat, recent FIRMS thermal-anomaly, and flood-extent visualizations on the shared map. |
 
 The eight tool definitions stay registered for the page lifetime so Agent tool
@@ -114,12 +115,22 @@ Ambiguous lookups pause for a person-selected stable choice ID, and stale IDs
 are revalidated instead of guessed. Every user-specified radius remains
 authoritative.
 
+For a geography-only lookup, one clear match updates the visible map while
+preserving its radius, date, and requested layers. If the name could refer to
+more than one place, the page lists every validated candidate in the bounded
+response, up to five, with its administrative area, coordinates, and available
+bounds, then asks which place the person meant. No match,
+invalid input, and lookup failure are also explained on the page in everyday
+language. None of these unfinished outcomes moves the map or clears evidence,
+and an older cancelled lookup cannot replace a newer result.
+
 Map-layer input is desired state: `true` means show, `false` means hide, and an
 omitted layer stays unchanged. Repeating the same request is safe. A pure layer
 change does not discard an analysis; changing the selected place, date, or
-radius clears evidence that no longer matches that context. Agent updates use
-the same state as the desktop and mobile controls and reveal the Map view on
-mobile.
+radius clears evidence that no longer matches that context. A successful place
+lookup uses this same shared state and clears evidence only when the selected
+place changes. Agent updates use the same state as the desktop and mobile
+controls and reveal the Map view on mobile.
 
 Each imagery request uses exactly one UTC calendar date. A multi-day analysis
 range is never silently reduced to its end date; the caller must provide a
@@ -142,6 +153,9 @@ flowchart LR
   Human --> MapState
   MapState --> UI
   PlaceTool[Place lookup tool] --> Resolver[Bounded Photon resolver]
+  Resolver --> MapState
+  Resolver --> Notice[Plain-language place notice]
+  Notice --> UI
 ```
 
 Deterministic code owns location and time validation, source coverage,

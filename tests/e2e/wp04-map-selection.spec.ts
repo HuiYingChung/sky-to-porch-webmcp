@@ -75,9 +75,9 @@ test("left Query selection is the same atomic selection in non-map text view", a
   await expect(summary).toContainText("Houston area (demo)");
   await expect(summary).toContainText("Coordinates:");
   await expect(summary).toContainText("40 km radius");
-  await expect(summary).toContainText("Bounds:");
-  await expect(summary).toContainText("Selection method:");
-  await expect(summary).toContainText("Area model / resolution:");
+  await expect(summary).toContainText("Approximate area:");
+  await expect(summary).toContainText("How this place was chosen:");
+  await expect(summary).toContainText("How the area is drawn:");
   await expect(summary).not.toHaveAttribute("data-selection-time");
 });
 
