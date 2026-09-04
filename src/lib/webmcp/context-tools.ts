@@ -36,6 +36,14 @@ export const PREPARE_STORM_CLAIM_INPUT_SCHEMA = {
   properties: {},
 } as const;
 
+export interface ContextualToolState {
+  activeAnalysis: ActiveAnalysis | null;
+  relatedAnalyses: readonly ActiveAnalysis[];
+  onOpenStormClaimDiscussion: () => void;
+}
+
+export type ReadContextualToolState = () => ContextualToolState;
+
 function compactText(value: string, maxLength: number): string {
   const clean = value.replace(/\s+/gu, " ").trim();
   return clean.length <= maxLength ? clean : `${clean.slice(0, maxLength - 1)}…`;
@@ -161,15 +169,14 @@ function focusedInspection(
   };
 }
 
-export function createInspectEvidenceTool(
-  analysis: ActiveAnalysis,
-  relatedAnalyses: ActiveAnalysis[] = []
+function createInspectEvidenceToolFromState(
+  readState: () => Pick<ContextualToolState, "activeAnalysis" | "relatedAnalyses">
 ): WebMCP.ModelContextTool {
   return {
     name: INSPECT_EVIDENCE_TOOL_NAME,
     title: "Inspect current environmental evidence",
     description:
-      "Read validated observations, confidence, and citations from the current primary and related evidence without re-querying or controlling the UI. Explain supported relationships and label inference. Do not use for an insurer or property-record checklist; use prepare_storm_claim_discussion when available.",
+      "Use only after an environmental analysis. Read validated observations, confidence, and citations from the current primary and related evidence without re-querying or controlling the UI. If no result is active, this returns no_active_analysis. Explain supported relationships and label inference. Do not use for an insurer or property-record checklist; use prepare_storm_claim_discussion when applicable.",
     inputSchema: INSPECT_EVIDENCE_INPUT_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     execute: async (input) => {
@@ -186,6 +193,14 @@ export function createInspectEvidenceTool(
         (typeof input.hazard !== "string" || !(HAZARD_IDS as readonly string[]).includes(input.hazard))
       ) {
         return { status: "invalid_input", message: "hazard is not supported." };
+      }
+      const { activeAnalysis: analysis, relatedAnalyses } = readState();
+      if (!analysis) {
+        return {
+          status: "no_active_analysis",
+          ui_updated: false,
+          message: "No completed environmental analysis is active. Run an analysis first.",
+        };
       }
       const availableAnalyses = [analysis, ...relatedAnalyses];
       const selectedAnalysis = typeof input.hazard === "string"
@@ -359,6 +374,22 @@ export function createInspectEvidenceTool(
   };
 }
 
+export function createInspectEvidenceTool(
+  analysis: ActiveAnalysis,
+  relatedAnalyses: readonly ActiveAnalysis[] = []
+): WebMCP.ModelContextTool {
+  return createInspectEvidenceToolFromState(() => ({
+    activeAnalysis: analysis,
+    relatedAnalyses,
+  }));
+}
+
+export function createStateBackedInspectEvidenceTool(
+  readState: ReadContextualToolState
+): WebMCP.ModelContextTool {
+  return createInspectEvidenceToolFromState(readState);
+}
+
 export function claimDiscussionForAnalysis(
   analysis: ActiveAnalysis
 ): StormQueryResult["claimDiscussion"] | null {
@@ -369,22 +400,39 @@ export function claimDiscussionForAnalysis(
   return analysis.outcome.result.claimDiscussion ?? null;
 }
 
-export function createStormClaimDiscussionTool(
-  analysis: ActiveAnalysis,
-  onOpen: () => void
-): WebMCP.ModelContextTool | null {
-  const discussion = claimDiscussionForAnalysis(analysis);
-  if (!discussion) return null;
+function createStormClaimDiscussionToolFromState(
+  readState: ReadContextualToolState
+): WebMCP.ModelContextTool {
   return {
     name: PREPARE_STORM_CLAIM_TOOL_NAME,
     title: "Prepare a storm claim discussion",
     description:
-      "Use this, not evidence inspection, when the person asks to open an insurer discussion or identify roof/property records. It opens the evidence-backed wind contribution kit after Home + Wind & Storm, leads with supported regional findings, and shows records that could strengthen the discussion; the insurer decides coverage.",
+      "Use only when the current completed result is Home + Wind & Storm and the person asks to open an insurer discussion or identify roof/property records. Otherwise this returns a non-applicable status. It opens the evidence-backed wind contribution kit, leads with supported regional findings, and shows records that could strengthen the discussion; the insurer decides coverage.",
     inputSchema: PREPARE_STORM_CLAIM_INPUT_SCHEMA,
     annotations: { readOnlyHint: false, untrustedContentHint: true },
     execute: async (input) => {
       if (Object.keys(input).length > 0) {
         return { status: "invalid_input", ui_updated: false, message: "This tool takes no input." };
+      }
+      const {
+        activeAnalysis: analysis,
+        onOpenStormClaimDiscussion: onOpen,
+      } = readState();
+      if (!analysis) {
+        return {
+          status: "no_active_analysis",
+          ui_updated: false,
+          message: "No completed environmental analysis is active. Run an analysis first.",
+        };
+      }
+      const discussion = claimDiscussionForAnalysis(analysis);
+      if (!discussion) {
+        return {
+          status: "not_available_for_current_result",
+          ui_updated: false,
+          analysis_id: analysis.analysisId,
+          message: "This action requires a completed Home + Wind & Storm result with a claim discussion guide.",
+        };
       }
       onOpen();
       const output = {
@@ -438,4 +486,22 @@ export function createStormClaimDiscussionTool(
       };
     },
   };
+}
+
+export function createStormClaimDiscussionTool(
+  analysis: ActiveAnalysis,
+  onOpen: () => void
+): WebMCP.ModelContextTool | null {
+  if (!claimDiscussionForAnalysis(analysis)) return null;
+  return createStormClaimDiscussionToolFromState(() => ({
+    activeAnalysis: analysis,
+    relatedAnalyses: [],
+    onOpenStormClaimDiscussion: onOpen,
+  }));
+}
+
+export function createStateBackedStormClaimDiscussionTool(
+  readState: ReadContextualToolState
+): WebMCP.ModelContextTool {
+  return createStormClaimDiscussionToolFromState(readState);
 }

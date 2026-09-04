@@ -23,8 +23,11 @@ The service owns:
 
 ## Implemented tool surface
 
-Four baseline tools are registered whenever WebMCP is available. Two more
-tools are registered only while the necessary validated page state exists.
+Six tools are registered once whenever WebMCP is available. Four operate
+without page-result context. Two are state-dependent: their definitions and
+registered handles remain stable, while execution reads the latest committed
+page state and returns a deterministic availability status when its prerequisite
+does not exist.
 
 ### get_sky_to_porch_help_and_demos
 
@@ -91,17 +94,20 @@ No scenario or chain can silently replace another in the Agent receipt.
 
 ### inspect_current_environmental_evidence
 
-Registered only while a completed result is active. It reads the strongest
-primary and related observations, confidence, structured citations, source
-status, limitations, and the hazard-specific scope. The Agent may focus the
-read on a summary, direct observations, sources, limitations, or evidence still
-needed, and may select one already completed chain. It does not run another
-query and is not required before or after the primary tool.
+Reads the strongest primary and related observations, confidence, structured
+citations, source status, limitations, and the hazard-specific scope from the
+latest committed result. Before a completed result exists it returns
+`no_active_analysis`. The Agent may focus the read on a summary, direct
+observations, sources, limitations, or evidence still needed, and may select
+one already completed chain. It does not run another query and is not required
+before or after the primary tool.
 
 ### prepare_storm_claim_discussion
 
-Registered only while the current result is Home + Wind & Storm and a bounded
-claim-discussion guide exists. It opens that guide in the visible page and
+Opens a bounded claim-discussion guide only when the latest committed result is
+Home + Wind & Storm and that guide exists. Before any completed result it
+returns `no_active_analysis`; for other results it returns
+`not_available_for_current_result` without changing the UI. When applicable it
 returns a confidence-labelled assessment, supporting official observations,
 property-specific questions, and a documentation checklist. It does not
 contact an insurer or submit a claim.
@@ -145,11 +151,15 @@ when retrieval returns no usable observation.
 
 ## Registration lifecycle
 
-Register tools from a client component after feature detection. Tie
-registration to an AbortController so unmounting or replacement unregisters
-the tools. The four baseline tools share one registration lifecycle. Keep
-definitions stable and use the shared controller's current state through safe
-closures for the two contextual tools.
+Register the complete tool set from a client component after feature detection.
+All six definitions share one AbortController and one page-lifetime
+registration. Abort only when the bridge unmounts or group registration fails;
+ordinary analysis-state changes must not unregister or re-register tools.
+
+The two state-dependent execute callbacks take one snapshot of the latest
+committed analysis state through a stable getter. This keeps RegisteredTool
+handles valid across analysis and comparison turns without mixing state from
+different render generations.
 
 ## Security and failure behavior
 

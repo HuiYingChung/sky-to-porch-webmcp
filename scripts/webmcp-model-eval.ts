@@ -8,8 +8,8 @@ import {
   DEFAULT_RELATED_HAZARDS,
 } from "@/lib/webmcp/analyze-tool";
 import {
-  createInspectEvidenceTool,
-  createStormClaimDiscussionTool,
+  createStateBackedInspectEvidenceTool,
+  createStateBackedStormClaimDiscussionTool,
 } from "@/lib/webmcp/context-tools";
 import {
   createGetEnvironmentalSourceCoverageTool,
@@ -213,7 +213,7 @@ function modelEvalGeocoder(_url: RequestInfo | URL, init?: RequestInit): Promise
 }
 
 function availableTools(item?: EvalCase, executeAnalysis = false) {
-  const baseline = [
+  const tools = [
     createAnalyzeHazardTool(executeAnalysis
       ? {
           runAnalysis: async (request) => modelEvalAnalysis(request),
@@ -232,14 +232,20 @@ function availableTools(item?: EvalCase, executeAnalysis = false) {
     createEnvironmentalCapabilitiesTool(),
     createGetEnvironmentalSourceCoverageTool(),
   ];
-  if (!item?.availableAfter) return baseline;
-  const analysis = sampleCompletedAnalysis();
-  const contextual = [createInspectEvidenceTool(analysis)];
-  if (item.availableAfter === "completed_home_wind_analysis") {
-    const claim = createStormClaimDiscussionTool(analysis, () => {});
-    if (claim) contextual.push(claim);
+  const activeAnalysis = item?.availableAfter ? sampleCompletedAnalysis() : null;
+  if (activeAnalysis && item?.availableAfter === "completed_environmental_analysis") {
+    activeAnalysis.request.concern = "general";
   }
-  return [...baseline, ...contextual];
+  const readState = () => ({
+    activeAnalysis,
+    relatedAnalyses: [],
+    onOpenStormClaimDiscussion: () => {},
+  });
+  return [
+    ...tools,
+    createStateBackedInspectEvidenceTool(readState),
+    createStateBackedStormClaimDiscussionTool(readState),
+  ];
 }
 
 function apiTools(tools: WebMCP.ModelContextTool[]) {

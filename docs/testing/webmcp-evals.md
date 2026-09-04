@@ -47,12 +47,14 @@ Rain, each with status, strongest evidence, time, source, and limitation. It
 also rejects internal hazard IDs, result field names, and enum values in the
 person-facing response.
 
-The dataset also includes post-analysis availability context for
+The dataset also includes post-analysis state for
 `inspect_current_environmental_evidence` and the Home + Wind-only
-`prepare_storm_claim_discussion`. At least one natural selection case must
-exist for every registered baseline or contextual tool. Non-demo analysis
-questions must cover all seven hazard families so curated prompts cannot mask
-a generic-query regression.
+`prepare_storm_claim_discussion`. All six stable tool definitions are presented
+in every selection case, including before a result exists, so the two
+state-dependent actions are tested as real distractors instead of disappearing
+from the simulated registry. At least one natural selection case must exist for
+every tool. Non-demo analysis questions must cover all seven hazard families so
+curated prompts cannot mask a generic-query regression.
 
 Before release, run the dataset repeatedly with the challenge agent and record:
 

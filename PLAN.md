@@ -11,7 +11,8 @@
 - W0 repository baseline: complete
 - W1 shared analysis application layer: complete for the vertical slice
 - W2 shared client controller and state: complete with renderer compatibility
-- W3 WebMCP tools: four baseline tools plus two contextual tools implemented;
+- W3 WebMCP tools: six page-lifetime tools implemented—four context-free and
+  two state-dependent tools that fail closed until their prerequisites exist;
   product commit `72f3a36` fixes the production-reported Houston
   ambiguity loop with distinguishable locality/type labels, stable upstream
   place IDs, original-query continuation, exact retry arguments, and stale-ID
