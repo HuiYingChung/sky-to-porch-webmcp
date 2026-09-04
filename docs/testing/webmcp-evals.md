@@ -49,8 +49,10 @@ person-facing response.
 
 The dataset also includes post-analysis state for
 `inspect_current_environmental_evidence` and the Home + Wind-only
-`prepare_storm_claim_discussion`. All six stable tool definitions are presented
-in every selection case, including before a result exists, so the two
+`prepare_storm_claim_discussion`, plus direct geography lookup and shared-map
+desired-state cases for `look_up_place_location` and
+`set_environmental_map_layers`. All eight stable tool definitions are presented
+in every selection case, including before a result exists, so the three
 state-dependent actions are tested as real distractors instead of disappearing
 from the simulated registry. Every tool must have a paraphrase family with at
 least three semantically equivalent requests: a question, an imperative, and a
@@ -96,18 +98,23 @@ Before release, run the dataset repeatedly with the challenge agent and record:
 17. whether an unqualified storm, thunderstorm, or severe-weather question runs
     separate Wind and Flood context chains instead of narrowing to Wind alone.
 18. whether every related-context final answer reports every included chain in
-    plain English, beginning with an overall summary and preserving each
-    chain's evidence and limitation.
+   plain English, beginning with an overall summary and preserving each
+   chain's evidence and limitation.
+19. whether a pure place/geography request selects `look_up_place_location`
+    without mutating the UI or making an environmental claim;
+20. whether an explicit map-layer request selects
+    `set_environmental_map_layers`, preserves omitted layers, and keeps map
+    imagery separate from analysis evidence.
 
 Do not call this dataset "passed" until the model-backed runs and raw outcomes
 have been retained for the exact tool definition under review.
 
 ## Execution status
 
-The current 38-case selection dataset contains six three-utterance paraphrase
-families, one for every registered tool. These cases are deterministic coverage
-until the exact suite is run with a model; no current six-tool paraphrase pass
-is claimed yet.
+The current 49-case selection dataset contains 24 paraphrase cases across eight
+three-utterance families, one for every registered tool. These cases are
+deterministic coverage until the exact suite is run with a model; no current
+eight-tool paraphrase pass is claimed yet.
 
 The retained 2026-08-27 model-backed result covers the prior 22-case dataset
 and four multi-turn ambiguity cases. The owner authorized paid OpenAI

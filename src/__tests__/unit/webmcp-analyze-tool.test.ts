@@ -9,6 +9,7 @@ import {
   createAnalyzeHazardTool,
   executeAnalyzeHazardTool,
 } from "@/lib/webmcp/analyze-tool";
+import { placeChoiceId } from "@/lib/webmcp/place-resolution";
 
 const NOW = new Date("2026-08-26T18:00:00.000Z");
 
@@ -194,11 +195,23 @@ describe("WebMCP environmental hazard tool", () => {
     });
     expect("choices" in output ? output.choices : undefined).toEqual([
       {
-        choice_id: "place-coordinate-39.7800000--89.6500000",
+        choice_id: placeChoiceId({
+          label: "Springfield, Illinois",
+          lon: -89.65,
+          lat: 39.78,
+          boundingBox: null,
+          adminContext: {},
+        }),
         label: "Springfield, Illinois",
       },
       {
-        choice_id: "place-coordinate-37.2100000--93.2900000",
+        choice_id: placeChoiceId({
+          label: "Springfield, Missouri",
+          lon: -93.29,
+          lat: 37.21,
+          boundingBox: null,
+          adminContext: {},
+        }),
         label: "Springfield, Missouri",
       },
     ]);
@@ -284,10 +297,17 @@ describe("WebMCP environmental hazard tool", () => {
     expect(ambiguous.status).toBe("needs_place_choice");
     expect(runAnalysis).not.toHaveBeenCalled();
 
+    if (
+      ambiguous.status !== "needs_place_choice" ||
+      !("choices" in ambiguous) ||
+      !ambiguous.choices
+    ) {
+      throw new Error("Expected Springfield ambiguity choices");
+    }
     const completed = await executeAnalyzeHazardTool(
       {
         place: "Springfield",
-        place_choice_id: "place-coordinate-39.7800000--89.6500000",
+        place_choice_id: ambiguous.choices[0].choice_id,
         hazard: "fire_smoke",
         time: "latest_completed",
         analysis_scope: "single_hazard_only",
@@ -316,6 +336,12 @@ describe("WebMCP environmental hazard tool", () => {
         label: "Houston, Texas, United States",
         lon: -95.3676974,
         lat: 29.7589382,
+        boundingBox: {
+          west: -95.9,
+          south: 29.5,
+          east: -95.0,
+          north: 30.1,
+        },
       },
       {
         id: "osm-r-1840945",
@@ -380,6 +406,12 @@ describe("WebMCP environmental hazard tool", () => {
       placeSelection: {
         label: "Houston, Texas, United States (OSM search)",
         coordinate: { lon: -95.3676974, lat: 29.7589382 },
+        placeBoundingBox: {
+          west: -95.9,
+          south: 29.5,
+          east: -95.0,
+          north: 30.1,
+        },
       },
     });
     expect(completed.ui_updated).toBe(true);
@@ -989,6 +1021,33 @@ describe("WebMCP environmental hazard tool", () => {
     expect(output).toMatchObject({
       included_chains: ["air_quality", "extreme_heat", "earth_volcanoes"],
     });
+  });
+
+  it("propagates caller cancellation from a related-context bundle", async () => {
+    const controller = new AbortController();
+    const runAnalysis = vi.fn();
+    const runAnalysisBundle = vi.fn((
+      _requests: AnalysisRequest[],
+      _origin?: "agent",
+      signal?: AbortSignal
+    ): Promise<ActiveAnalysis[] | null> => new Promise((resolve) => {
+      signal?.addEventListener("abort", () => resolve(null), { once: true });
+    }));
+    const pending = executeAnalyzeHazardTool(
+      {
+        place: "19.7074, -155.0885",
+        hazard: "earth_volcanoes",
+        time: "latest_completed",
+      },
+      toolOptions(controller.signal),
+      { runAnalysis, runAnalysisBundle, now: () => NOW }
+    );
+    await vi.waitFor(() => expect(runAnalysisBundle).toHaveBeenCalledTimes(1));
+
+    controller.abort(new DOMException("cancelled", "AbortError"));
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(runAnalysis).not.toHaveBeenCalled();
   });
 
   it.each([

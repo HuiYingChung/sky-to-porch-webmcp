@@ -3,11 +3,13 @@ import type { BoundingBox } from "@/contracts/common";
 import { parseWildfireLayerEnvelope } from "@/contracts/wildfire-layer";
 import {
   clearFirmsNrtLayerServerStateForTests,
+  isSupportedFirmsNrtMapDate,
   parseFirmsNrtCsv,
   queryFirmsNrtLayer,
   queryFirmsNrtLayerGuarded,
 } from "@/lib/fire/firms-nrt-layer";
 import {
+  WILDFIRE_LAYER_CLIENT_CACHE_MAX_ENTRIES,
   clearWildfireLayerClientCacheForTests,
   loadWildfireLayer,
 } from "@/lib/fire/firms-nrt-layer-client";
@@ -75,6 +77,33 @@ describe("NASA FIRMS NRT wildfire layer adapter", () => {
     }
   });
 
+  it("supports only today and the previous UTC day for the NRT map", async () => {
+    expect(isSupportedFirmsNrtMapDate("2026-08-13", Date.parse(NOW))).toBe(true);
+    expect(isSupportedFirmsNrtMapDate("2026-08-12", Date.parse(NOW))).toBe(true);
+    expect(isSupportedFirmsNrtMapDate("2026-08-11", Date.parse(NOW))).toBe(false);
+    expect(isSupportedFirmsNrtMapDate("2026-08-14", Date.parse(NOW))).toBe(false);
+
+    for (const date of ["2026-08-11", "2026-08-14"]) {
+      const fetchImpl = vi.fn();
+      await expect(queryFirmsNrtLayer(date, AREA, {
+        fetch: fetchImpl as typeof fetch,
+        nowIso: () => NOW,
+        mapKey: "unit-test-map-key",
+      })).resolves.toEqual({ kind: "failure", error: "unsupported_date" });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    }
+  });
+
+  it("reports an unsupported historical map date even when FIRMS is unconfigured", async () => {
+    const fetchImpl = vi.fn();
+    await expect(queryFirmsNrtLayer("2020-01-01", AREA, {
+      fetch: fetchImpl as typeof fetch,
+      nowIso: () => NOW,
+      mapKey: " ",
+    })).resolves.toEqual({ kind: "failure", error: "unsupported_date" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("returns truthful no_observation without converting it to no danger", async () => {
     const outcome = await queryFirmsNrtLayer(DATE, AREA, {
       fetch: vi.fn(async () => response(`${CSV_HEADER}\n`)) as typeof fetch,
@@ -140,6 +169,17 @@ describe("NASA FIRMS private-key route guard", () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
     expect(first).toEqual(second);
     expect(third).toEqual(first);
+  });
+
+  it("rejects historical dates before consuming upstream concurrency", async () => {
+    const fetchImpl = vi.fn();
+    const outcome = await queryFirmsNrtLayerGuarded("2020-01-01", AREA, {
+      fetch: fetchImpl as typeof fetch,
+      nowIso: () => NOW,
+      mapKey: "unit-test-map-key",
+    });
+    expect(outcome).toEqual({ kind: "failure", error: "unsupported_date" });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("caps simultaneous upstream requests without retry or fallback", async () => {
@@ -220,5 +260,49 @@ describe("wildfire layer client boundary", () => {
       () => 3_000
     );
     expect(envelope).toEqual({ ok: false, error: "schema_validation" });
+  });
+
+  it("bounds successful per-area cache entries and evicts the oldest", async () => {
+    const serverOutcome = await queryFirmsNrtLayer(DATE, AREA, {
+      fetch: vi.fn(async () => response(CSV)) as typeof fetch,
+      nowIso: () => NOW,
+      mapKey: "unit-test-map-key",
+    });
+    if (serverOutcome.kind !== "success") throw new Error("test setup failed");
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), "http://localhost");
+      const requestArea = {
+        west: Number(url.searchParams.get("west")),
+        south: Number(url.searchParams.get("south")),
+        east: Number(url.searchParams.get("east")),
+        north: Number(url.searchParams.get("north")),
+      };
+      return new Response(JSON.stringify({
+        ok: true,
+        result: { ...serverOutcome.result, requestArea },
+      }), { headers: { "Content-Type": "application/json" } });
+    });
+    const areas = Array.from(
+      { length: WILDFIRE_LAYER_CLIENT_CACHE_MAX_ENTRIES + 1 },
+      (_, index) => ({
+        ...AREA,
+        west: AREA.west - index * 0.001,
+        east: AREA.east + index * 0.001,
+      })
+    );
+
+    for (const area of areas) {
+      await loadWildfireLayer(DATE, area, fetchImpl as typeof fetch, () => 4_000);
+    }
+    expect(fetchImpl).toHaveBeenCalledTimes(areas.length);
+    await loadWildfireLayer(DATE, areas[0], fetchImpl as typeof fetch, () => 4_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(areas.length + 1);
+    await loadWildfireLayer(
+      DATE,
+      areas.at(-1)!,
+      fetchImpl as typeof fetch,
+      () => 4_000
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(areas.length + 1);
   });
 });

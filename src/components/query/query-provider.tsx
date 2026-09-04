@@ -37,6 +37,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useReducer,
   useRef,
   useState,
@@ -65,6 +66,23 @@ import {
   WebMcpBridge,
   type WebMcpStatus,
 } from "@/components/webmcp/webmcp-bridge";
+import {
+  useEnvironmentalMapController,
+  type FloodExtentLayerUiState,
+  type WildfireLayerUiState,
+} from "@/components/map/use-environmental-map-controller";
+import {
+  DEFAULT_ENVIRONMENTAL_LAYERS_BY_HAZARD,
+  singleMapDateFromSelection,
+  sameMapSelection,
+  type EnvironmentalMapLayerId,
+  type EnvironmentalMapState,
+} from "@/lib/map/environmental-map-state";
+import type {
+  EnvironmentalMapToolSnapshot,
+  EnvironmentalMapToolUpdate,
+  EnvironmentalMapToolUpdateResult,
+} from "@/lib/webmcp/map-tool";
 
 interface QueryContextValue {
   draft: QueryDraft;
@@ -124,6 +142,25 @@ interface QueryContextValue {
   agentInvestigation: AgentInvestigationState | null;
   /** Current browser-native WebMCP discovery/registration state. */
   webMcpStatus: WebMcpStatus;
+  /** Shared desired and runtime environmental-map state across desktop/mobile. */
+  environmentalMapState: EnvironmentalMapState;
+  wildfireLayerState: WildfireLayerUiState;
+  floodExtentLayerState: FloodExtentLayerUiState;
+  setEnvironmentalMapLayerVisible: (
+    layerId: EnvironmentalMapLayerId,
+    visible: boolean
+  ) => void;
+  reportMapOverlayStatus: (
+    layerId: EnvironmentalMapLayerId,
+    status: "ready" | "source_failure" | "detached",
+    date: string,
+    contextRevision: number
+  ) => void;
+  reportMapRendererStatus: (
+    status: "attached" | "unavailable",
+    date: string,
+    contextRevision: number
+  ) => void;
   /** Cancel any active request and clear all displayed analysis results. */
   clearAnalysis: () => void;
   /** Restore the snapshot that was visible immediately before the Agent update. */
@@ -141,9 +178,28 @@ interface QueryContextValue {
 
 const QueryContext = createContext<QueryContextValue | null>(null);
 
+function sameEnvironmentalMapArea(
+  first: PlaceSelection | null,
+  second: PlaceSelection | null
+): boolean {
+  if (first === second) return true;
+  if (!first || !second) return false;
+  const firstArea = first.analysisArea.boundingBox;
+  const secondArea = second.analysisArea.boundingBox;
+  return firstArea.west === secondArea.west &&
+    firstArea.south === secondArea.south &&
+    firstArea.east === secondArea.east &&
+    firstArea.north === secondArea.north;
+}
+
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [draft, dispatchState] = useReducer(queryDraftReducer, undefined, emptyDraft);
   const [placeSelection, setPlaceSelectionState] = useState<PlaceSelection | null>(null);
+  const placeSelectionRef = useRef<PlaceSelection | null>(null);
+  const environmentalMap = useEnvironmentalMapController(placeSelection);
+  const applyEnvironmentalMapDesiredState = environmentalMap.applyDesiredState;
+  const environmentalMapState = environmentalMap.mapState;
+  const readEnvironmentalMapState = environmentalMap.readState;
   const [fireResult, setFireResultState] = useState<FireQueryResult | null>(null);
   const [fireLoading, setFireLoadingState] = useState(false);
   // UXFIX-01: Live retrieval is the default evidence mode. Fixture remains a
@@ -171,9 +227,13 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [webMcpStatus, setWebMcpStatus] = useState<WebMcpStatus>("checking");
   // Mutable ref for the unified query generation (never triggers render).
   const analysisQueryGenRef = useRef(0);
+  // Intent generation starts before Agent geocoding and also advances for
+  // every human invalidation, so a delayed lookup cannot reclaim newer UI.
+  const analysisIntentGenRef = useRef(0);
   const analysisAbortRef = useRef<AbortController | null>(null);
   const activeAnalysisRef = useRef<ActiveAnalysis | null>(null);
   const previousAnalysisRef = useRef<ActiveAnalysis | null>(null);
+  const lastDefaultMapHazardRef = useRef<string | null>(null);
   const activeScenarioId = activeAnalysis?.request.evidenceBundle?.scenarioId;
   const relatedStormFloodResult = relatedAnalyses
     .find((analysis) =>
@@ -194,6 +254,26 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     previousAnalysisRef.current = analysis;
     setPreviousAnalysis(analysis);
   }, []);
+
+  const commitPlaceSelection = useCallback((selection: PlaceSelection | null) => {
+    placeSelectionRef.current = selection;
+    setPlaceSelectionState(selection);
+  }, []);
+
+  const synchronizeEnvironmentalMapSelection = useCallback((
+    selection: PlaceSelection | null,
+    origin: "human" | "agent" = "human"
+  ) => applyEnvironmentalMapDesiredState({}, {
+    date: singleMapDateFromSelection(selection),
+    // Source requests depend on UTC date + canonical analysis bounds. A label,
+    // framing extent, or equivalent time normalization must not cancel an
+    // otherwise identical source request and strand its layer in loading.
+    contextChanged: !sameEnvironmentalMapArea(
+      placeSelectionRef.current,
+      selection
+    ),
+    origin,
+  }), [applyEnvironmentalMapDesiredState]);
 
   const openStormClaimDiscussion = useCallback(() => {
     setStormClaimDiscussionOpen(true);
@@ -227,7 +307,8 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   }, [clearResultState]);
 
   const synchronizeRequestState = useCallback((request: AnalysisRequest) => {
-    setPlaceSelectionState(request.placeSelection);
+    synchronizeEnvironmentalMapSelection(request.placeSelection);
+    commitPlaceSelection(request.placeSelection);
     dispatchState({ type: "SET_HAZARD", value: request.hazardId });
     dispatchState({ type: "SET_CONCERN", value: request.concern });
     dispatchState({
@@ -244,9 +325,10 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     } else if (request.hazardId === "drought_land") {
       setDroughtEvidenceModeState(request.evidenceMode);
     }
-  }, []);
+  }, [commitPlaceSelection, synchronizeEnvironmentalMapSelection]);
 
   function invalidateEvidenceQueries() {
+    analysisIntentGenRef.current += 1;
     analysisQueryGenRef.current += 1;
     analysisAbortRef.current?.abort();
     analysisAbortRef.current = null;
@@ -272,12 +354,14 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
 
   function setPlaceSelection(selection: PlaceSelection) {
     invalidateEvidenceQueries();
-    setPlaceSelectionState(selection);
+    synchronizeEnvironmentalMapSelection(selection);
+    commitPlaceSelection(selection);
   }
 
   function clearPlaceSelection() {
     invalidateEvidenceQueries();
-    setPlaceSelectionState(null);
+    synchronizeEnvironmentalMapSelection(null);
+    commitPlaceSelection(null);
   }
 
   function setFireEvidenceMode(mode: FireEvidenceMode) {
@@ -300,11 +384,101 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     setDroughtEvidenceModeState(mode);
   }
 
+  function setEnvironmentalMapLayerVisible(
+    layerId: EnvironmentalMapLayerId,
+    visible: boolean
+  ) {
+    applyEnvironmentalMapDesiredState({ [layerId]: visible }, {
+      date: readEnvironmentalMapState().date,
+      contextChanged: false,
+      origin: "human",
+    });
+  }
+
+  function applyEnvironmentalMapUpdate(
+    update: EnvironmentalMapToolUpdate
+  ): EnvironmentalMapToolUpdateResult {
+    const selectionChanged = !sameMapSelection(
+      placeSelectionRef.current,
+      update.selection
+    );
+    const sourceAreaChanged = !sameEnvironmentalMapArea(
+      placeSelectionRef.current,
+      update.selection
+    );
+    if (selectionChanged) {
+      invalidateEvidenceQueries();
+      commitPlaceSelection(update.selection);
+    }
+    const nextMapState = applyEnvironmentalMapDesiredState(update.layers, {
+      date: update.date,
+      contextChanged: sourceAreaChanged,
+      origin: update.origin,
+    });
+    return {
+      mapState: nextMapState,
+      analysisCleared: selectionChanged,
+    };
+  }
+
+  // WebMCP calls may arrive back-to-back before React commits a render. Read
+  // both halves of the shared snapshot from refs so the next call observes
+  // the preceding transaction atomically instead of stale bridge props.
+  const readEnvironmentalMapSnapshot = useCallback(
+    (): EnvironmentalMapToolSnapshot => ({
+      placeSelection: placeSelectionRef.current,
+      mapState: readEnvironmentalMapState(),
+    }),
+    [readEnvironmentalMapState]
+  );
+
+  // Reserve a browser-tool intent before its optional geocoding awaits. Human
+  // invalidation advances the same intent generation, so neither an older
+  // Agent call nor an older human request can reclaim newer state.
+  const beginContextMutationInvocation = useCallback(() => {
+    const intentGeneration = ++analysisIntentGenRef.current;
+    analysisQueryGenRef.current += 1;
+    analysisAbortRef.current?.abort(
+      new DOMException("Superseded by a newer Agent request", "AbortError")
+    );
+    analysisAbortRef.current = null;
+    setAnalysisLoading(false);
+    setAgentInvestigation(null);
+    setFireLoadingState(false);
+    setFloodLoadingState(false);
+    setWindLoadingState(false);
+    setHeatLoadingState(false);
+    setDroughtLoadingState(false);
+    setCoverageGapLoadingState(false);
+    return () => intentGeneration === analysisIntentGenRef.current;
+  }, []);
+
+  useEffect(() => {
+    if (draft.hazardId === lastDefaultMapHazardRef.current) return;
+    lastDefaultMapHazardRef.current = draft.hazardId;
+    if (!draft.hazardId) return;
+    const defaults = DEFAULT_ENVIRONMENTAL_LAYERS_BY_HAZARD[draft.hazardId];
+    if (defaults.length === 0) return;
+    const patch = Object.fromEntries(
+      defaults.map((layerId) => [layerId, true])
+    );
+    applyEnvironmentalMapDesiredState(patch, {
+      date: environmentalMapState.date,
+      contextChanged: false,
+      origin: "human",
+    });
+  }, [
+    draft.hazardId,
+    applyEnvironmentalMapDesiredState,
+    environmentalMapState.date,
+  ]);
+
   const runAnalysis = useCallback(async (
     request: AnalysisRequest,
     origin: AnalysisOrigin = "human",
     externalSignal?: AbortSignal
   ): Promise<ActiveAnalysis | null> => {
+    if (origin === "human") analysisIntentGenRef.current += 1;
     analysisQueryGenRef.current += 1;
     const generation = analysisQueryGenRef.current;
     analysisAbortRef.current?.abort();
@@ -542,6 +716,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     const snapshot = previousAnalysisRef.current;
     if (!snapshot) return false;
 
+    analysisIntentGenRef.current += 1;
     analysisQueryGenRef.current += 1;
     analysisAbortRef.current?.abort();
     analysisAbortRef.current = null;
@@ -604,6 +779,12 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         analysisLoading,
         agentInvestigation,
         webMcpStatus,
+        environmentalMapState,
+        wildfireLayerState: environmentalMap.wildfireState,
+        floodExtentLayerState: environmentalMap.floodExtentState,
+        setEnvironmentalMapLayerVisible,
+        reportMapOverlayStatus: environmentalMap.reportMapOverlayStatus,
+        reportMapRendererStatus: environmentalMap.reportMapRendererStatus,
         clearAnalysis: invalidateEvidenceQueries,
         restorePreviousAnalysis,
         runAnalysis,
@@ -615,6 +796,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         activeAnalysis={activeAnalysis}
         relatedAnalyses={relatedAnalyses}
         onOpenStormClaimDiscussion={openStormClaimDiscussion}
+        placeSelection={placeSelection}
+        environmentalMapState={environmentalMapState}
+        readEnvironmentalMapSnapshot={readEnvironmentalMapSnapshot}
+        applyEnvironmentalMapUpdate={applyEnvironmentalMapUpdate}
+        beginContextMutationInvocation={beginContextMutationInvocation}
         onStatusChange={setWebMcpStatus}
       />
       {children}

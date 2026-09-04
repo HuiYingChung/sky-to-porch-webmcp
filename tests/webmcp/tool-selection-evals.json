@@ -755,6 +755,238 @@
     ]
   },
   {
+    "id": "display-rain-imagery-houston",
+    "paraphraseFamily": "houston-rain-imagery-display",
+    "utteranceStyle": "question",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Could you display the rain satellite imagery layer around Houston for July 8, 2024 within a 50 km radius?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "set_environmental_map_layers",
+        "arguments": {
+          "layers": {
+            "rain_satellite": true
+          },
+          "place": "Houston",
+          "date": "2024-07-08",
+          "radius_km": 50
+        }
+      }
+    ]
+  },
+  {
+    "id": "display-rain-imagery-houston-imperative",
+    "paraphraseFamily": "houston-rain-imagery-display",
+    "utteranceStyle": "imperative",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Display the rain satellite imagery layer within 50 km of Houston for July 8, 2024."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "set_environmental_map_layers",
+        "arguments": {
+          "layers": {
+            "rain_satellite": true
+          },
+          "place": "Houston",
+          "date": "2024-07-08",
+          "radius_km": 50
+        }
+      }
+    ]
+  },
+  {
+    "id": "display-rain-imagery-houston-conversational",
+    "paraphraseFamily": "houston-rain-imagery-display",
+    "utteranceStyle": "conversational",
+    "messages": [
+      {
+        "role": "user",
+        "content": "I'd like to see Houston's rain satellite imagery for July 8, 2024, using a 50 km radius."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "set_environmental_map_layers",
+        "arguments": {
+          "layers": {
+            "rain_satellite": true
+          },
+          "place": "Houston",
+          "date": "2024-07-08",
+          "radius_km": 50
+        }
+      }
+    ]
+  },
+  {
+    "id": "place-geography-phoenix",
+    "paraphraseFamily": "phoenix-place-geography",
+    "utteranceStyle": "question",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What are Phoenix's normalized place name, WGS84 coordinates, bounding box, and available administrative context?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "look_up_place_location",
+        "arguments": {
+          "place": "Phoenix"
+        }
+      }
+    ]
+  },
+  {
+    "id": "place-geography-phoenix-imperative",
+    "paraphraseFamily": "phoenix-place-geography",
+    "utteranceStyle": "imperative",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Look up Phoenix's canonical label, WGS84 coordinates, bounds, and administrative details."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "look_up_place_location",
+        "arguments": {
+          "place": "Phoenix"
+        }
+      }
+    ]
+  },
+  {
+    "id": "place-geography-phoenix-conversational",
+    "paraphraseFamily": "phoenix-place-geography",
+    "utteranceStyle": "conversational",
+    "messages": [
+      {
+        "role": "user",
+        "content": "I'm trying to pin down Phoenix precisely—could you give me its normalized name, coordinates, bounding box, and admin context?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "look_up_place_location",
+        "arguments": {
+          "place": "Phoenix"
+        }
+      }
+    ]
+  },
+  {
+    "id": "hide-surface-heat-imagery",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hide the surface-heat satellite imagery layer from the map; do not analyze heat conditions."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "set_environmental_map_layers",
+        "arguments": {
+          "layers": {
+            "surface_heat_satellite": false
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "remove-thermal-anomalies-imagery",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Remove the FIRMS thermal-anomaly imagery from the map without assessing fire severity."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "set_environmental_map_layers",
+        "arguments": {
+          "layers": {
+            "thermal_anomalies_firms": false
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "place-and-map-composite",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Give me Tucson's WGS84 coordinates, bounding box, and administrative context, then display the flood-extent imagery around Tucson for July 24, 2025 within 40 km."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "look_up_place_location",
+        "arguments": {
+          "place": "Tucson"
+        }
+      },
+      {
+        "functionName": "set_environmental_map_layers",
+        "arguments": {
+          "layers": {
+            "flood_extent": true
+          },
+          "place": "Tucson",
+          "date": "2025-07-24",
+          "radius_km": 40
+        }
+      }
+    ]
+  },
+  {
+    "id": "map-neighbor-analysis-conditions-impact-safety",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Do not just display rainfall imagery. Analyze the July 8, 2024 rainfall conditions around Houston: amount, severity, supporting evidence, likely impact, and what the records do or do not establish about safety."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "analyze_environmental_hazard",
+        "arguments": {
+          "place": "Houston",
+          "hazard": "flood_storm",
+          "time": "2024-07-08",
+          "analysis_scope": "single_hazard_only"
+        }
+      }
+    ]
+  },
+  {
+    "id": "map-neighbor-source-eligibility",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Do not display imagery or assess actual conditions. Tell me only where and when Flood & Heavy Rain sources are eligible, including their source coverage limits."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_environmental_source_coverage",
+        "arguments": {
+          "hazard": "flood_storm"
+        }
+      }
+    ]
+  },
+  {
     "id": "out-of-scope-no-call",
     "messages": [
       {

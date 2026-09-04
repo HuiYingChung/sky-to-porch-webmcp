@@ -13,6 +13,12 @@ import {
   buildGeocodedPlaceSelection,
   type PlaceSelection,
 } from "@/lib/location/selection";
+import {
+  PLACE_CHOICE_ID_RE,
+  resolveNamedPlace,
+  type AgentPlaceChoice as SharedAgentPlaceChoice,
+  type ResolvedPlaceCandidate,
+} from "@/lib/webmcp/place-resolution";
 
 export const ANALYZE_HAZARD_TOOL_NAME = "analyze_environmental_hazard";
 export const COMPARE_HAZARD_TOOL_NAME = "compare_environmental_evidence";
@@ -80,6 +86,8 @@ export interface AnalyzeHazardToolDependencies {
   ) => Promise<ActiveAnalysis[] | null>;
   fetchImpl?: typeof fetch;
   now?: () => Date;
+  /** Shared by analyze and compare to reserve order before geocoding. */
+  beginInvocation?: () => () => boolean;
 }
 
 interface ParsedInput {
@@ -96,17 +104,7 @@ interface ParsedInput {
   question?: string;
 }
 
-interface GeocodeCandidate {
-  id?: string;
-  label: string;
-  lon: number;
-  lat: number;
-}
-
-export interface AgentPlaceChoice {
-  choice_id: string;
-  label: string;
-}
+export type AgentPlaceChoice = SharedAgentPlaceChoice;
 
 interface ToolFailure {
   status:
@@ -410,19 +408,6 @@ function placeChoiceFailure(
   };
 }
 
-function placeChoiceId(candidate: GeocodeCandidate): string {
-  const stableId = candidate.id ??
-    `coordinate-${candidate.lat.toFixed(7)}-${candidate.lon.toFixed(7)}`;
-  return `place-${stableId}`;
-}
-
-function placeChoices(candidates: GeocodeCandidate[]): AgentPlaceChoice[] {
-  return candidates.map((candidate) => ({
-    choice_id: placeChoiceId(candidate),
-    label: truncate(candidate.label, 120),
-  }));
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -442,7 +427,9 @@ function latestCompletedUtcDate(now: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function explicitCoordinate(place: string): GeocodeCandidate | ToolFailure | null {
+function explicitCoordinate(
+  place: string
+): ResolvedPlaceCandidate | ToolFailure | null {
   const match = COORDINATE_PLACE_RE.exec(place);
   if (!match) return null;
   const lat = Number(match[1]);
@@ -450,7 +437,13 @@ function explicitCoordinate(place: string): GeocodeCandidate | ToolFailure | nul
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
     return failure("invalid_input", "The explicit latitude, longitude place is outside the valid WGS-84 range.");
   }
-  return { label: place, lat, lon };
+  return {
+    label: place,
+    lat,
+    lon,
+    boundingBox: null,
+    adminContext: {},
+  };
 }
 
 function shouldUseRelatedStormContext(
@@ -506,7 +499,7 @@ function parseInput(
     raw.place_choice_id !== undefined &&
     raw.place_choice_id !== null &&
     (typeof raw.place_choice_id !== "string" ||
-      !/^place-[A-Za-z0-9._-]{3,120}$/.test(raw.place_choice_id))
+      !PLACE_CHOICE_ID_RE.test(raw.place_choice_id))
   ) {
     return failure("invalid_input", "place_choice_id must be copied unchanged from a prior needs_place_choice result.");
   }
@@ -638,7 +631,7 @@ function selectionTime(
 
 function buildSelection(
   input: ParsedInput,
-  candidate: GeocodeCandidate,
+  candidate: ResolvedPlaceCandidate,
   time: ReturnType<typeof selectionTime>,
   coordinateOrigin: "agent" | "geocoder"
 ): PlaceSelection {
@@ -650,84 +643,57 @@ function buildSelection(
     time.startTs,
     time.endTs,
   ] as const;
-  return coordinateOrigin === "agent"
-    ? buildAgentCoordinateSelection(...args)
-    : buildGeocodedPlaceSelection(...args);
+  if (coordinateOrigin === "agent") {
+    return buildAgentCoordinateSelection(...args);
+  }
+  return buildGeocodedPlaceSelection(...args, candidate.boundingBox);
 }
 
 async function resolvePlace(
   input: ParsedInput,
   fetchImpl: typeof fetch,
   signal: AbortSignal
-): Promise<GeocodeCandidate | ToolFailure> {
+): Promise<ResolvedPlaceCandidate | ToolFailure> {
   if (input.latitude !== undefined && input.longitude !== undefined) {
-    return { label: input.place, lat: input.latitude, lon: input.longitude };
+    return {
+      label: input.place,
+      lat: input.latitude,
+      lon: input.longitude,
+      boundingBox: null,
+      adminContext: {},
+    };
   }
 
-  let response: Response;
-  try {
-    response = await fetchImpl("/api/geocode", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: input.place }),
-      signal,
-    });
-  } catch (error) {
-    if (signal.aborted) throw error;
-    return failure("place_lookup_failed", "Place search failed; no evidence query was run.");
+  const resolution = await resolveNamedPlace(
+    input.place,
+    input.placeChoiceId,
+    fetchImpl,
+    signal
+  );
+  if (resolution.status === "resolved") return resolution.candidate;
+  if (resolution.status === "place_not_found") {
+    return failure("place_not_found", `No place candidate was found for “${input.place}”.`);
   }
-
-  if (response.status === 429) {
+  if (resolution.status === "needs_place_choice") {
+    return placeChoiceFailure(
+      input,
+      resolution.choices.map((choice) => ({
+        ...choice,
+        label: truncate(choice.label, 120),
+      })),
+      resolution.refreshed
+    );
+  }
+  if (resolution.reason === "rate_limited") {
     return {
       ...failure("place_lookup_failed", "Place search was rate-limited; no evidence query was run."),
       reason: "rate_limited",
     };
   }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    return failure("place_lookup_failed", "Place search returned an unreadable response; no evidence query was run.");
-  }
-  if (!response.ok || !isRecord(payload) || payload.ok !== true || !Array.isArray(payload.results)) {
-    return failure("place_lookup_failed", "Place search was unavailable; no evidence query was run.");
-  }
-
-  const candidates = payload.results
-    .filter((item): item is Record<string, unknown> => isRecord(item))
-    .filter(
-      (item) =>
-        typeof item.label === "string" &&
-        typeof item.lon === "number" &&
-        typeof item.lat === "number" &&
-        Number.isFinite(item.lon) &&
-        Number.isFinite(item.lat)
-    )
-    .slice(0, 3)
-    .map((item) => ({
-      ...(typeof item.id === "string" && /^[A-Za-z0-9._-]{3,120}$/.test(item.id)
-        ? { id: item.id }
-        : {}),
-      label: item.label as string,
-      lon: item.lon as number,
-      lat: item.lat as number,
-    }));
-
-  if (candidates.length === 0) {
-    return failure("place_not_found", `No place candidate was found for “${input.place}”.`);
-  }
-  if (input.placeChoiceId !== undefined) {
-    const selected = candidates.find(
-      (candidate) => placeChoiceId(candidate) === input.placeChoiceId
-    );
-    if (selected) return selected;
-    return placeChoiceFailure(input, placeChoices(candidates), true);
-  }
-  if (candidates.length > 1) {
-    return placeChoiceFailure(input, placeChoices(candidates));
-  }
-  return candidates[0];
+  return failure(
+    "place_lookup_failed",
+    "Place search was unavailable; no evidence query was run."
+  );
 }
 
 function namedPlaceResolutionKey(input: ParsedInput): string | null {
@@ -1234,12 +1200,22 @@ export async function executeAnalyzeHazardTool(
   const now = dependencies.now?.() ?? new Date();
   const input = parseInput(rawInput, now);
   if ("status" in input) return input;
+  const isCurrentInvocation = dependencies.beginInvocation?.() ?? (() => true);
 
   const resolved = await resolvePlace(
     input,
     dependencies.fetchImpl ?? fetch,
     signal
   );
+  if (signal.aborted) {
+    throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+  }
+  if (!isCurrentInvocation()) {
+    return failure(
+      "superseded",
+      "A newer analysis request replaced this request while its place was being resolved."
+    );
+  }
   if ("status" in resolved) return resolved;
 
   const time = selectionTime(input, now);
@@ -1304,9 +1280,18 @@ export async function executeAnalyzeHazardTool(
       }
     }
     if (analyses === null) {
+      if (signal.aborted) {
+        throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+      }
       return failure(
         "superseded",
         "A newer request replaced the related-context investigation before every evidence chain completed."
+      );
+    }
+    if (!isCurrentInvocation()) {
+      return failure(
+        "superseded",
+        "A newer request replaced the related-context investigation before it completed."
       );
     }
     return compactEvidenceBundle(analyses, analyses[analyses.length - 1], time.display);
@@ -1327,6 +1312,12 @@ export async function executeAnalyzeHazardTool(
     if (signal.aborted) {
       throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
     }
+    return failure(
+      "superseded",
+      "A newer human or agent request replaced this analysis before it completed."
+    );
+  }
+  if (!isCurrentInvocation()) {
     return failure(
       "superseded",
       "A newer human or agent request replaced this analysis before it completed."
@@ -1457,6 +1448,7 @@ export async function executeCompareHazardTool(
   if ("status" in baselineInput) return baselineInput;
   const comparisonInput = comparisonScenarioInput(rawInput, "comparison", now);
   if ("status" in comparisonInput) return comparisonInput;
+  const isCurrentInvocation = dependencies.beginInvocation?.() ?? (() => true);
 
   const fetchImpl = dependencies.fetchImpl ?? fetch;
   const shareNamedPlaceResolution = canShareNamedPlaceResolution(
@@ -1464,12 +1456,30 @@ export async function executeCompareHazardTool(
     comparisonInput
   );
   const baselineResolved = await resolvePlace(baselineInput, fetchImpl, signal);
+  if (signal.aborted) {
+    throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+  }
+  if (!isCurrentInvocation()) {
+    return failure(
+      "superseded",
+      "A newer analysis request replaced this comparison while its places were being resolved."
+    );
+  }
   if ("status" in baselineResolved) {
     return comparisonPlaceFailure("baseline", baselineResolved, rawInput);
   }
   const comparisonResolved = shareNamedPlaceResolution
     ? baselineResolved
     : await resolvePlace(comparisonInput, fetchImpl, signal);
+  if (signal.aborted) {
+    throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+  }
+  if (!isCurrentInvocation()) {
+    return failure(
+      "superseded",
+      "A newer analysis request replaced this comparison while its places were being resolved."
+    );
+  }
   if ("status" in comparisonResolved) {
     return comparisonPlaceFailure("comparison", comparisonResolved, rawInput);
   }
@@ -1558,7 +1568,16 @@ export async function executeCompareHazardTool(
     }
   }
   if (analyses === null) {
+    if (signal.aborted) {
+      throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+    }
     return failure("superseded", "A newer request replaced the comparison before every evidence chain completed.");
+  }
+  if (!isCurrentInvocation()) {
+    return failure(
+      "superseded",
+      "A newer request replaced the comparison before every evidence chain completed."
+    );
   }
 
   const groupedScenarios = scenarioInputs.map((scenario) => ({

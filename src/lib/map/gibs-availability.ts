@@ -1,10 +1,8 @@
 /**
- * ADR-0040 (Bug E): bounded server-side probe answering one question — does
- * NASA GIBS have published, non-transparent imagery for this product, date,
- * and area? A transparent probe means "no imagery for this date here"
- * (unpublished or genuinely no coverage), which the layer card must state
- * instead of showing nothing silently. Mirrors the flood-extent transport
- * bounds; no retry, no fallback, no raw-payload persistence.
+ * ADR-0040 (Bug E): bounded server-side probe answering one narrow question —
+ * does a NASA GIBS response contain any visible pixel for this product, date,
+ * and area? A fully transparent response cannot distinguish valid transparent
+ * imagery from unavailable coverage. No retry, fallback, or payload storage.
  */
 
 import sharp from "sharp";
@@ -19,6 +17,9 @@ export const GIBS_AVAILABILITY_IMAGE_SIZE = 256;
 export const GIBS_AVAILABILITY_MAX_BYTES = 1_000_000;
 export const GIBS_AVAILABILITY_TIMEOUT_MS = 10_000;
 export const GIBS_AVAILABILITY_CACHE_TTL_MS = 5 * 60 * 1_000;
+export const GIBS_AVAILABILITY_MAX_CONCURRENCY = 2;
+export const GIBS_AVAILABILITY_RATE_WINDOW_MS = 60_000;
+export const GIBS_AVAILABILITY_MAX_REQUESTS_PER_WINDOW = 12;
 const CACHE_MAX_ENTRIES = 24;
 
 /** The two map overlays this probe serves; WMS layer names match WMTS. */
@@ -30,7 +31,11 @@ export const GIBS_AVAILABILITY_PRODUCTS = {
 export type GibsAvailabilityProduct = keyof typeof GIBS_AVAILABILITY_PRODUCTS;
 
 export type GibsAvailabilityResult =
-  | { kind: "checked"; available: boolean; alphaMaximum: number }
+  | {
+      kind: "checked";
+      visiblePixelsDetected: boolean;
+      alphaMaximum: number;
+    }
   | {
       kind: "source_failure";
       reason:
@@ -53,6 +58,9 @@ class GibsAvailabilityError extends Error {
 }
 
 const cache = new Map<string, { expiresAt: number; result: GibsAvailabilityResult }>();
+const inFlight = new Map<string, Promise<GibsAvailabilityResult>>();
+const requestStarts: number[] = [];
+let activeRequests = 0;
 
 function validateDate(date: string): void {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) throw new GibsAvailabilityError("invalid_input");
@@ -86,31 +94,53 @@ export function buildGibsAvailabilityUrl(
   return url;
 }
 
-export async function checkGibsAvailability(
-  product: GibsAvailabilityProduct,
-  date: string,
-  areaValue: unknown,
-  fetchImpl?: FetchLike
-): Promise<GibsAvailabilityResult> {
-  let area: BoundingBox;
-  try {
-    validateDate(date);
-    area = validateQueryArea(areaValue);
-  } catch {
-    return { kind: "source_failure", reason: "invalid_input" };
+async function readBoundedBytes(response: Response): Promise<Uint8Array> {
+  const lengthHeader = response.headers.get("content-length");
+  if (lengthHeader !== null) {
+    const declaredLength = Number(lengthHeader);
+    if (
+      !Number.isSafeInteger(declaredLength) ||
+      declaredLength < 0 ||
+      declaredLength > GIBS_AVAILABILITY_MAX_BYTES
+    ) {
+      throw new GibsAvailabilityError("oversize");
+    }
   }
-  const url = buildGibsAvailabilityUrl(product, date, area);
-  const cacheEnabled = fetchImpl === undefined;
-  const nowMs = Date.now();
-  const cached = cacheEnabled ? cache.get(url.toString()) : undefined;
-  if (cached && cached.expiresAt > nowMs) return cached.result;
 
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > GIBS_AVAILABILITY_MAX_BYTES) {
+      await reader.cancel();
+      throw new GibsAvailabilityError("oversize");
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+async function retrieveGibsAvailability(
+  url: URL,
+  fetchImpl: FetchLike
+): Promise<GibsAvailabilityResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), GIBS_AVAILABILITY_TIMEOUT_MS);
   try {
     let response: Response;
     try {
-      response = await (fetchImpl ?? fetch)(url, {
+      response = await fetchImpl(url, {
         method: "GET",
         redirect: "manual",
         cache: "no-store",
@@ -128,31 +158,43 @@ export async function checkGibsAvailability(
       .trim()
       .toLowerCase();
     if (contentType !== "image/png") throw new GibsAvailabilityError("media_type");
-    const buffer = new Uint8Array(await response.arrayBuffer());
-    if (buffer.byteLength > GIBS_AVAILABILITY_MAX_BYTES) throw new GibsAvailabilityError("oversize");
+    const buffer = await readBoundedBytes(response);
     let alphaMaximum: number;
     try {
-      const stats = await sharp(buffer, { failOn: "error" }).ensureAlpha().stats();
-      alphaMaximum = stats.channels[3]?.max ?? 255;
+      const image = sharp(buffer, {
+        failOn: "error",
+        limitInputPixels:
+          GIBS_AVAILABILITY_IMAGE_SIZE * GIBS_AVAILABILITY_IMAGE_SIZE,
+      });
+      const metadata = await image.metadata();
+      if (
+        metadata.width !== GIBS_AVAILABILITY_IMAGE_SIZE ||
+        metadata.height !== GIBS_AVAILABILITY_IMAGE_SIZE
+      ) throw new GibsAvailabilityError("malformed");
+      if (!metadata.hasAlpha) {
+        alphaMaximum = 255;
+      } else {
+        const channelCount = metadata.channels;
+        if (!channelCount || channelCount < 2) {
+          throw new GibsAvailabilityError("malformed");
+        }
+        // PNG may be grayscale+alpha (2 channels) or RGBA (4 channels).
+        // The alpha band is the final input channel, not always index 3.
+        const stats = await image.stats();
+        const alphaChannel = stats.channels[channelCount - 1];
+        if (!alphaChannel || !Number.isFinite(alphaChannel.max)) {
+          throw new GibsAvailabilityError("malformed");
+        }
+        alphaMaximum = alphaChannel.max;
+      }
     } catch {
       throw new GibsAvailabilityError("malformed");
     }
     const result: GibsAvailabilityResult = {
       kind: "checked",
-      available: alphaMaximum > 0,
+      visiblePixelsDetected: alphaMaximum > 0,
       alphaMaximum,
     };
-    if (cacheEnabled) {
-      for (const [key, entry] of cache) {
-        if (entry.expiresAt <= nowMs) cache.delete(key);
-      }
-      while (cache.size >= CACHE_MAX_ENTRIES) {
-        const oldest = cache.keys().next().value as string | undefined;
-        if (!oldest) break;
-        cache.delete(oldest);
-      }
-      cache.set(url.toString(), { expiresAt: nowMs + GIBS_AVAILABILITY_CACHE_TTL_MS, result });
-    }
     return result;
   } catch (error) {
     return {
@@ -162,4 +204,81 @@ export async function checkGibsAvailability(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function storeCachedResult(
+  key: string,
+  result: GibsAvailabilityResult,
+  nowMs: number
+): void {
+  for (const [cachedKey, entry] of cache) {
+    if (entry.expiresAt <= nowMs) cache.delete(cachedKey);
+  }
+  while (cache.size >= CACHE_MAX_ENTRIES) {
+    const oldest = cache.keys().next().value as string | undefined;
+    if (!oldest) break;
+    cache.delete(oldest);
+  }
+  cache.set(key, {
+    expiresAt: nowMs + GIBS_AVAILABILITY_CACHE_TTL_MS,
+    result,
+  });
+}
+
+export async function checkGibsAvailability(
+  product: GibsAvailabilityProduct,
+  date: string,
+  areaValue: unknown,
+  fetchImpl?: FetchLike
+): Promise<GibsAvailabilityResult> {
+  let area: BoundingBox;
+  try {
+    validateDate(date);
+    area = validateQueryArea(areaValue);
+  } catch {
+    return { kind: "source_failure", reason: "invalid_input" };
+  }
+
+  const url = buildGibsAvailabilityUrl(product, date, area);
+  const key = url.toString();
+  // Dependency-injected transports are bounded test adapters. The public
+  // production path additionally gets process-local cache, coalescing, rate,
+  // and concurrency guards before any NASA request or Sharp decode begins.
+  if (fetchImpl !== undefined) {
+    return retrieveGibsAvailability(url, fetchImpl);
+  }
+
+  const nowMs = Date.now();
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > nowMs) return cached.result;
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+
+  while (
+    requestStarts[0] !== undefined &&
+    requestStarts[0] <= nowMs - GIBS_AVAILABILITY_RATE_WINDOW_MS
+  ) requestStarts.shift();
+  if (
+    requestStarts.length >= GIBS_AVAILABILITY_MAX_REQUESTS_PER_WINDOW ||
+    activeRequests >= GIBS_AVAILABILITY_MAX_CONCURRENCY
+  ) return { kind: "source_failure", reason: "rate_limited" };
+
+  requestStarts.push(nowMs);
+  activeRequests += 1;
+  const request = retrieveGibsAvailability(url, fetch).then((result) => {
+    if (result.kind === "checked") storeCachedResult(key, result, Date.now());
+    return result;
+  }).finally(() => {
+    activeRequests -= 1;
+    inFlight.delete(key);
+  });
+  inFlight.set(key, request);
+  return request;
+}
+
+export function clearGibsAvailabilityServerStateForTests(): void {
+  cache.clear();
+  inFlight.clear();
+  requestStarts.length = 0;
+  activeRequests = 0;
 }

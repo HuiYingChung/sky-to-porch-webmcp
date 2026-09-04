@@ -45,6 +45,119 @@ test("shows a neutral waiting status while WebMCP tools are still registering", 
   await expect(agentStatus).toHaveCSS("padding", "0px");
 });
 
+test("an Agent map-layer request updates the shared map and reveals Map on mobile", async ({
+  page,
+}, testInfo) => {
+  await page.addInitScript(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    state.__skyToPorchWebMcpTools = {};
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: async (tool: WebMCP.ModelContextTool) => {
+          state.__skyToPorchWebMcpTools![tool.name] = tool;
+        },
+      },
+    });
+  });
+  await page.route("**/api/geocode", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        results: [{
+          id: "houston-city",
+          label: "Houston, Texas, United States",
+          lon: -95.3698,
+          lat: 29.7604,
+          boundingBox: {
+            west: -95.91,
+            south: 29.52,
+            east: -95.01,
+            north: 30.11,
+          },
+          adminContext: {
+            city: "Houston",
+            state: "Texas",
+            country: "United States",
+            countryCode: "US",
+          },
+        }],
+      }),
+    });
+  });
+  await page.route("**/api/map/gibs-availability?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        result: { visiblePixelsDetected: false },
+      }),
+    });
+  });
+
+  await gotoHydrated(page, "/");
+  await page.waitForFunction(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    return Boolean(state.__skyToPorchWebMcpTools?.set_environmental_map_layers);
+  });
+  const output = await page.evaluate(async () => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    const tool = state.__skyToPorchWebMcpTools?.set_environmental_map_layers;
+    if (!tool) throw new Error("WebMCP map tool was not registered");
+    return tool.execute({
+      place: "Houston, Texas",
+      date: "2024-07-08",
+      radius_km: 25,
+      layers: { rain_satellite: true },
+    }, { signal: new AbortController().signal });
+  }) as Record<string, unknown>;
+
+  expect(output).toMatchObject({
+    status: "success",
+    ui_updated: true,
+    analysis_cleared: true,
+    map_date: "2024-07-08",
+    selected_place: {
+      label: "Houston, Texas, United States (OSM search)",
+      longitude: -95.3698,
+      latitude: 29.7604,
+      bounding_box: {
+        west: -95.91,
+        south: 29.52,
+        east: -95.01,
+        north: 30.11,
+      },
+    },
+    layers: {
+      rain_satellite: {
+        requested: true,
+        visualization_only: true,
+        source: "NASA GIBS IMERG_Precipitation_Rate",
+      },
+    },
+  });
+
+  await expect(page.getByTestId("analysis-map").filter({ visible: true })
+    .getByTestId("selection-summary"))
+    .toContainText("Houston, Texas, United States");
+  if (testInfo.project.name === "chromium-mobile") {
+    await expect(page.getByTestId("mobile-nav-map")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await expect(page.getByTestId("mobile-map-view")).toBeVisible();
+  }
+});
+
 test("a non-demo Albuquerque question returns evidence and updates the shared human UI", async ({
   page,
 }) => {
@@ -139,7 +252,7 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
     const state = globalThis as typeof globalThis & {
       __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
     };
-    return Object.keys(state.__skyToPorchWebMcpTools ?? {}).length === 6;
+    return Object.keys(state.__skyToPorchWebMcpTools ?? {}).length === 8;
   });
   const registryBeforeAnalysis = await page.evaluate(() => {
     const state = globalThis as typeof globalThis & {
@@ -154,6 +267,8 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
       "compare_environmental_evidence",
       "get_sky_to_porch_help_and_demos",
       "get_environmental_source_coverage",
+      "look_up_place_location",
+      "set_environmental_map_layers",
       "inspect_current_environmental_evidence",
       "prepare_storm_claim_discussion",
     ];
@@ -167,12 +282,14 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
     };
   });
   expect(registryBeforeAnalysis).toEqual({
-    epoch: 6,
+    epoch: 8,
     counts: {
       analyze_environmental_hazard: 1,
       compare_environmental_evidence: 1,
       get_sky_to_porch_help_and_demos: 1,
       get_environmental_source_coverage: 1,
+      look_up_place_location: 1,
+      set_environmental_map_layers: 1,
       inspect_current_environmental_evidence: 1,
       prepare_storm_claim_discussion: 1,
     },
@@ -450,6 +567,8 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
       "compare_environmental_evidence",
       "get_sky_to_porch_help_and_demos",
       "get_environmental_source_coverage",
+      "look_up_place_location",
+      "set_environmental_map_layers",
       "inspect_current_environmental_evidence",
       "prepare_storm_claim_discussion",
     ],
@@ -485,6 +604,22 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
       { signal: new AbortController().signal }
     );
   }, place) as Promise<Record<string, unknown>>;
+
+  const expectVisibleMapSelection = async (options: {
+    method?: string;
+    text?: string;
+  }) => {
+    const mobileMap = page.getByTestId("mobile-nav-map");
+    if (await mobileMap.isVisible()) await mobileMap.click();
+    const summary = page.getByTestId("analysis-map").filter({ visible: true })
+      .getByTestId("selection-summary");
+    if (options.method) {
+      await expect(summary).toHaveAttribute("data-selection-method", options.method);
+    }
+    if (options.text) await expect(summary).toContainText(options.text);
+    const mobileInsight = page.getByTestId("mobile-nav-insight");
+    if (await mobileInsight.isVisible()) await mobileInsight.click();
+  };
 
   const output = await executeAgentAnalysis("Tucson, Arizona");
 
@@ -523,9 +658,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
     .toHaveAttribute("aria-selected", "true");
   await visibleInsight.getByTestId("tab-meaning").click();
 
-  await expect(page.locator(
-    '[data-testid="map-area"] [data-testid="selection-summary"]'
-  )).toHaveAttribute("data-selection-method", "place_search");
+  await expectVisibleMapSelection({ method: "place_search" });
 
   await executeAgentAnalysis("Phoenix, Arizona");
   await expect(visibleReceipt.getByTestId("agent-analysis-receipt"))
@@ -536,9 +669,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
   await expect(visibleReceipt.getByTestId("agent-analysis-receipt"))
     .toContainText("Tucson, Arizona");
   await expect(visibleReceipt.getByTestId("agent-restore-previous")).toHaveCount(0);
-  await expect(page.locator(
-    '[data-testid="map-area"] [data-testid="selection-summary"]'
-  )).toContainText("Tucson, Arizona");
+  await expectVisibleMapSelection({ text: "Tucson, Arizona" });
 
   if (testInfo.project.name === "chromium-mobile") {
     await expect(page.getByTestId("mobile-nav-insight")).toHaveAttribute(

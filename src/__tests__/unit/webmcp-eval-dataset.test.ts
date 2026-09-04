@@ -21,6 +21,14 @@ import {
   PREPARE_STORM_CLAIM_TOOL_NAME,
 } from "@/lib/webmcp/context-tools";
 import {
+  SET_ENVIRONMENTAL_MAP_LAYERS_INPUT_SCHEMA,
+  SET_ENVIRONMENTAL_MAP_LAYERS_TOOL_NAME,
+} from "@/lib/webmcp/map-tool";
+import {
+  LOOK_UP_PLACE_LOCATION_INPUT_SCHEMA,
+  LOOK_UP_PLACE_LOCATION_TOOL_NAME,
+} from "@/lib/webmcp/place-tool";
+import {
   assertValidParaphraseMetadata,
   PARAPHRASE_UTTERANCE_STYLES,
   summarizeParaphraseFamilies,
@@ -47,6 +55,8 @@ const REGISTERED_TOOL_NAMES = [
   GET_COVERAGE_TOOL_NAME,
   INSPECT_EVIDENCE_TOOL_NAME,
   PREPARE_STORM_CLAIM_TOOL_NAME,
+  SET_ENVIRONMENTAL_MAP_LAYERS_TOOL_NAME,
+  LOOK_UP_PLACE_LOCATION_TOOL_NAME,
 ] as const;
 
 interface PostToolBehaviorCase {
@@ -256,6 +266,8 @@ describe("WebMCP tool-selection eval dataset", () => {
       [GET_COVERAGE_TOOL_NAME]: GET_COVERAGE_INPUT_SCHEMA.properties,
       [INSPECT_EVIDENCE_TOOL_NAME]: INSPECT_EVIDENCE_INPUT_SCHEMA.properties,
       [PREPARE_STORM_CLAIM_TOOL_NAME]: PREPARE_STORM_CLAIM_INPUT_SCHEMA.properties,
+      [SET_ENVIRONMENTAL_MAP_LAYERS_TOOL_NAME]: SET_ENVIRONMENTAL_MAP_LAYERS_INPUT_SCHEMA.properties,
+      [LOOK_UP_PLACE_LOCATION_TOOL_NAME]: LOOK_UP_PLACE_LOCATION_INPUT_SCHEMA.properties,
     };
     for (const item of dataset) {
       expect(item.messages).toHaveLength(1);
@@ -278,6 +290,18 @@ describe("WebMCP tool-selection eval dataset", () => {
         }
         if (call.functionName === GET_COVERAGE_TOOL_NAME) {
           expect(call.arguments).toHaveProperty("hazard");
+        }
+        if (call.functionName === SET_ENVIRONMENTAL_MAP_LAYERS_TOOL_NAME) {
+          expect(call.arguments).toHaveProperty("layers");
+          const layers = call.arguments.layers as Record<string, unknown>;
+          expect(Object.keys(layers).length).toBeGreaterThan(0);
+          for (const layer of Object.keys(layers)) {
+            expect(SET_ENVIRONMENTAL_MAP_LAYERS_INPUT_SCHEMA.properties.layers.properties)
+              .toHaveProperty(layer);
+          }
+        }
+        if (call.functionName === LOOK_UP_PLACE_LOCATION_TOOL_NAME) {
+          expect(call.arguments).toHaveProperty("place");
         }
       }
     }
@@ -347,15 +371,15 @@ describe("WebMCP tool-selection eval dataset", () => {
     }], 1);
 
     expect(summary).toMatchObject({
-      expected_cases: 18,
-      expected_runs: 18,
+      expected_cases: 24,
+      expected_runs: 24,
       executed_runs: 1,
       passes: 1,
-      total: 18,
+      total: 24,
       complete: false,
       all_passed: false,
     });
-    expect(summary.families).toHaveLength(6);
+    expect(summary.families).toHaveLength(8);
     expect(summary.families.find((family) => family.family === "capability-discovery"))
       .toMatchObject({
         expected_case_count: 3,
@@ -426,6 +450,21 @@ describe("WebMCP tool-selection eval dataset", () => {
       .toBe(ANALYZE_HAZARD_TOOL_NAME);
     expect(expectedTool("prepare-claim-after-home-wind-conversational"))
       .toBe(PREPARE_STORM_CLAIM_TOOL_NAME);
+
+    expect(expectedTool("map-neighbor-analysis-conditions-impact-safety"))
+      .toBe(ANALYZE_HAZARD_TOOL_NAME);
+    expect(expectedTool("map-neighbor-source-eligibility"))
+      .toBe(GET_COVERAGE_TOOL_NAME);
+    expect(expectedTool("place-geography-phoenix-conversational"))
+      .toBe(LOOK_UP_PLACE_LOCATION_TOOL_NAME);
+    expect(expectedTool("hide-surface-heat-imagery"))
+      .toBe(SET_ENVIRONMENTAL_MAP_LAYERS_TOOL_NAME);
+
+    const composite = dataset.find((item) => item.id === "place-and-map-composite");
+    expect(composite?.expectedCall.map((call) => call.functionName)).toEqual([
+      LOOK_UP_PLACE_LOCATION_TOOL_NAME,
+      SET_ENVIRONMENTAL_MAP_LAYERS_TOOL_NAME,
+    ]);
   });
 
   it("lets narrow historical evidence asks proceed without concern and broad goals ask first", () => {

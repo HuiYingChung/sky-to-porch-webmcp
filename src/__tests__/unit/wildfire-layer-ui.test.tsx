@@ -82,7 +82,7 @@ describe("Wildfire layer controls", () => {
       layer.id === "wildfire_nrt" ? { ...layer, visible: true } : layer
     );
     expect(render({ layers, wildfireLayerStatus: "loading" }))
-      .toContain("Loading and validating recent viewport detections");
+      .toContain("Loading and validating recent selected-area detections");
     const positive = render({
       layers,
       wildfireLayerStatus: "ready",
@@ -179,7 +179,9 @@ describe("ADR-0040 GIBS overlay status (Bug E)", () => {
     expect(errored).toContain("could not be loaded");
     expect(errored).toContain("not evidence of no hazard");
     const missing = render({ layers: rainVisible, gibsPrecipitationStatus: "no_imagery" });
-    expect(missing).toContain("has not published imagery");
+    expect(missing).toContain("availability check returned no visible pixels");
+    expect(missing).toContain("does not distinguish an all-transparent valid image");
+    expect(missing).not.toContain("has not published");
     expect(missing).toContain("2026-08-12 UTC");
     expect(missing).toContain("not evidence of no hazard");
   });

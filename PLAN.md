@@ -11,8 +11,10 @@
 - W0 repository baseline: complete
 - W1 shared analysis application layer: complete for the vertical slice
 - W2 shared client controller and state: complete with renderer compatibility
-- W3 WebMCP tools: six page-lifetime tools implemented—four context-free and
-  two state-dependent tools that fail closed until their prerequisites exist;
+- W3 WebMCP tools: eight page-lifetime tools implemented with stable handles;
+  contextual tools read current state at execution and fail closed until their
+  prerequisites exist. The surface includes read-only place lookup and
+  idempotent shared-map imagery control alongside the six evidence tools;
   product commit `72f3a36` fixes the production-reported Houston
   ambiguity loop with distinguishable locality/type labels, stable upstream
   place IDs, original-query continuation, exact retry arguments, and stale-ID
@@ -150,7 +152,9 @@ The human and agent paths must not duplicate hazard orchestration.
 - replace hazard-specific active result state with one active analysis state;
 - retain stale-response and cancellation protection;
 - route the human form through the shared controller;
-- expose the same controller to WebMCP registration.
+- expose the same controller to WebMCP registration;
+- keep one desired environmental-map state across desktop and mobile, so
+  human and Agent layer changes cannot diverge between responsive views.
 
 ### W3 — WebMCP vertical slice
 
@@ -180,6 +184,26 @@ inference, unknowns, failed checks, and evidence that would change the
 conclusion. The existing no-input hazard-list tool exposes compact ready inputs
 for all three demos in one response; no selector, separate demo tool, or
 citation tool is added.
+
+Two bounded geography and map-interaction tools complete the fixed registry:
+
+- `look_up_place_location` reuses the deterministic Photon/OpenStreetMap
+  resolver and ambiguity continuation. It returns the canonical label, WGS84
+  representative point, only the bounding box and administrative context that
+  the source supplied, and attribution. It is read-only and does not imply
+  environmental conditions or source coverage.
+- `set_environmental_map_layers` applies a desired-state patch for rain,
+  land-surface heat, recent FIRMS thermal-anomaly, and flood-extent imagery.
+  Omitted layers remain unchanged, explicit booleans show or hide layers, and
+  repeated identical calls are idempotent. It may resolve a place through the
+  same stable choice-ID flow, preserves an omitted radius, and updates the
+  shared desktop/mobile map state.
+
+The map tool accepts one UTC calendar date. It never collapses a multi-day
+analysis range to an arbitrary map day. A place, date, or radius change clears
+an active analysis whose context no longer matches; a layer-only change does
+not. Photon bounds frame the map when available but do not replace the selected
+point-and-radius analysis area.
 
 ### W4 — Provider cleanup
 
@@ -246,6 +270,23 @@ citation tool is added.
 - require summary-first plain English that keeps direct observation, inference,
   failure, and unknown state distinct.
 
+### W5f — Agent geography and map interaction
+
+- keep all eight tool definitions registered for the page lifetime and test
+  stable handle identity across analysis and map-state changes;
+- distinguish requested visibility from rendered visibility and expose
+  `hidden`, `loading`, `ready`, `no_imagery`, `source_failure`, and
+  `unsupported_date` without treating absence or failure as safety evidence;
+- treat NASA GIBS and FIRMS layers as visualizations, not measurements of flood
+  amount, water depth, air temperature, fire perimeter, severity, impact, or
+  safety;
+- block the near-real-time FIRMS map path for dates older than today or the
+  previous UTC day, without making a source request or returning a false empty
+  result; keep historical wildfire investigation in the analysis pipeline;
+- verify human/Agent parity, desktop/mobile synchronization, ambiguity
+  continuation, bounding-box framing, one-date validation, idempotent repeats,
+  stale result protection, and truthful imagery failure states.
+
 ### W6 — Release and submission
 
 - reconcile prior work, README, UI, video, and submission claims;
@@ -283,8 +324,9 @@ The product owner has ruled on the first three checkpoints:
 8. the curated Houston roof, Los Angeles health, and Tucson pet prompts require
    actual historical observations, citations, and an evidence-forward
    assessment. No-data and failure are last-resort states, not demo features;
-9. panel switching, generic expansion, map-layer controls, and Start over stay
-   as human UI actions for now rather than increasing the Agent tool count.
+9. panel switching, generic expansion, and Start over remain human UI actions.
+   Map-layer controls are also available to the Agent through one bounded
+   desired-state tool; Agent map updates reveal the Map view on mobile.
 10. the demos are curated entrances, not privileged code paths. A supported
     custom question receives the same evidence-forward order: strongest
     assessment; observed values, times, and official citations; labelled
@@ -294,19 +336,22 @@ Technical WebMCP details remain Codex's responsibility.
 
 ## 7. Definition of done
 
-- WebMCP tools are discoverable in the supported production in-app browser.
-  Product commit `72f3a36` fixes the reported same-label ambiguity loop and
-  passes local deterministic, browser, three-run model, PR-head, post-merge,
-  deployment, and production native tool-level checks at merge `90b8236`.
+- All eight fixed WebMCP tools are discoverable in the supported production
+  in-app browser. The earlier product commit `72f3a36` and merge `90b8236`
+  verify only the prior six-tool surface and must not be reused as evidence for
+  the two new tools; this change requires its own PR-head CI and deployment
+  evidence.
 - Human and agent interactions share one evidence pipeline and UI state.
 - The deterministic safety model is unchanged or stronger.
 - Tool descriptions and outputs stay within current implementation guidance.
-- All deterministic tests and exact-candidate checks pass locally. The
-  separate model gate passes 66/66 semantic selection/argument cases and 12/12
-  ambiguity wait/resume journeys across three runs. PR-head CI run
-  `33127306578`, post-merge main CI run `33128144825`, Vercel deployment
-  `dpl_DnNkQ5i91s8hEXsWvqr1JvSZNy4x`, and the production native tool journey
-  are recorded as separate evidence.
+- All deterministic tests and exact-candidate checks pass locally. The current
+  49-case, eight-tool model gate must be run and retained against the exact
+  reviewed definitions before a model-backed pass is claimed.
+- Historical evidence only—not acceptance evidence for this eight-tool
+  change—the prior six-tool gate passed 66/66 semantic selection/argument
+  cases and 12/12 ambiguity wait/resume journeys across three runs. PR-head CI
+  run `33127306578`, post-merge main CI run `33128144825`, and Vercel deployment
+  `dpl_DnNkQ5i91s8hEXsWvqr1JvSZNy4x` likewise belong to that prior surface.
 - Prior work and new work are unambiguous.
 - The repository is publicly reproducible under a recognized open-source
   license.

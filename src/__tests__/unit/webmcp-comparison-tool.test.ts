@@ -462,6 +462,33 @@ describe("WebMCP environmental evidence comparison tool", () => {
     expect(runAnalysisBundle).not.toHaveBeenCalled();
   });
 
+  it("propagates caller cancellation from the comparison bundle", async () => {
+    const controller = new AbortController();
+    const runAnalysis = vi.fn();
+    const runAnalysisBundle = vi.fn((
+      _requests: AnalysisRequest[],
+      _origin?: "agent",
+      signal?: AbortSignal
+    ): Promise<ActiveAnalysis[] | null> => new Promise((resolve) => {
+      signal?.addEventListener("abort", () => resolve(null), { once: true });
+    }));
+    const pending = executeCompareHazardTool(
+      {
+        baseline: { place: "29.7604, -95.3698", time: "2026-08-28" },
+        comparison: { place: "30.2672, -97.7431", time: "2026-08-27" },
+        hazard: "wind_storm",
+      },
+      { signal: controller.signal },
+      { runAnalysis, runAnalysisBundle, now: () => NOW }
+    );
+    await vi.waitFor(() => expect(runAnalysisBundle).toHaveBeenCalledTimes(1));
+
+    controller.abort(new DOMException("cancelled", "AbortError"));
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(runAnalysis).not.toHaveBeenCalled();
+  });
+
   it("publishes a bounded comparison contract", () => {
     const tool = createCompareHazardTool({ runAnalysis: vi.fn() });
     expect(tool.name).toBe("compare_environmental_evidence");

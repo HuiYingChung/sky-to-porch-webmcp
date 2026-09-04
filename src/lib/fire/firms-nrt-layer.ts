@@ -9,6 +9,7 @@ import {
   type WildfireProcessing,
 } from "@/contracts/wildfire-layer";
 import { validateQueryArea } from "@/lib/location/query-area";
+import { isFirmsNrtMapDateSupported } from "@/lib/map/environmental-map-state";
 
 const FIRMS_HOST = "firms.modaps.eosdis.nasa.gov";
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -39,14 +40,23 @@ function cacheKey(date: string, area: BoundingBox): string {
   return [date, area.west, area.south, area.east, area.north].join(",");
 }
 
-/** ADR-0040 (Bug F): the requested UTC detection day must be real and completed. */
-function validateWildfireDate(date: string, nowMs: number): boolean {
+function isValidUtcDate(date: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) return false;
   const parsed = Date.parse(`${date}T00:00:00Z`);
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString().slice(0, 10) !== date) {
     return false;
   }
-  return parsed < nowMs;
+  return true;
+}
+
+/**
+ * The FIRMS NRT map is intentionally a near-real-time view, not a historical
+ * archive browser. Only the current or previous UTC day is accepted. Older
+ * dates must use the separate historical analysis pipeline.
+ */
+export function isSupportedFirmsNrtMapDate(date: string, nowMs: number): boolean {
+  return Number.isFinite(nowMs) &&
+    isFirmsNrtMapDateSupported(date, new Date(nowMs));
 }
 
 function storeServerResult(key: string, outcome: FirmsNrtLayerOutcome, nowMs: number): void {
@@ -229,16 +239,17 @@ export async function queryFirmsNrtLayer(
   } catch {
     return { kind: "failure", error: "schema_validation" };
   }
+  const retrievedAt = deps.nowIso();
+  const retrievedAtMs = Date.parse(retrievedAt);
+  if (!Number.isFinite(retrievedAtMs) || !isValidUtcDate(date)) {
+    return { kind: "failure", error: "schema_validation" };
+  }
+  if (!isSupportedFirmsNrtMapDate(date, retrievedAtMs)) {
+    return { kind: "failure", error: "unsupported_date" };
+  }
   const mapKey = deps.mapKey ?? process.env.FIRMS_MAP_KEY;
   if (!mapKey || mapKey.trim().length === 0) {
     return { kind: "failure", error: "unconfigured" };
-  }
-  const retrievedAt = deps.nowIso();
-  if (!Number.isFinite(Date.parse(retrievedAt))) {
-    return { kind: "failure", error: "schema_validation" };
-  }
-  if (!validateWildfireDate(date, Date.parse(retrievedAt))) {
-    return { kind: "failure", error: "schema_validation" };
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -332,7 +343,14 @@ export async function queryFirmsNrtLayerGuarded(
   const key = cacheKey(date, area);
   const nowIso = deps.nowIso();
   const nowMs = Date.parse(nowIso);
-  if (!Number.isFinite(nowMs)) return { kind: "failure", error: "schema_validation" };
+  if (!Number.isFinite(nowMs) || !isValidUtcDate(date)) {
+    return { kind: "failure", error: "schema_validation" };
+  }
+  // Reject historical/future dates before cache, rate-budget, concurrency, or
+  // upstream work so they can never become a false `no_observation` result.
+  if (!isSupportedFirmsNrtMapDate(date, nowMs)) {
+    return { kind: "failure", error: "unsupported_date" };
+  }
   const cached = serverCache.get(key);
   if (cached && cached.expiresAt > nowMs) return structuredClone(cached.outcome);
   const pending = serverInFlight.get(key);

@@ -191,7 +191,12 @@ export function SelectionControls({
 
   // UXFIX-02 (W8): optional world-wide place search via the server-side
   // geocode proxy. Failure never blocks demo places or map selection.
-  interface GeoResult { label: string; lon: number; lat: number }
+  interface GeoResult {
+    label: string;
+    lon: number;
+    lat: number;
+    boundingBox?: { west: number; south: number; east: number; north: number } | null;
+  }
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [geoResults, setGeoResults] = useState<GeoResult[] | null>(null);
@@ -241,7 +246,8 @@ export function SelectionControls({
         radiusKm,
         currentTimeType,
         dates ? dateInputToStartTs(dates.start) : undefined,
-        dates ? dateInputToEndTs(dates.end) : undefined
+        dates ? dateInputToEndTs(dates.end) : undefined,
+        result.boundingBox ?? undefined
       );
       commitSelection(sel);
       setGeoResults(null);

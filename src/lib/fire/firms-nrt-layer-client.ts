@@ -5,6 +5,7 @@ import {
 } from "@/contracts/wildfire-layer";
 
 const CACHE_TTL_MS = 2 * 60_000;
+export const WILDFIRE_LAYER_CLIENT_CACHE_MAX_ENTRIES = 24;
 
 interface CacheEntry {
   storedAt: number;
@@ -13,6 +14,20 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<WildfireLayerEnvelope>>();
+
+function storeSuccess(key: string, entry: CacheEntry): void {
+  for (const [cachedKey, cached] of cache) {
+    if (entry.storedAt - cached.storedAt > CACHE_TTL_MS) {
+      cache.delete(cachedKey);
+    }
+  }
+  while (cache.size >= WILDFIRE_LAYER_CLIENT_CACHE_MAX_ENTRIES) {
+    const oldest = cache.keys().next().value as string | undefined;
+    if (!oldest) break;
+    cache.delete(oldest);
+  }
+  cache.set(key, entry);
+}
 
 function cacheKey(date: string, area: BoundingBox): string {
   return [date, area.west, area.south, area.east, area.north].join(",");
@@ -38,6 +53,7 @@ export async function loadWildfireLayer(
   const key = cacheKey(date, area);
   const cached = cache.get(key);
   if (cached && nowMs() - cached.storedAt <= CACHE_TTL_MS) return cached.envelope;
+  if (cached) cache.delete(key);
   const pending = inFlight.get(key);
   if (pending) return pending;
 
@@ -62,7 +78,7 @@ export async function loadWildfireLayer(
         envelope.result.requestArea.east !== area.east ||
         envelope.result.requestArea.north !== area.north
       )) return { ok: false, error: "schema_validation" } as const;
-      if (envelope.ok) cache.set(key, { storedAt: nowMs(), envelope });
+      if (envelope.ok) storeSuccess(key, { storedAt: nowMs(), envelope });
       return envelope;
     } catch {
       return { ok: false, error: "source_failure" } as const;

@@ -46,7 +46,9 @@ export async function GET(request: Request) {
     nowIso: () => new Date().toISOString(),
   });
   if (outcome.kind === "failure") {
-    const status = outcome.error === "unconfigured"
+    const status = outcome.error === "unsupported_date"
+      ? 422
+      : outcome.error === "unconfigured"
       ? 503
       : outcome.error === "rate_limited"
         ? 429

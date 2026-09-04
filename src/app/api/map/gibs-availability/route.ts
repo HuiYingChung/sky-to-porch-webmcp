@@ -73,9 +73,9 @@ export async function GET(request: Request) {
       result: {
         product: GIBS_AVAILABILITY_PRODUCTS[input.product],
         date: input.date,
-        available: outcome.available,
+        visiblePixelsDetected: outcome.visiblePixelsDetected,
         claimBoundary:
-          "Availability describes published NASA GIBS imagery only. Missing imagery is not evidence of no hazard.",
+          "This probe reports only whether the returned NASA GIBS image contains a visible pixel. A fully transparent valid image cannot be distinguished from unavailable coverage, and neither result is evidence of no hazard.",
       },
     },
     { headers: { "Cache-Control": "private, no-store" } }

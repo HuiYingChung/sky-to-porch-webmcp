@@ -69,13 +69,13 @@ export const INITIAL_LAYERS: LayerState[] = [
     id: "wildfire_nrt",
     label: "Thermal anomalies (FIRMS)",
     visible: false,
-    description: "Recent validated NASA FIRMS thermal-anomaly pixels in the visible viewport.",
+    description: "Recent validated NASA FIRMS thermal-anomaly pixels in the selected analysis area.",
   },
   {
     id: "flood_extent",
     label: "Flood extent",
     visible: false,
-    description: "NASA VIIRS 3-day flood-extent visualization for the visible map area.",
+    description: "NASA VIIRS 3-day flood-extent visualization for the selected analysis area.",
   },
 ];
 
@@ -118,7 +118,7 @@ export type GibsOverlayStatus = "idle" | "loading" | "ready" | "error" | "no_ima
 interface LayerManagerProps {
   layers: LayerState[];
   onToggle: (id: LayerId) => void;
-  overlayDate: string;
+  overlayDate: string | null;
   gibsPrecipitationStatus?: GibsOverlayStatus;
   gibsSurfaceTempStatus?: GibsOverlayStatus;
   wildfireLayerStatus?: "idle" | "loading" | "ready" | "error";
@@ -129,24 +129,30 @@ interface LayerManagerProps {
   floodExtentLayerError?: FloodExtentLayerErrorCode | null;
 }
 
-function gibsStatusMessage(status: GibsOverlayStatus, date: string): string | null {
+function gibsStatusMessage(status: GibsOverlayStatus, date: string | null): string | null {
+  if (date === null) {
+    return "Choose one UTC map date. A multi-day analysis range is not silently collapsed to a map image date.";
+  }
   if (status === "loading") return "Loading satellite imagery…";
   if (status === "error") {
     return "Satellite imagery could not be loaded for this view. Failure is not evidence of no hazard.";
   }
   if (status === "no_imagery") {
-    return `NASA has not published imagery covering this area for ${date} UTC yet. ` +
-      "Missing imagery is not evidence of no hazard; an earlier date may be available.";
+    return `The NASA GIBS availability check returned no visible pixels for this area on ${date} UTC. ` +
+      "This does not distinguish an all-transparent valid image from unavailable coverage, and it is not evidence of no hazard.";
   }
   return null;
 }
 
 function wildfireErrorMessage(error: WildfireLayerErrorCode | null): string {
+  if (error === "unsupported_date") {
+    return "The FIRMS map layer supports only today or the previous UTC day. No request was sent for this older date; use environmental analysis for historical evidence.";
+  }
   if (error === "unconfigured") {
     return "Fire hotspots are not available right now because this app is running without its NASA FIRMS access key. No substitute points are shown.";
   }
   if (error === "rate_limited") {
-    return "NASA FIRMS temporarily rate-limited this viewport. This is not evidence of no wildfire.";
+    return "NASA FIRMS temporarily rate-limited the selected-area request. This is not evidence of no wildfire.";
   }
   if (error === "response_too_large") {
     return "The response exceeded the safe display limit. No partial or silently truncated layer is shown.";
@@ -154,7 +160,7 @@ function wildfireErrorMessage(error: WildfireLayerErrorCode | null): string {
   if (error === "schema_validation") {
     return "The response failed deterministic validation. No unvalidated points are shown.";
   }
-  return "The FIRMS viewport request failed. Failure is not evidence of no wildfire.";
+  return "The FIRMS selected-area request failed. Failure is not evidence of no wildfire.";
 }
 
 /**
@@ -220,7 +226,7 @@ function Toggle({ layer, onToggle }: { layer: LayerState; onToggle: (id: LayerId
   );
 }
 
-function RasterLegend({ kind, date }: { kind: "rain" | "heat"; date: string }) {
+function RasterLegend({ kind, date }: { kind: "rain" | "heat"; date: string | null }) {
   const rain = kind === "rain";
   return (
     <div data-testid={`legend-${kind}`} style={{ margin: "4px 0 6px 22px", fontSize: "14px", lineHeight: 1.35, color: "var(--text-muted)" }}>
@@ -233,7 +239,7 @@ function RasterLegend({ kind, date }: { kind: "rain" | "heat"; date: string }) {
         }} />
         <span>{rain ? "lower → higher precipitation rate (mm/hour)" : "lower → higher land-surface temperature (K source scale)"}</span>
       </div>
-      <div>{date} UTC · NASA GIBS product palette</div>
+      <div>{date ? `${date} UTC · NASA GIBS product palette` : "One UTC map date is required"}</div>
       <div>{rain ? "Rain intensity is not observed flood extent." : "Land surface is not outdoor air or indoor temperature."}</div>
     </div>
   );
@@ -242,7 +248,7 @@ function RasterLegend({ kind, date }: { kind: "rain" | "heat"; date: string }) {
 function GibsStatus({ layerId, status, date }: {
   layerId: LayerId;
   status: GibsOverlayStatus;
-  date: string;
+  date: string | null;
 }) {
   const message = gibsStatusMessage(status, date);
   if (!message) return null;
@@ -294,17 +300,17 @@ export function LayerManager({
         {wildfire.visible && (
           <div role="status" aria-live="polite" data-testid="wildfire-layer-status"
             style={{ margin: "2px 0 5px 22px", fontSize: "14px", lineHeight: 1.35, color: "var(--text-muted)" }}>
-            {wildfireLayerStatus === "idle" && "Waiting for the visible map viewport."}
-            {wildfireLayerStatus === "loading" && "Loading and validating recent viewport detections…"}
+            {wildfireLayerStatus === "idle" && "Waiting for a selected analysis area."}
+            {wildfireLayerStatus === "loading" && "Loading and validating recent selected-area detections…"}
             {wildfireLayerStatus === "error" && wildfireErrorMessage(wildfireLayerError)}
             {wildfireLayerStatus === "ready" && wildfireLayerResult?.evidenceState === "no_observation" &&
-              `No hotspot pixels were returned for this viewport on ${overlayDate} UTC. This does not mean no wildfire.`}
+              `No hotspot pixels were returned for the selected analysis area on ${overlayDate ?? "the selected date"} UTC. This does not mean no wildfire.`}
             {wildfireLayerStatus === "ready" && wildfireLayerResult?.evidenceState === "observations_returned" && (
               <>
                 <span data-testid="wildfire-layer-count">
                   {wildfireLayerResult.featureCollection.features.length} validated thermal-anomaly pixel{wildfireLayerResult.featureCollection.features.length === 1 ? "" : "s"}
                 </span>{" "}
-                for {overlayDate} UTC.{" "}
+                for {overlayDate ?? "the selected date"} UTC.{" "}
                 Latest: {wildfireLayerResult.latestAcquiredAt?.replace("T", " ").replace("Z", " UTC")}.
               </>
             )}
@@ -318,7 +324,7 @@ export function LayerManager({
         {floodExtent.visible && (
           <div role="status" aria-live="polite" data-testid="flood-extent-layer-status"
             style={{ margin: "2px 0 5px 22px", fontSize: "14px", lineHeight: 1.35, color: "var(--text-muted)" }}>
-            {floodExtentLayerStatus === "idle" && "Waiting for the visible map area."}
+            {floodExtentLayerStatus === "idle" && "Waiting for a selected analysis area."}
             {floodExtentLayerStatus === "loading" && "Checking available flood imagery…"}
             {floodExtentLayerStatus === "error" && floodExtentErrorMessage(floodExtentLayerError)}
             {floodExtentLayerStatus === "ready" && floodExtentLayerResult?.evidenceState === "no_observation" &&
@@ -326,7 +332,7 @@ export function LayerManager({
             {floodExtentLayerStatus === "ready" && floodExtentLayerResult?.evidenceState === "observations_returned" && (
               <>
                 <span data-testid="flood-extent-layer-date">
-                  Flood imagery returned: 3-day composite covering {floodCompositeWindow(floodExtentLayerResult.observedDate ?? overlayDate)} UTC.
+                  Flood imagery returned: 3-day composite covering {floodCompositeWindow(floodExtentLayerResult.observedDate ?? overlayDate ?? "unknown date")} UTC.
                 </span>{" "}
                 Detections may come from any day in that window, not only the selected end date. NASA&apos;s image is shown as supplied; Sky to Porch does not interpret its colors as depth or property impact.
               </>
