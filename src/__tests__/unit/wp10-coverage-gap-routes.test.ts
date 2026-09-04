@@ -61,6 +61,7 @@ async function mockFetch(
   airNowStatus = 200,
   airNowBody = airNowDailyLine(),
   earthquakeFeatures: unknown[] = [],
+  gvpFeatures: unknown[] = [],
 ): Promise<typeof fetch> {
   const image = await png(alpha);
   return vi.fn(async (request: string | URL | Request) => {
@@ -90,7 +91,11 @@ async function mockFetch(
       });
     }
     if (url.hostname === "webservices.volcano.si.edu") {
-      return Response.json({ type: "FeatureCollection", numberMatched: 0, features: [] });
+      return Response.json({
+        type: "FeatureCollection",
+        numberMatched: gvpFeatures.length,
+        features: gvpFeatures,
+      });
     }
     throw new Error(`unexpected mocked request ${url.hostname}${url.pathname}`);
   }) as unknown as typeof fetch;
@@ -219,6 +224,62 @@ describe("Air Quality and Earth & Volcanoes live query routes", () => {
     expect(payload.result.sourceOutcomes.earthquake_prediction).toBe("out_of_scope");
     expect(payload.result.sourceOutcomes.usgs_earthquake_geojson).toBe("no_observation");
     expect(payload.result.evidence.observations).toHaveLength(0);
+  });
+
+  it("returns a validated live GVP observation instead of failing the volcano route", async () => {
+    const hawaiiArea = {
+      west: -156.2,
+      south: 18.5,
+      east: -154.3,
+      north: 20.3,
+    };
+    const gvpFeature = {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [-155.292, 19.421] },
+      properties: {
+        Volcano_Number: 332010,
+        Volcano_Name: "Kilauea",
+        Eruption_Number: 22597,
+        Activity_Type: "Confirmed Eruption",
+        ExplosivityIndexMax: 1,
+        StartDateYear: 2024,
+        StartDateMonth: 12,
+        StartDateDay: 23,
+        EndDateYear: 2024,
+        EndDateMonth: 12,
+        EndDateDay: 23,
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      await mockFetch(0, 200, airNowDailyLine(), [], [gvpFeature])
+    );
+
+    const response = await postVolcano(new Request("http://localhost/api/volcano/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...input(),
+        area: hawaiiArea,
+        date: "2024-12-23",
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.ok).toBe(true);
+    expect(payload.result.retrievalAttempted).toBe(true);
+    expect(payload.result.sourceOutcomes.smithsonian_gvp_eruptions).toBe("success");
+    expect(payload.result.evidence.dataMode).toBe("live");
+    expect(payload.result.evidence.observations).toContainEqual(
+      expect.objectContaining({
+        dataMode: "live",
+        provenance: expect.objectContaining({
+          sourceId: "smithsonian_gvp_eruptions",
+          sourceRecordId: "332010-22597",
+        }),
+      })
+    );
   });
 
   it("keeps an observed earthquake event separate when satellite evidence does not contribute", async () => {

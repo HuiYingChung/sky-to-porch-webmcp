@@ -85,6 +85,19 @@ describe("adaptive Meaning and map-alternative UX", () => {
     expect(mission?.imageryUrl).toBe("https://gpm.nasa.gov/resources/images");
   });
 
+  it("keeps Canadian drought references separate from the U.S. Drought Monitor", () => {
+    const mission = missionContextReference(
+      "Canadian Drought Monitor ImageServer",
+      "Canadian Drought Monitor"
+    );
+    expect(mission?.label).toBe("Canadian Drought Monitor");
+    expect(mission?.overviewUrl).toContain("agriculture.canada.ca");
+    expect(mission?.overviewUrl).not.toContain("droughtmonitor.unl.edu");
+    expect(publicSourceUrl("canada_drought_monitor")).toBe(
+      "https://agriculture.canada.ca/en/agriculture-and-environment/drought-watch-and-agroclimate/canadian-drought-monitor"
+    );
+  });
+
   it("mentions the selected pets concern even when the optional question is blank and a source failed", () => {
     const evidence = {
       hazardId: "extreme_heat",

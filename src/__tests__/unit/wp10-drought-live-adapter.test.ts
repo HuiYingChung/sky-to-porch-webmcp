@@ -8,6 +8,7 @@ import {
   buildUsdmArizonaPercentRequest,
 } from "@/lib/drought/source-contracts";
 import { queryLiveDroughtEvidence } from "@/lib/drought/live-adapter";
+import { deriveBoundingBox } from "@/lib/location/area";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -909,6 +910,70 @@ describe("queryLiveDroughtEvidence", () => {
 
   describe("validated custom-area national satellite and regional path", () => {
     const area = { west: -74.3, south: 40.4, east: -73.6, north: 41 };
+
+    it("does not request whole-state USDM data for a Toronto-centred 50 km area", async () => {
+      const torontoArea = deriveBoundingBox({ lon: -79.3832, lat: 43.6532 }, 50);
+      const pngBytes = await makePng(220, 60, 130, 70);
+      const calls: string[] = [];
+      const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        calls.push(url);
+        if (url.includes("gitc.earthdata.nasa.gov")) {
+          return new Response(asBody(domainXml("2026-07-31/2026-09-01/P16D")), {
+            status: 200,
+            headers: { "Content-Type": "text/xml" },
+          });
+        }
+        if (url.includes("gibs.earthdata.nasa.gov")) {
+          return new Response(asBody(pngBytes), {
+            status: 200,
+            headers: { "Content-Type": "image/png" },
+          });
+        }
+        if (url.includes("tigerweb.geo.census.gov")) {
+          return new Response(JSON.stringify({
+            type: "FeatureCollection",
+            features: [{
+              type: "Feature",
+              properties: { STATE: "36", NAME: "New York", STUSAB: "NY" },
+              geometry: {
+                type: "Polygon",
+                coordinates: [[
+                  [-79.05, 43.15],
+                  [-78.7, 43.15],
+                  [-78.7, 43.35],
+                  [-79.05, 43.35],
+                  [-79.05, 43.15],
+                ]],
+              },
+            }],
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/geo+json" },
+          });
+        }
+        if (url.includes("agriculture.canada.ca")) {
+          return Response.json({ features: [] });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      }) as unknown as typeof fetch;
+
+      const result = await queryLiveDroughtEvidence(
+        { placeId: "custom-area", date: "2026-08-28", mode: "live", area: torontoArea },
+        { fetchImpl, now: () => new Date("2026-09-04T12:00:00Z") }
+      );
+
+      expect(calls.some((url) => url.includes("usdmdataservices.unl.edu"))).toBe(false);
+      expect(result.kind).toBe("inconclusive_evidence");
+      expect(result.sourceOutcomes).toEqual({
+        gibs: "success",
+        usdm: "not_attempted",
+        administrativeArea: "no_observation",
+        canadaDrought: "no_observation",
+      });
+      expect(result.evidence?.observations.map((observation) => observation.provenance.sourceId))
+        .toEqual(["nasa_gibs_modis_ndvi_16day"]);
+    });
 
     it("uses the canonical bbox, resolves New York, and queries matching USDM statistics", async () => {
       const pngBytes = await makePng(220, 60, 130, 70);

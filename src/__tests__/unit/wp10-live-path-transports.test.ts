@@ -8,6 +8,7 @@ import {
   resolveUsAdministrativeArea,
 } from "@/lib/drought/administrative-area-live";
 import { getUsAdministrativeArea } from "@/data/us-administrative-areas";
+import { deriveBoundingBox } from "@/lib/location/area";
 import {
   ghcnhGuardSummary,
   queryGhcnhGroundEvidence,
@@ -173,6 +174,36 @@ describe("mock-first prepared-to-live transports", () => {
         headers: { "Content-Type": "application/geo+json" },
       })) as unknown as typeof fetch,
     });
+    expect(result.kind).toBe("no_observation");
+  });
+
+  it("does not turn a Toronto-centred 50 km area into New York state evidence", async () => {
+    const torontoArea = deriveBoundingBox({ lon: -79.3832, lat: 43.6532 }, 50);
+    const result = await resolveUsAdministrativeArea(torontoArea, {
+      fetchImpl: vi.fn(async () => new Response(JSON.stringify({
+        type: "FeatureCollection",
+        features: [{
+          type: "Feature",
+          properties: { STATE: "36", NAME: "New York", STUSAB: "NY" },
+          // The returned state geometry overlaps the request envelope near its
+          // southern edge, but it does not contain the Toronto center.
+          geometry: {
+            type: "Polygon",
+            coordinates: [[
+              [-79.05, 43.15],
+              [-78.7, 43.15],
+              [-78.7, 43.35],
+              [-79.05, 43.35],
+              [-79.05, 43.15],
+            ]],
+          },
+        }],
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/geo+json" },
+      })) as unknown as typeof fetch,
+    });
+
     expect(result.kind).toBe("no_observation");
   });
 

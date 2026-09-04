@@ -125,7 +125,11 @@ export function observationsFromGvpGeoJson(
       },
       variableName: "Smithsonian GVP historical eruption record",
       textValue: `${activityType} at ${volcanoName} overlaps the requested date in the GVP catalog.`,
-      dataMode: "historical",
+      // This record describes historical activity, but it was retrieved from
+      // the live source for this request. Historical timing is represented by
+      // the observation dates and freshness classification; dataMode tracks
+      // the retrieval path and must match the enclosing EvidenceObject.
+      dataMode: "live",
       qualifiers: ["official_historical_catalog", "date_precision_may_be_incomplete", "not_a_prediction_or_alert"],
       periodStart: `${date}T00:00:00.000Z`,
       periodEnd: `${date}T23:59:59.999Z`,

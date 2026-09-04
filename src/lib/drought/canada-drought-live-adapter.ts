@@ -168,7 +168,10 @@ export async function queryCanadaDroughtMonitor(
         },
         variableName: "Canadian Drought Monitor source raster class",
         textValue: `Official source raster class code ${classCode}`,
-        dataMode: "historical",
+        // The monthly classification is historical context retrieved from the
+        // live service. Keep retrieval mode aligned with the enclosing live
+        // EvidenceObject; observation age remains explicit in its dates.
+        dataMode: "live",
         qualifiers: ["official_monthly_classification_source", "source_code_not_relabelled_without_verified_attribute_table", "center_point_not_property_assessment"],
         periodStart: `${item.productDate}T00:00:00.000Z`,
         periodEnd: `${item.productDate}T23:59:59.999Z`,

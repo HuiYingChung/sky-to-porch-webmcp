@@ -5,11 +5,12 @@
 
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { validateEvidenceObject } from "@/contracts/evidence";
+import { validateEvidenceObject, validateObservation } from "@/contracts/evidence";
 import { parseHmsKml } from "@/lib/fire/hms-kml";
 import { queryLiveFireEvidence } from "@/lib/fire/live-adapter";
 import type { HmsLiveDependencies } from "@/lib/fire/live-adapter";
 import { HMS_COMMON_START_DATE, LA_FIRE_BOX, LAKE_MICHIGAN_FIRE_BOX } from "@/lib/fire/types";
+import { observationsFromWfigsGeoJson } from "@/lib/fire/wfigs-live-adapter";
 
 const KML_MEDIA_TYPE = "application/vnd.google-earth.kml+xml";
 const TEXT_MEDIA_TYPE = "text/plain";
@@ -92,11 +93,20 @@ function successfulFetch(options: {
   smoke?: string;
   fireKml?: string;
   fireTextForDate?: (date: string) => string;
+  wfigsForDate?: (date: string) => unknown;
 } = {}): HmsLiveDependencies["fetch"] {
   return vi.fn(async (request) => {
     const url = urlText(request);
     if (url.includes("WFIGS_Interagency_Perimeters")) {
-      return Response.json({ type: "FeatureCollection", features: [] });
+      const where = new URL(url).searchParams.get("where") ?? "";
+      const requestedDate = where.match(/DATE '(\d{4}-\d{2}-\d{2})/u)?.[1];
+      if (!requestedDate) throw new Error(`missing WFIGS requested date: ${url}`);
+      return Response.json(
+        options.wfigsForDate?.(requestedDate) ?? {
+          type: "FeatureCollection",
+          features: [],
+        },
+      );
     }
     const date = isoDateFromProductUrl(url);
     if (url.includes("Smoke_Polygons")) {
@@ -149,6 +159,43 @@ describe("parseHmsKml", () => {
       LA_FIRE_BOX,
     )).toThrow(/world bounds/i);
     expect(() => parseHmsKml(encode(LA_FIRE_KML), "smoke_polygons", LA_FIRE_BOX)).toThrow(/Polygon geometry/i);
+  });
+});
+
+describe("WFIGS live retrieval identity", () => {
+  it("keeps the source record identity while making the daily observation identity date-specific", () => {
+    const payload = {
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        properties: {
+          OBJECTID: 44,
+          attr_IRWINID: "{fixture-irwin}",
+          attr_IncidentName: "Fixture Fire",
+        },
+      }],
+    };
+    const raw = encode(JSON.stringify(payload));
+    const [observation] = observationsFromWfigsGeoJson(
+      payload,
+      raw,
+      "https://services3.arcgis.com/example",
+      "2026-08-06",
+      FIXED_NOW,
+    );
+
+    expect(() => validateObservation(observation)).not.toThrow();
+    expect(observation).toMatchObject({
+      observationId: "obs-wfigs-perimeter-44-2026-08-06",
+      dataMode: "live",
+      provenance: {
+        sourceRecordId: "{fixture-irwin}",
+        observedAt: "2026-08-06T12:00:00.000Z",
+        requestParameters: { requestedDate: "2026-08-06" },
+      },
+      periodStart: "2026-08-06T00:00:00.000Z",
+      periodEnd: "2026-08-06T23:59:59.999Z",
+    });
   });
 });
 
@@ -218,6 +265,80 @@ describe("queryLiveFireEvidence temporal success", () => {
     expect(fire.metadata!.sourceLastModifiedAt).toBe("2026-08-07T10:00:00.000Z");
     const smoke = result.evidence!.observations.find((item) => item.provenance.sourceId === "noaa_hms_smoke_polygons")!;
     expect(smoke.metadata).toMatchObject({ observationDate: "2026-08-06", totalCount: 4, inBoxCount: 4 });
+  });
+
+  it("combines HMS and WFIGS observations for one custom day without mixing retrieval modes", async () => {
+    const result = await queryLiveFireEvidence(
+      rangeInput(),
+      deps(successfulFetch({
+        wfigsForDate: () => ({
+          type: "FeatureCollection",
+          features: [{
+            type: "Feature",
+            properties: {
+              OBJECTID: 44,
+              attr_IRWINID: "{fixture-irwin}",
+              attr_IncidentName: "Fixture Fire",
+            },
+          }],
+        }),
+      })),
+    );
+
+    expect(result.kind).toBe("success");
+    expect(() => validateEvidenceObject(result.evidence!)).not.toThrow();
+    expect(result.evidence?.observations).toHaveLength(3);
+    expect(result.evidence?.observations.every((observation) => observation.dataMode === "live")).toBe(true);
+    expect(result.evidence?.observations.find(
+      (observation) => observation.provenance.sourceId === "nifc_wfigs_fire_perimeters",
+    )).toMatchObject({
+      observationId: "obs-wfigs-perimeter-44-2026-08-06",
+      provenance: {
+        sourceRecordId: "{fixture-irwin}",
+        requestParameters: { requestedDate: "2026-08-06" },
+      },
+    });
+  });
+
+  it("keeps one WFIGS perimeter independently traceable across a three-day custom range", async () => {
+    const result = await queryLiveFireEvidence(
+      rangeInput("2026-08-04", "2026-08-06"),
+      deps(successfulFetch({
+        wfigsForDate: () => ({
+          type: "FeatureCollection",
+          features: [{
+            type: "Feature",
+            properties: {
+              OBJECTID: 44,
+              attr_IncidentName: "Fixture Fire",
+            },
+          }],
+        }),
+      })),
+    );
+
+    expect(result.kind).toBe("success");
+    expect(() => validateEvidenceObject(result.evidence!)).not.toThrow();
+    expect(result.evidence?.observations).toHaveLength(9);
+    const wfigs = result.evidence!.observations.filter(
+      (observation) => observation.provenance.sourceId === "nifc_wfigs_fire_perimeters",
+    );
+    expect(wfigs.map((observation) => observation.observationId)).toEqual([
+      "obs-wfigs-perimeter-44-2026-08-04",
+      "obs-wfigs-perimeter-44-2026-08-05",
+      "obs-wfigs-perimeter-44-2026-08-06",
+    ]);
+    expect(wfigs.map((observation) => observation.provenance.sourceRecordId)).toEqual([
+      "44",
+      "44",
+      "44",
+    ]);
+    expect(wfigs.map((observation) => observation.provenance.requestParameters?.requestedDate)).toEqual([
+      "2026-08-04",
+      "2026-08-05",
+      "2026-08-06",
+    ]);
+    expect(new Set(result.evidence?.observations.map((observation) => observation.observationId)).size).toBe(9);
   });
 
   it("excludes valid rows from a different observation day without misattributing them", async () => {

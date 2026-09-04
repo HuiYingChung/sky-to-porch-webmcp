@@ -63,6 +63,8 @@ const HAZARD_NAMES: Record<HazardId, string> = {
 const RESULT_STATUS_NAMES: Readonly<Record<string, string>> = {
   success: "Official readings and reports returned",
   no_observation: "No matching readings or reports returned",
+  inconclusive_evidence: "Context returned; no direct reading",
+  stale_data: "Available readings are out of date",
   unsupported_coverage: "Not supported for this area",
   unsupported_place: "Not supported for this area",
   unsupported_date: "Not supported for this date",

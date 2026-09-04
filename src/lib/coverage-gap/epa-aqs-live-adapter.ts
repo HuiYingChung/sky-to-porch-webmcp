@@ -102,7 +102,10 @@ export function observationsFromAqsJson(
       variableName: safeText(row.parameter, 160) || "EPA AQS outdoor pollutant sample",
       value: measurement,
       unit: units,
-      dataMode: "historical",
+      // AQS publishes historical samples, but this adapter retrieves them
+      // live for the current request. Observation age belongs in freshness;
+      // dataMode identifies the retrieval path used by the evidence object.
+      dataMode: "live",
       qualifiers: ["validated_regulatory_monitoring_data", "outdoor_station", "publication_lag_applies"],
       metadata: {
         siteId,
