@@ -315,7 +315,9 @@ describe("queryLiveFireEvidence temporal success", () => {
     );
     expect(result.kind).toBe("no_observation");
     expect(result.evidence?.confidence.level).toBe("insufficient");
-    expect(result.evidence?.limitations.some((item) => item.required && item.description.includes("do not mean"))).toBe(true);
+    expect(result.evidence?.limitations.some((item) =>
+      item.required && item.description.includes("does not mean there was no fire or danger")
+    )).toBe(true);
   });
 });
 

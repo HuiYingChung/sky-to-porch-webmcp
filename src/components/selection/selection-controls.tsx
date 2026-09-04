@@ -45,6 +45,7 @@ import {
   latestCompletedUtcDate,
   tsToDateInput,
 } from "@/lib/ui/date-input";
+import { publicErrorMessage } from "@/lib/ui/public-presentation";
 
 export interface SelectionControlsProps {
   /** idPrefix — keeps form element IDs unique across instances. */
@@ -252,7 +253,7 @@ export function SelectionControls({
       commitSelection(sel);
       setGeoResults(null);
     } catch (e) {
-      onError(e instanceof Error ? e.message : String(e));
+      onError(publicErrorMessage(e));
     }
   }
 
@@ -363,7 +364,7 @@ export function SelectionControls({
       );
       commitSelection(sel);
     } catch (e) {
-      onError(e instanceof Error ? e.message : String(e));
+      onError(publicErrorMessage(e));
     }
   }
 
@@ -389,7 +390,7 @@ export function SelectionControls({
       );
       commitSelection(updated);
     } catch (err) {
-      onError(err instanceof Error ? err.message : String(err));
+      onError(publicErrorMessage(err));
     }
   }
 
@@ -415,7 +416,7 @@ export function SelectionControls({
       );
       commitSelection(updated);
     } catch (err) {
-      onError(err instanceof Error ? err.message : String(err));
+      onError(publicErrorMessage(err));
     }
   }
 
@@ -467,7 +468,7 @@ export function SelectionControls({
       // ADR-0043 (B1): a rejected pair must not stay on screen while the
       // previous canonical range would be submitted.
       revertDateDraftsToSelection();
-      onError(err instanceof Error ? err.message : String(err));
+      onError(publicErrorMessage(err));
     }
   }
 

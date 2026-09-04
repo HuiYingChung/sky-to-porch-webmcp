@@ -102,30 +102,35 @@ test.describe("WP-03 desktop shell", () => {
   test("insight navigation tabs are visible on desktop", async ({ page }) => {
     await gotoHydrated(page, "/");
     const ds = page.locator('[data-testid="desktop-shell"]');
-    await expect(ds.locator('[data-testid="tab-meaning"]')).toBeVisible();
-    await expect(ds.locator('[data-testid="tab-evidence"]')).toBeVisible();
-    await expect(ds.locator('[data-testid="tab-missions"]')).toBeVisible();
+    await expect(ds.locator('[data-testid="tab-meaning"]')).toHaveText("Meaning");
+    await expect(ds.locator('[data-testid="tab-evidence"]')).toHaveText("Evidence");
+    await expect(ds.locator('[data-testid="tab-missions"]')).toHaveText("Missions");
   });
 
   test("all Insight tabs start with purpose guidance only and no repeated selection summary", async ({ page }) => {
     await gotoHydrated(page, "/?dev=1");
     const ds = page.locator('[data-testid="desktop-shell"]');
     const meaning = ds.locator('[data-testid="panel-meaning"]');
-    await expect(meaning.getByTestId("meaning-empty-prompt"))
-      .toContainText("Get evidence-based answer");
+    await expect(meaning.getByTestId("meaning-empty-prompt").locator("p").first())
+      .toHaveText(
+        "Meaning answers your question in plain English, grounded in validated observations, with clear limitations and useful next checks."
+      );
     await expect(meaning.getByTestId("selection-summary")).toHaveCount(0);
 
     await ds.getByTestId("tab-evidence").click();
     const evidence = ds.getByTestId("panel-evidence");
-    // PR4b batch 2: shorter approved empty-state prompts.
     await expect(evidence.getByTestId("evidence-empty-prompt"))
-      .toContainText("Evidence is the audit trail");
+      .toHaveText(
+        "Evidence is the audit trail: the exact datasets, observation times, values, and limitations behind each answer, including any no-data state. Ask a question first to create a result."
+      );
     await expect(evidence.getByTestId("selection-summary")).toHaveCount(0);
 
     await ds.getByTestId("tab-missions").click();
     const missions = ds.getByTestId("panel-missions");
     await expect(missions.getByTestId("missions-empty-prompt"))
-      .toContainText("clearly labelled example imagery");
+      .toHaveText(
+        "Missions gives background on the satellites, sensors, and agencies behind the evidence, with clearly labelled example imagery. Ask a question first to create a result."
+      );
     await expect(missions.getByTestId("selection-summary")).toHaveCount(0);
 
     await ds.getByTestId("desktop-gq-place-demo-houston").click();

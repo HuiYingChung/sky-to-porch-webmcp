@@ -11,6 +11,15 @@ import {
   ObservationSelectionButton,
 } from "@/components/missions/mission-dashboard";
 import type { MissionSelectionIntegrationProps } from "@/components/missions/mission-selection";
+import {
+  formatUtcDate,
+  formatUtcTimestamp,
+  publicErrorMessage,
+  publicNarrativeText,
+  publicObservationValue,
+  publicSourceName,
+  publicVariableName,
+} from "@/lib/ui/public-presentation";
 
 const SOURCE_LABELS: Record<string, string> = {
   nasa_gibs_modis_aod: "NASA GIBS MODIS MAIAC aerosol optical depth",
@@ -22,21 +31,54 @@ const SOURCE_LABELS: Record<string, string> = {
   earthquake_prediction: "Earthquake prediction",
 };
 
+const INTERNAL_DISPLAY_VALUE = /(?:\b(?:obs|evd|intent|lim|src)-[a-z0-9_-]+\b|\b(?:analysis|place)-[a-z0-9_-]{8,}\b|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b|\b[0-9a-f]{32,}\b|[a-z]:\\|\\\\[^\\\s]+\\|(?:^|\s)\/(?:[^/\s]+\/)+[^/\s]+|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b|\.(?:csv|json|geojson|png|tiff?|kml|xml|psv|txt|zip|gz|pdf|nc|grib2?|hdf5?|parquet)\b)/iu;
+
+function observationLabel(value: string): string {
+  return INTERNAL_DISPLAY_VALUE.test(value) ? publicVariableName(value) : value;
+}
+
 function title(result: CoverageGapQueryResult): string {
   return result.hazardId === "air_quality" ? "Air Quality" : "Earth & Volcanoes";
 }
 
 function observationValue(observation: Observation): string {
-  if (observation.value !== undefined) return `${observation.value} ${observation.unit}`;
-  return observation.textValue ?? "value unavailable";
+  if (observation.value !== undefined) return publicObservationValue(observation.value, observation.unit);
+  const value = observation.textValue ?? "value unavailable";
+  if (!INTERNAL_DISPLAY_VALUE.test(value)) return value;
+  const safeValue = publicNarrativeText(value);
+  return INTERNAL_DISPLAY_VALUE.test(safeValue) ? "Details are not available." : safeValue;
 }
 
 function observationTime(observation: Observation): string {
   const validDate = observation.metadata?.validDate;
   if (observation.provenance.observedAt === "unknown" && typeof validDate === "string") {
-    return `${validDate} local daily date (UTC instant unavailable)`;
+    return `${formatUtcDate(validDate).replace(/ UTC$/u, "")} local daily date (UTC instant unavailable)`;
   }
-  return observation.provenance.observedAt;
+  return formatUtcTimestamp(observation.provenance.observedAt);
+}
+
+function resultStatus(result: CoverageGapQueryResult): string {
+  if (result.kind === "success") return "Live retrieval · evidence returned";
+  if (result.kind === "inconclusive_evidence") return "Live retrieval · inconclusive evidence";
+  if (result.kind === "no_observation") return "Live retrieval · no observation returned";
+  if (result.kind === "unsupported_coverage") return "Live retrieval · requested coverage unavailable";
+  if (result.kind === "unsupported_date") return "Live retrieval · requested date unavailable";
+  return "Live retrieval · source unavailable";
+}
+
+function resultNote(result: CoverageGapQueryResult): string | null {
+  const note = result.rejectionReason;
+  if (!note) return null;
+  if (note.startsWith("MAIAC source failure:")) {
+    return "MAIAC source failure. Available outdoor AQI remains separate from satellite evidence.";
+  }
+  if (note.startsWith("AirNow daily source failure:")) {
+    return "AirNow daily source failure. Satellite AOD is not AQI, and missing ground evidence is not clean air.";
+  }
+  if (note.startsWith("EPA AQS source failure:")) {
+    return "EPA AQS source failure. Preliminary AirNow and satellite AOD remain separate from the missing validated historical check.";
+  }
+  return INTERNAL_DISPLAY_VALUE.test(note) ? publicErrorMessage(note) : note;
 }
 
 function Meaning({ result }: { result: CoverageGapQueryResult }) {
@@ -47,8 +89,8 @@ function Meaning({ result }: { result: CoverageGapQueryResult }) {
         {result.retrievalAttempted && result.evidence
           ? `${dataModeLabel(result.evidence.dataMode)} · ${evidenceStateLabel(result.evidence.evidenceState)}`
           : result.retrievalAttempted
-            ? `Live retrieval · ${result.kind.replaceAll("_", " ")}`
-            : "No upstream retrieval attempted"}
+            ? resultStatus(result)
+            : "No source check was attempted"}
       </strong>
       {/* ADR-0045: with a validated explanation, air/earth render the same
           adaptive Meaning as every other hazard. Results without evidence
@@ -73,7 +115,7 @@ function Meaning({ result }: { result: CoverageGapQueryResult }) {
         </p>
       )}
       <p style={{ margin: 0, color: "var(--status-warning-fg)" }}>
-        {result.rejectionReason}
+        {resultNote(result)}
       </p>
     </div>
   );
@@ -92,7 +134,7 @@ function Evidence({
       <dl style={{ margin: 0 }}>
         {Object.entries(result.sourceOutcomes).map(([sourceId, outcome]) => (
           <div key={sourceId} style={{ marginBottom: "8px" }}>
-            <dt style={{ fontWeight: 600 }}>{SOURCE_LABELS[sourceId] ?? sourceId}</dt>
+            <dt style={{ fontWeight: 600 }}>{SOURCE_LABELS[sourceId] ?? publicSourceName(sourceId)}</dt>
             <dd style={{ margin: 0, color: "var(--text-secondary)" }}>{sourceOutcomeLabel(outcome)}</dd>
           </div>
         ))}
@@ -112,7 +154,7 @@ function Evidence({
                     missionSelection={missionSelection}
                     onMissionSelectionChange={onMissionSelectionChange}
                   />
-                  {observation.variableName} · {observationValue(observation)} · {observation.provenance.sourceId} · {observationTime(observation)}
+                  {observationLabel(observation.variableName)} · {observationValue(observation)} · {publicSourceName(observation.provenance.sourceId)} · {observationTime(observation)}
                 </li>
               ))}
             </ul>
@@ -146,7 +188,7 @@ function Missions({
         />
       ) : (
         <p style={{ margin: "0 0 8px", color: "var(--text-secondary)" }}>
-          No validated Evidence Object is available, so no relevant mission entry is shown.
+          No verified evidence is available, so no relevant mission is shown.
         </p>
       )}
       <p style={{ margin: 0 }}>

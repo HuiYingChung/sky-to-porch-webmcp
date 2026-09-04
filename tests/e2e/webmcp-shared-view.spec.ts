@@ -11,6 +11,19 @@ const WEBMCP_TEST_GEOCODES: Record<string, { label: string; lon: number; lat: nu
   "Hilo, Hawaii": { label: "Hilo, Hawaii", lon: -155.0885, lat: 19.7074 },
 };
 
+function expectNoPrivateWebMcpDetails(output: unknown): void {
+  const serialized = JSON.stringify(output);
+  expect(serialized).not.toMatch(
+    /"(?:analysis_id|source_id|observation_id|evidence_id|dataset_id|included_chains|map_state_revision|map_focus_revision|payloadHash|payload_hash|observed_at|retrieved_at)"\s*:/u
+  );
+  expect(serialized).not.toMatch(
+    /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/u
+  );
+  expect(serialized).not.toMatch(
+    /\b[a-f0-9]{64}\b|[A-Za-z0-9_-]+\.(?:json|kml|pdf|psv|ts|tsx|js|jsx)\b/iu
+  );
+}
+
 async function mockWebMcpGeocode(page: Page): Promise<void> {
   await page.route("**/api/geocode", async (route) => {
     const body = route.request().postDataJSON() as { query?: string };
@@ -137,14 +150,25 @@ test("an Agent map-layer request updates the shared map and reveals Map on mobil
         north: 30.11,
       },
     },
-    layers: {
-      rain_satellite: {
+    layers: expect.arrayContaining([
+      expect.objectContaining({
+        layer_name: "Rainfall imagery",
         requested: true,
         visualization_only: true,
-        source: "NASA GIBS IMERG_Precipitation_Rate",
-      },
-    },
+        status_label: "Loading",
+        source_name: "NASA GIBS IMERG Precipitation Rate Visualization",
+      }),
+    ]),
   });
+  const publicLayers = output.layers as Array<Record<string, unknown>>;
+  expect(publicLayers).toHaveLength(4);
+  for (const layer of publicLayers) {
+    expect(layer).not.toHaveProperty("status");
+    expect(layer).not.toHaveProperty("source");
+  }
+  expect(JSON.stringify(output)).not.toContain("rain_satellite");
+  expect(JSON.stringify(output)).not.toContain("houston-city");
+  expectNoPrivateWebMcpDetails(output);
 
   await expect(page.getByTestId("analysis-map").filter({ visible: true })
     .getByTestId("selection-summary"))
@@ -328,8 +352,16 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
     ],
     support: { level: "official_observations_returned", observation_count: 2, source_count: 2 },
     citations: [
-      { source: "noaa_hms_fire_points", observed_at: "2025-05-20T00:00:00Z" },
-      { source: "noaa_hms_smoke_polygons", observed_at: "2025-05-20T00:00:00Z" },
+      {
+        source_name: "NOAA HMS Fire Detection Points",
+        observed: "May 20, 2025, 12:00 AM UTC",
+        retrieved: "Aug 27, 2026, 12:00 PM UTC",
+      },
+      {
+        source_name: "NOAA HMS Smoke Polygons",
+        observed: "May 20, 2025, 12:00 AM UTC",
+        retrieved: "Aug 27, 2026, 12:00 PM UTC",
+      },
     ],
   });
   expect(output.no_data_is_not_no_danger).toBeUndefined();
@@ -345,9 +377,12 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
   await receipt.getByTestId("agent-view-evidence").click();
   const insight = page.locator('[data-testid="insight-navigation"]:visible');
   await insight.getByRole("button", { name: /Show evidence details/u }).click();
-  await expect(insight).toContainText("Value: 17 coordinate_pairs");
-  await expect(insight).toContainText("Source: noaa_hms_fire_points");
-  await expect(insight).toContainText("Observed at: 2025-05-20T00:00:00Z");
+  await expect(insight).toContainText("Value: 17 source map points");
+  await expect(insight).toContainText("Source: NOAA HMS Fire Detection Points");
+  await expect(insight).toContainText("Observed at: May 20, 2025, 12:00 AM UTC");
+  const visibleText = await insight.innerText();
+  expect(visibleText).not.toMatch(/noaa_hms|Evidence ID|Observation ID|payload hash|\b[a-f0-9]{64}\b/iu);
+  expect(visibleText).not.toMatch(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/u);
   await expect(insight).not.toContainText("Los Angeles");
   await expect(insight).not.toContainText("2025-01-08");
 
@@ -375,10 +410,26 @@ test("a non-demo Albuquerque question returns evidence and updates the shared hu
       "confidence_and_evidence_that_would_change_it",
     ],
     citations: [
-      { source: "noaa_hms_fire_points", observed_at: "2025-05-20T00:00:00Z" },
-      { source: "noaa_hms_smoke_polygons", observed_at: "2025-05-20T00:00:00Z" },
+      {
+        source_name: "NOAA HMS Fire Detection Points",
+        observed: "May 20, 2025, 12:00 AM UTC",
+        retrieved: "Aug 27, 2026, 12:00 PM UTC",
+      },
+      {
+        source_name: "NOAA HMS Smoke Polygons",
+        observed: "May 20, 2025, 12:00 AM UTC",
+        retrieved: "Aug 27, 2026, 12:00 PM UTC",
+      },
     ],
   });
+  for (const publicResult of [output, inspected]) {
+    const serialized = JSON.stringify(publicResult);
+    expect(serialized).not.toContain("evd-fire-albuquerque-20250520-browser-test");
+    expect(serialized).not.toContain("obs-hms-fire-albuquerque-browser-test");
+    expect(serialized).not.toContain("noaa_hms_fire_points");
+    expect(serialized).not.toContain("hms_fire20250520.kml");
+    expectNoPrivateWebMcpDetails(publicResult);
+  }
   const registryAfterInspection = await page.evaluate(() => {
     const state = globalThis as typeof globalThis & {
       __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
@@ -487,7 +538,14 @@ test("an identical-label place choice resumes by stable id and completes the sha
       { choice_id: "place-osm-r-1840945", label: "Houston, Texas, United States" },
     ],
   });
+  expectNoPrivateWebMcpDetails(ambiguous);
   expect(analysisQueries).toBe(0);
+  const placeNotice = page.locator(
+    '[data-testid="agent-place-lookup-notice"]:visible'
+  );
+  await expect(placeNotice).toContainText("Houston, Texas, United States");
+  const placeNoticeText = await placeNotice.innerText();
+  expect(placeNoticeText).not.toMatch(/choice_id|place-osm|osm-r-\d+/iu);
 
   const completed = await execute("Houston", "place-osm-r-2688911");
   expect(completed).toMatchObject({
@@ -495,6 +553,7 @@ test("an identical-label place choice resumes by stable id and completes the sha
     ui_updated: true,
     request: { place: "Houston, Texas, United States (place search result)" },
   });
+  expectNoPrivateWebMcpDetails(completed);
   expect(analysisQueries).toBe(1);
   await expect(page.locator('[data-testid="agent-analysis-receipt"]:visible'))
     .toContainText("Houston, Texas, United States");
@@ -579,12 +638,20 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
     },
     coverageCatalog: {
       status: "coverage_catalog",
-      hazard: "air_quality",
-      coverage_scope: "pipeline_eligibility_not_observation",
-      live_sources_queried: false,
-      actual_observation_not_established: true,
+      status_label: "Environmental source coverage",
+      hazard_label: "Air Quality",
+      source_count: expect.any(Number),
+      sources: expect.arrayContaining([
+        expect.objectContaining({
+          source_name: expect.any(String),
+          availability: expect.any(String),
+          region: expect.any(String),
+          time_range: expect.any(String),
+        }),
+      ]),
     },
   });
+  expectNoPrivateWebMcpDetails(registered);
 
   const executeAgentAnalysis = async (place: string) => page.evaluate(async (agentPlace) => {
     const state = globalThis as typeof globalThis & {
@@ -633,6 +700,7 @@ test("registers WebMCP and shares an agent analysis with the visible product", a
       radius_km: 15,
     },
   });
+  expectNoPrivateWebMcpDetails(output);
   expect(JSON.stringify(output).length).toBeLessThanOrEqual(2_400);
   expect(requestBody).toMatchObject({
     placeId: "custom-area",
@@ -766,8 +834,12 @@ test("related-context scope automatically checks heat and drought as separate vi
       use_overall_summary: true,
       summary_first: true,
     },
-    included_chains: ["drought_land", "extreme_heat"],
+    chains: [
+      { hazard: "drought_land", name: "Drought & Land" },
+      { hazard: "extreme_heat", name: "Extreme Heat" },
+    ],
   });
+  expectNoPrivateWebMcpDetails(output);
   expect(JSON.stringify(output).length).toBeLessThanOrEqual(2_400);
 
   const visibleReceipt = page.locator('[data-testid="agent-analysis-notice"]:visible');
@@ -904,23 +976,27 @@ test("a generic storm call cannot collapse to wind-only when water evidence exis
       per_chain_fields: "status_strongest_evidence_time_source_limitation",
     },
     request: { radius_km: 50, analysis_scope: "related_context" },
-    overall_summary: "Flood & Heavy Rain: observations returned; Wind & Storm: no matching observation returned",
+    overall_summary: "Flood & Heavy Rain: official readings and reports returned; Wind & Storm: no matching readings or reports returned",
     support: {
       level: "partial_official_context",
       chains_with_observations: 1,
       total_chains: 2,
     },
-    included_chains: ["flood_storm", "wind_storm"],
     chains: [
       {
         hazard: "flood_storm",
-        status_summary: "observations returned",
-        citation: { source: "usgs_instantaneous_values" },
+        status_summary: "official readings and reports returned",
+        citation: {
+          source_name: "USGS Water Data Continuous Values",
+          observed: "Aug 28, 2026, 5:00 AM UTC",
+        },
       },
-      { hazard: "wind_storm", status_summary: "no matching observation returned" },
+      { hazard: "wind_storm", status_summary: "no matching readings or reports returned" },
     ],
   });
   expect(output).not.toHaveProperty("required_final_answer_sentence");
+  expect(JSON.stringify(output)).not.toContain("usgs_instantaneous_values");
+  expectNoPrivateWebMcpDetails(output);
 
   const receipt = page.locator('[data-testid="agent-analysis-notice"]:visible');
   await expect(receipt.getByTestId("agent-analysis-receipt"))
@@ -1052,6 +1128,8 @@ test("Agent comparison keeps both storm chains visible for both user-sized scena
         },
     ],
   });
+  expect(JSON.stringify(output)).not.toContain("houston-city");
+  expectNoPrivateWebMcpDetails(output);
   expect(JSON.stringify(output).length).toBeLessThanOrEqual(2_400);
 
   const receipt = page.locator('[data-testid="agent-analysis-notice"]:visible');
@@ -1161,8 +1239,13 @@ test("volcano related context automatically adds separate air-quality and heat c
   ]));
   expect(output).toMatchObject({
     relationship: "related_evidence_for_assessment",
-    included_chains: ["air_quality", "extreme_heat", "earth_volcanoes"],
+    chains: [
+      { hazard: "air_quality", name: "Air Quality" },
+      { hazard: "extreme_heat", name: "Extreme Heat" },
+      { hazard: "earth_volcanoes", name: "Earth & Volcanoes" },
+    ],
   });
+  expectNoPrivateWebMcpDetails(output);
   expect(JSON.stringify(output).length).toBeLessThanOrEqual(2_400);
 
   const visibleInsight = page.locator('[data-testid="insight-navigation"]:visible');

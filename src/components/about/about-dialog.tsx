@@ -9,6 +9,7 @@ import {
   SOURCE_COVERAGE_PROFILES,
   coverageProfileRegistryEntry,
 } from "@/data/source-coverage";
+import { formatUtcDate, publicNarrativeText } from "@/lib/ui/public-presentation";
 
 type AboutSection = "coverage" | "satellite" | "north-america";
 
@@ -19,17 +20,21 @@ const ABOUT_SECTIONS: readonly { id: AboutSection; label: string }[] = [
 ];
 
 const HAZARD_ORDER = Object.keys(HAZARD_LABELS) as HazardId[];
-const LIVE_STATUSES = new Set<SourceCoverageProfile["integrationStatus"]>([
+const LIVE_PATH_STATUSES = new Set<SourceCoverageProfile["integrationStatus"]>([
   "live_integrated",
   "live_key_required",
 ]);
 
-function isLive(profile: SourceCoverageProfile): boolean {
-  return LIVE_STATUSES.has(profile.integrationStatus);
+function isAvailableNow(profile: SourceCoverageProfile): boolean {
+  return profile.integrationStatus === "live_integrated";
+}
+
+function isLivePath(profile: SourceCoverageProfile): boolean {
+  return LIVE_PATH_STATUSES.has(profile.integrationStatus);
 }
 
 function sourceDisplayName(profile: SourceCoverageProfile): string {
-  return coverageProfileRegistryEntry(profile.sourceId)?.displayName ?? profile.sourceId;
+  return profile.publicName;
 }
 
 function joinNames(profiles: readonly SourceCoverageProfile[]): string {
@@ -39,60 +44,75 @@ function joinNames(profiles: readonly SourceCoverageProfile[]): string {
 }
 
 /**
- * The gap summary is derived from SOURCE_COVERAGE_PROFILES so it can never
+ * The availability summary is derived from SOURCE_COVERAGE_PROFILES so it can never
  * drift from the per-source integration status the rest of the dialog shows.
  * Only the closing epistemic boundary sentence is fixed text.
  */
 function GapSummary() {
-  const prepared = SOURCE_COVERAGE_PROFILES.filter(
-    (profile) => profile.integrationStatus === "prepared_for_live"
+  const needsSetup = SOURCE_COVERAGE_PROFILES.filter(
+    (profile) => profile.integrationStatus === "live_key_required"
   );
-  const deferred = SOURCE_COVERAGE_PROFILES.filter(
-    (profile) => profile.integrationStatus === "registered_deferred"
+  const unavailable = SOURCE_COVERAGE_PROFILES.filter(
+    (profile) =>
+      profile.integrationStatus === "prepared_for_live" ||
+      profile.integrationStatus === "registered_deferred"
   );
   const supportingOnly = SOURCE_COVERAGE_PROFILES.filter(
     (profile) => profile.integrationStatus === "supporting_only"
   );
-  const liveCount = SOURCE_COVERAGE_PROFILES.filter(isLive).length;
+  const availableCount = SOURCE_COVERAGE_PROFILES.filter(isAvailableNow).length;
   const latestVerified = SOURCE_COVERAGE_PROFILES
     .filter((profile) => profile.lastVerifiedDate !== undefined)
     .sort((left, right) => right.lastVerifiedDate!.localeCompare(left.lastVerifiedDate!));
   return (
     <div className="about-gap-summary">
-      <h3>Current primary gaps</h3>
+      <h3>Availability at a glance</h3>
       <ul className="about-gap-list">
-        {prepared.length > 0 && (
+        {needsSetup.length > 0 && (
           <li>
-            <strong className="about-gap-label-prepared">Documented contract, live gate not yet run:</strong>{" "}
-            {joinNames(prepared)}.
+            <strong className="about-gap-label-prepared">Needs setup:</strong>{" "}
+            {joinNames(needsSetup)}.
           </li>
         )}
-        {deferred.length > 0 && (
+        {unavailable.length > 0 && (
           <li>
-            <strong>Registered research candidates, no supported machine contract:</strong>{" "}
-            {joinNames(deferred)}.
+            <strong>Not available yet:</strong> {joinNames(unavailable)}.
           </li>
         )}
         {supportingOnly.length > 0 && (
           <li>
-            <strong>Historical supporting context, no live path:</strong>{" "}
+            <strong>Background information only:</strong>{" "}
             {joinNames(supportingOnly)}.
           </li>
         )}
       </ul>
       <p className="about-lead">
-        The other {liveCount} of {SOURCE_COVERAGE_PROFILES.length} listed sources are live,
-        bounded product paths.
+        {availableCount} of {SOURCE_COVERAGE_PROFILES.length} listed sources can be used now.
         {latestVerified.length > 0
-          ? ` Each source card shows its own "Last verified" gate date where one is recorded (most recent: ${sourceDisplayName(latestVerified[0])}, ${latestVerified[0].lastVerifiedDate}).`
+          ? ` ${latestVerified.length} source cards have a recorded connection-check date; the most recent is ${sourceDisplayName(latestVerified[0])} on ${formatUtcDate(latestVerified[0].lastVerifiedDate).replace(/ UTC$/u, "")}. These dates describe checks of the app connection, not the age of every reading.`
           : ""}
       </p>
       <p className="about-lead">
-        Coverage remains location- and date-dependent, a missing observation is never proof of
-        safety, and earthquake or eruption-timing prediction remains out of scope.
+        Availability still depends on the place and date. When no matching reading or report is returned, that
+        never means a place is safe. This app also does not predict earthquakes or when a volcano
+        will erupt.
       </p>
     </div>
   );
+}
+
+function availabilityNote(profile: SourceCoverageProfile): string {
+  switch (profile.integrationStatus) {
+    case "live_integrated":
+      return "Sky to Porch can check this source for supported places and dates.";
+    case "live_key_required":
+      return "Sky to Porch can use this source after the required private access is set up.";
+    case "prepared_for_live":
+    case "registered_deferred":
+      return "Sky to Porch lists this official source, but cannot check it yet.";
+    case "supporting_only":
+      return "Sky to Porch uses this only for the specific historical place and date listed above.";
+  }
 }
 
 function SourceDetails({ profile }: { profile: SourceCoverageProfile }) {
@@ -101,7 +121,7 @@ function SourceDetails({ profile }: { profile: SourceCoverageProfile }) {
     <details className="about-source-card" data-source-id={profile.sourceId}>
       <summary>
         <span>
-          <strong>{registry?.displayName ?? profile.sourceId}</strong>
+          <strong>{profile.publicName}</strong>
           <small>{profile.regionLabel}</small>
         </span>
         <span className="about-status" data-status={profile.integrationStatus}>
@@ -109,28 +129,28 @@ function SourceDetails({ profile }: { profile: SourceCoverageProfile }) {
         </span>
       </summary>
       <div className="about-source-body">
-        <p>{profile.coverageNote}</p>
+        <p>{publicNarrativeText(profile.coverageNote)}</p>
         <dl>
           <div><dt>Hazards</dt><dd>{profile.hazardIds.map((id) => HAZARD_LABELS[id]).join(", ")}</dd></div>
-          <div><dt>Resolution</dt><dd>{profile.spatialResolution}</dd></div>
-          <div><dt>Update</dt><dd>{profile.updateCadence}</dd></div>
-          <div><dt>Time range</dt><dd>{profile.temporalCoverage}</dd></div>
+          <div><dt>Resolution</dt><dd>{publicNarrativeText(profile.spatialResolution)}</dd></div>
+          <div><dt>Update</dt><dd>{publicNarrativeText(profile.updateCadence)}</dd></div>
+          <div><dt>Time range</dt><dd>{publicNarrativeText(profile.temporalCoverage)}</dd></div>
           {profile.satellite ? (
             <div>
               <dt>Satellite product</dt>
-              <dd>{profile.satellite.platform} · {profile.satellite.sensor} · {profile.satellite.product}</dd>
+              <dd>{publicNarrativeText(`${profile.satellite.platform} · ${profile.satellite.sensor} · ${profile.satellite.product}`)}</dd>
             </div>
           ) : null}
           {profile.lastVerifiedDate ? (
             <div>
               <dt>Last verified</dt>
-              <dd>{profile.lastVerifiedDate} (bounded gate)</dd>
+              <dd>{formatUtcDate(profile.lastVerifiedDate).replace(/ UTC$/u, "")}</dd>
             </div>
           ) : null}
         </dl>
-        <p className="about-gate"><strong>Integration gate:</strong> {profile.liveGateNote}</p>
+        <p className="about-gate"><strong>Availability:</strong> {availabilityNote(profile)}</p>
         {registry?.requiredLimitations[0] ? (
-          <p className="about-limit"><strong>Key limitation:</strong> {registry.requiredLimitations[0]}</p>
+          <p className="about-limit"><strong>Key limitation:</strong> {publicNarrativeText(registry.requiredLimitations[0])}</p>
         ) : null}
         {registry ? (
           <a href={registry.documentationUrl} target="_blank" rel="noreferrer">
@@ -150,7 +170,7 @@ function CoverageSection() {
         <p className="about-lead">
           Coverage is evaluated for the selected area, selected hazard, and supported date. Any valid
           U.S. selection, including Alaska, Hawaii, Puerto Rico, and supported territories, uses the
-          same atomic bounding box whether it came from map, search, or a non-map control. A place is
+          same selected area whether it came from the map, search, or another control. A place is
           not rejected merely because it is outside a demo city.
         </p>
       </div>
@@ -174,12 +194,16 @@ function CoverageSection() {
           const profiles = SOURCE_COVERAGE_PROFILES.filter((profile) =>
             profile.hazardIds.includes(hazardId)
           );
-          const liveCount = profiles.filter(isLive).length;
+          const liveCount = profiles.filter(isLivePath).length;
           return (
             <details className="about-hazard-card" key={hazardId}>
               <summary>
                 <span>{HAZARD_LABELS[hazardId]}</span>
-                <small>{liveCount > 0 ? `${liveCount} live path${liveCount === 1 ? "" : "s"}` : "No live path yet"}</small>
+                <small>
+                  {liveCount > 0
+                    ? `${liveCount} live path${liveCount === 1 ? "" : "s"}`
+                    : "No live path yet"}
+                </small>
               </summary>
               <div className="about-card-list">
                 {profiles.map((profile) => <SourceDetails key={profile.sourceId} profile={profile} />)}
@@ -215,16 +239,16 @@ function NorthAmericaSection() {
       profile.level === "north_america" ||
       profile.countryCodes.some((code) => code === "US" || code === "CA" || code === "MX")
   );
-  const liveCount = profiles.filter(isLive).length;
+  const liveCount = profiles.filter(isLivePath).length;
   return (
     <div className="about-section-stack">
       <p className="about-lead">
         North America is the first coverage target: global satellite baselines are supplemented by
         U.S., Canadian, and Mexican official sources. U.S. acceptance cases include the contiguous
         states, Alaska, Hawaii, Puerto Rico, territories, coasts, borders, and sparse-station areas,
-        but each hazard/date can still return no observation, unsupported coverage, stale data, or a
-        truthful source failure. Today, {liveCount} listed paths are live in the product; the rest remain
-        visibly prepared or deferred until their own gate passes.
+        but each hazard and date can still return no observation, fall outside a source&apos;s coverage,
+        use data that is too old, or encounter a source that cannot be reached. Today, {liveCount}{" "}
+        listed paths are live in the product; the rest are clearly marked until they are available.
       </p>
       <div className="about-card-list">
         {profiles.map((profile) => <SourceDetails key={profile.sourceId} profile={profile} />)}
@@ -364,7 +388,7 @@ export function AboutDialog({ open, onRequestClose }: AboutDialogProps) {
             <p>
               © 2026 Huiying Chung. Personal and educational use only.{" "}
               <a
-                href="https://github.com/HuiYingChung/sky-to-porch"
+                href="https://github.com/HuiYingChung/sky-to-porch-webmcp"
                 target="_blank"
                 rel="noopener noreferrer"
                 data-testid="about-source-link"

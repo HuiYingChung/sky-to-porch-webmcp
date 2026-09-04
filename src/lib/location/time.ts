@@ -52,8 +52,7 @@ export interface TimeSelection {
  * Must be displayed wherever the time selection is shown.
  */
 export const TIME_COVERAGE_LIMITATION =
-  "Time range is a request. The selected source confirms supported dates during retrieval. " +
-  "Missing, incomplete, or unsupported coverage must remain explicit.";
+  "These are the dates you asked us to check. Each source confirms which dates it has after you submit; missing dates will be clearly shown.";
 
 /**
  * Validates a time range type string.

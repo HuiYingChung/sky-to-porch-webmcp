@@ -8,17 +8,36 @@ import {
 } from "@/contracts/common";
 import type { EvidenceObject, Observation } from "@/contracts/evidence";
 import type { ActiveAnalysis, AnalysisRequest } from "@/lib/analysis/types";
+import { publicSourceUrl } from "@/data/public-source-links";
+import {
+  formatUtcTimestamp,
+  publicNarrativeText,
+  publicSourceName,
+  publicUnitName,
+  publicVariableName,
+} from "@/lib/ui/public-presentation";
 import {
   buildAgentCoordinateSelection,
   buildGeocodedPlaceSelection,
   type PlaceSelection,
 } from "@/lib/location/selection";
 import {
+  MAX_PLACE_LOOKUP_CHOICES,
   PLACE_CHOICE_ID_RE,
   resolveNamedPlace,
   type AgentPlaceChoice as SharedAgentPlaceChoice,
   type ResolvedPlaceCandidate,
 } from "@/lib/webmcp/place-resolution";
+import {
+  placeLookupChoiceReceipt,
+  placeLookupFailureReceipt,
+  placeLookupInvalidRequestReceipt,
+  placeLookupResolvedReceipt,
+  placeLookupSupersededReceipt,
+  type AgentPlaceLookupFeedbackContext,
+  type AgentPlaceLookupFeedbackSession,
+  type BeginAgentPlaceLookupFeedback,
+} from "@/lib/webmcp/place-tool";
 
 export const ANALYZE_HAZARD_TOOL_NAME = "analyze_environmental_hazard";
 export const COMPARE_HAZARD_TOOL_NAME = "compare_environmental_evidence";
@@ -41,6 +60,41 @@ const HAZARD_NAMES: Record<HazardId, string> = {
   air_quality: "Air Quality",
   earth_volcanoes: "Earth & Volcanoes",
 };
+const RESULT_STATUS_NAMES: Readonly<Record<string, string>> = {
+  success: "Official readings and reports returned",
+  no_observation: "No matching readings or reports returned",
+  unsupported_coverage: "Not supported for this area",
+  unsupported_place: "Not supported for this area",
+  unsupported_date: "Not supported for this date",
+  source_failure: "Official source unavailable",
+  invalid_request: "Request could not be used",
+  not_applicable: "Not applicable",
+  invalid_input: "Request could not be used",
+  place_not_found: "Place not found",
+  place_lookup_failed: "Place search unavailable",
+  needs_place_choice: "Place choice needed",
+  superseded: "Replaced by a newer request",
+};
+
+function toolCancellationError(): DOMException {
+  return new DOMException("Tool execution cancelled", "AbortError");
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+export function hazardNameForOutput(hazard: HazardId): string {
+  return HAZARD_NAMES[hazard];
+}
+
+export function sourceNameForOutput(sourceId: string): string {
+  return publicSourceName(sourceId);
+}
+
+export function resultStatusNameForOutput(status: string): string {
+  return RESULT_STATUS_NAMES[status] ?? "Information status unavailable";
+}
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F-\u009F]/;
 const COORDINATE_PLACE_RE = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/;
@@ -88,6 +142,8 @@ export interface AnalyzeHazardToolDependencies {
   now?: () => Date;
   /** Shared by analyze and compare to reserve order before geocoding. */
   beginInvocation?: () => () => boolean;
+  /** Publishes the named-place lookup lifecycle in the shared page UI. */
+  beginPlaceLookupFeedback?: BeginAgentPlaceLookupFeedback;
 }
 
 interface ParsedInput {
@@ -114,6 +170,8 @@ interface ToolFailure {
     | "needs_place_choice"
     | "superseded";
   message: string;
+  status_label: string;
+  display_summary: string;
   ui_updated: false;
   no_data_is_not_no_danger: true;
   reason?: "rate_limited";
@@ -144,21 +202,22 @@ interface CompactObservation {
   name: string;
   value: number | string;
   unit?: string;
-  source: string;
-  observed_at: string;
+  source_name: string;
+  observed: string;
 }
 
 interface CompactCitation {
-  source: string;
-  product: string;
-  observed_at: string;
-  retrieved_at: string;
+  source_name: string;
+  product?: string;
+  observed: string;
+  retrieved?: string;
   url: string | null;
 }
 
 interface ToolSuccess {
   status: string;
-  analysis_id: string;
+  status_label: string;
+  display_summary: string;
   ui_updated: true;
   evidence_scope:
     | "regional_wind_observations"
@@ -168,6 +227,7 @@ interface ToolSuccess {
     | "regional_fire_and_smoke_observations"
     | "regional_air_quality_observations"
     | "regional_earth_and_volcano_observations";
+  hazard_label: string;
   request: {
     place: string;
     hazard: HazardId;
@@ -189,6 +249,12 @@ interface ToolSuccess {
     source_count: number;
   };
   answer_order: typeof ANSWER_ORDER;
+  agent_response_contract: {
+    style: "plain_english";
+    use_display_summary_and_labels: true;
+    use_source_name: true;
+    never_repeat_internal_ids_source_keys_or_enum_names: true;
+  };
   citations: CompactCitation[];
   limitations: string[];
   no_data_is_not_no_danger?: true;
@@ -222,7 +288,8 @@ interface CrossSourceSynthesis {
 
 interface ToolEvidenceBundle {
   status: "related_environmental_evidence_bundle";
-  analysis_id: string;
+  status_label: string;
+  display_summary: string;
   ui_updated: true;
   evidence_scope: "separate_related_hazard_chains";
   relationship: "related_evidence_for_assessment";
@@ -261,7 +328,6 @@ interface ToolEvidenceBundle {
     radius_km: number;
     time: string;
   };
-  included_chains: HazardId[];
   chains: CompactEvidenceChain[];
   claim_discussion_available?: boolean;
   related_evidence_visible_in_shared_view?: true;
@@ -362,7 +428,11 @@ function failure(
 ): ToolFailure {
   return {
     status,
-    message,
+    message: status === "invalid_input"
+      ? "We couldn’t use this environmental request. Check the place, topic, date, and area size, then try again."
+      : message,
+    status_label: resultStatusNameForOutput(status),
+    display_summary: resultStatusNameForOutput(status),
     ui_updated: false,
     no_data_is_not_no_danger: true,
     ...(choices ? { choices } : {}),
@@ -381,7 +451,11 @@ function placeChoiceFailure(
     : "latest_completed";
   return {
     status: "needs_place_choice",
-    message: `PAUSE FOR USER: ${refreshed ? "The previous place choice no longer matches the refreshed results. I now found" : "I found"} ${choices.length} possible places for “${input.place}”. Do not select a place or retry yet. Ask the person to choose one option below, then wait for a new user message. After the person replies, continue the unfinished task: call this tool again, copy retry_with_original_arguments exactly (especially time=${time}), and add the selected choice_id as place_choice_id.`,
+    status_label: resultStatusNameForOutput("needs_place_choice"),
+    display_summary: `More than one place matched “${input.place}”; ask the person to choose.`,
+    message: `${refreshed
+      ? "The earlier choice is no longer available. "
+      : ""}Several places matched “${input.place}”. Please choose one below. The current map and results have not changed.`,
     ui_updated: false,
     no_data_is_not_no_danger: true,
     requires_user_input: true,
@@ -653,47 +727,165 @@ async function resolvePlace(
   input: ParsedInput,
   fetchImpl: typeof fetch,
   signal: AbortSignal
-): Promise<ResolvedPlaceCandidate | ToolFailure> {
+): Promise<
+  | { kind: "resolved"; candidate: ResolvedPlaceCandidate }
+  | {
+      kind: "failure";
+      output: ToolFailure;
+      candidates?: ResolvedPlaceCandidate[];
+      refreshed?: boolean;
+    }
+> {
   if (input.latitude !== undefined && input.longitude !== undefined) {
     return {
-      label: input.place,
-      lat: input.latitude,
-      lon: input.longitude,
-      boundingBox: null,
-      adminContext: {},
+      kind: "resolved",
+      candidate: {
+        label: input.place,
+        lat: input.latitude,
+        lon: input.longitude,
+        boundingBox: null,
+        adminContext: {},
+      },
     };
   }
 
-  const resolution = await resolveNamedPlace(
-    input.place,
-    input.placeChoiceId,
-    fetchImpl,
-    signal
-  );
-  if (resolution.status === "resolved") return resolution.candidate;
+  let resolution: Awaited<ReturnType<typeof resolveNamedPlace>>;
+  try {
+    resolution = await resolveNamedPlace(
+      input.place,
+      input.placeChoiceId,
+      fetchImpl,
+      signal,
+      MAX_PLACE_LOOKUP_CHOICES
+    );
+  } catch (error) {
+    if (signal.aborted || isAbortError(error)) throw toolCancellationError();
+    return {
+      kind: "failure",
+      output: failure(
+        "place_lookup_failed",
+        "Place search is temporarily unavailable. No environmental check was run."
+      ),
+    };
+  }
+  if (resolution.status === "resolved") {
+    return { kind: "resolved", candidate: resolution.candidate };
+  }
   if (resolution.status === "place_not_found") {
-    return failure("place_not_found", `No place candidate was found for “${input.place}”.`);
+    return {
+      kind: "failure",
+      output: failure("place_not_found", `No place candidate was found for “${input.place}”.`),
+    };
   }
   if (resolution.status === "needs_place_choice") {
-    return placeChoiceFailure(
-      input,
-      resolution.choices.map((choice) => ({
-        ...choice,
-        label: truncate(choice.label, 120),
-      })),
-      resolution.refreshed
-    );
+    return {
+      kind: "failure",
+      output: placeChoiceFailure(
+        input,
+        resolution.choices.map((choice) => ({
+          ...choice,
+          label: truncate(choice.label, 120),
+        })),
+        resolution.refreshed
+      ),
+      candidates: resolution.candidates,
+      refreshed: resolution.refreshed,
+    };
   }
   if (resolution.reason === "rate_limited") {
     return {
-      ...failure("place_lookup_failed", "Place search was rate-limited; no evidence query was run."),
-      reason: "rate_limited",
+      kind: "failure",
+      output: {
+        ...failure("place_lookup_failed", "Place search was rate-limited; no evidence query was run."),
+        reason: "rate_limited",
+      },
     };
   }
-  return failure(
-    "place_lookup_failed",
-    "Place search was unavailable; no evidence query was run."
+  return {
+    kind: "failure",
+    output: failure(
+      "place_lookup_failed",
+      "Place search was unavailable; no evidence query was run."
+    ),
+  };
+}
+
+async function publishPlaceResolutionFeedback(
+  session: AgentPlaceLookupFeedbackSession | undefined,
+  context: AgentPlaceLookupFeedbackContext | undefined,
+  resolution: Awaited<ReturnType<typeof resolvePlace>>
+): Promise<void> {
+  if (!session || !context) return;
+  if (resolution.kind === "resolved") {
+    await session.publish(
+      placeLookupResolvedReceipt(context, resolution.candidate)
+    );
+    return;
+  }
+  if (
+    resolution.output.status === "needs_place_choice" &&
+    resolution.candidates
+  ) {
+    await session.publish(placeLookupChoiceReceipt(
+      context,
+      resolution.candidates,
+      resolution.refreshed
+    ));
+    return;
+  }
+  if (
+    resolution.output.status === "place_not_found" ||
+    resolution.output.status === "place_lookup_failed"
+  ) {
+    await session.publish(placeLookupFailureReceipt(
+      context,
+      resolution.output.status,
+      resolution.output.reason
+    ));
+  }
+}
+
+async function publishPlaceLookupSuperseded(
+  session: AgentPlaceLookupFeedbackSession | undefined,
+  context: AgentPlaceLookupFeedbackContext | undefined
+): Promise<void> {
+  if (!session || !context) return;
+  await session.publish(placeLookupSupersededReceipt(context));
+}
+
+function feedbackQuery(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const query = value.trim();
+  return query.length <= 200 && !CONTROL_CHAR_RE.test(query) ? query : "";
+}
+
+async function publishInvalidAnalysisInput(
+  rawInput: Record<string, unknown>,
+  dependencies: AnalyzeHazardToolDependencies,
+  output: ToolFailure,
+  operation: "analysis" | "comparison"
+): Promise<ToolFailure> {
+  if (!dependencies.beginPlaceLookupFeedback) return output;
+  const scenarioPlace = operation === "comparison"
+    ? isRecord(rawInput.baseline) && typeof rawInput.baseline.place === "string"
+      ? rawInput.baseline.place
+      : isRecord(rawInput.comparison) && typeof rawInput.comparison.place === "string"
+        ? rawInput.comparison.place
+        : undefined
+    : rawInput.place;
+  const context: AgentPlaceLookupFeedbackContext = {
+    query: feedbackQuery(scenarioPlace),
+    operation,
+    ...(operation === "comparison"
+      ? { context_label: "Comparison request" }
+      : {}),
+  };
+  const session = await dependencies.beginPlaceLookupFeedback(
+    context,
+    { announcePending: false }
   );
+  await session.publish(placeLookupInvalidRequestReceipt(context));
+  return output;
 }
 
 function namedPlaceResolutionKey(input: ParsedInput): string | null {
@@ -727,22 +919,21 @@ function truncate(value: string, maxLength: number): string {
 
 function compactObservation(observation: Observation): CompactObservation {
   return {
-    name: truncate(observation.variableName, 70),
-    value: observation.value ?? truncate(observation.textValue ?? "unavailable", 80),
-    ...(observation.unit ? { unit: truncate(observation.unit, 30) } : {}),
-    source: observation.provenance.sourceId,
-    observed_at: observation.provenance.observedAt,
+    name: truncate(publicVariableName(observation.variableName), 70),
+    value: observation.value ?? truncate(publicNarrativeText(observation.textValue ?? "Unavailable"), 80),
+    ...(observation.unit ? { unit: truncate(publicUnitName(observation.unit), 30) } : {}),
+    source_name: sourceNameForOutput(observation.provenance.sourceId),
+    observed: formatUtcTimestamp(observation.provenance.observedAt),
   };
 }
 
 function compactCitation(observation: Observation): CompactCitation {
-  const sourceUrl = observation.provenance.sourceUrl;
   return {
-    source: observation.provenance.sourceId,
-    product: truncate(observation.provenance.product, 90),
-    observed_at: observation.provenance.observedAt,
-    retrieved_at: observation.provenance.retrievedAt,
-    url: typeof sourceUrl === "string" && sourceUrl.length <= 500 ? sourceUrl : null,
+    source_name: sourceNameForOutput(observation.provenance.sourceId),
+    product: truncate(publicNarrativeText(observation.provenance.product), 90),
+    observed: formatUtcTimestamp(observation.provenance.observedAt),
+    retrieved: formatUtcTimestamp(observation.provenance.retrievedAt),
+    url: publicSourceUrl(observation.provenance.sourceId),
   };
 }
 
@@ -841,12 +1032,20 @@ function compactSuccess(
     : evidence?.evidenceState === "observations_returned"
       ? "official_observations_returned" as const
       : "partial_official_evidence" as const;
+  const hazardLabel = hazardNameForOutput(analysis.request.hazardId);
+  const statusLabel = resultStatusNameForOutput(details.kind);
+  const evidenceScope = evidenceScopeForHazard(analysis.request.hazardId);
+  const displaySummary = observationCount > 0
+    ? `${hazardLabel}: ${statusLabel} for ${truncate(analysis.request.placeSelection.label, 70)} (${observationCount} observation${observationCount === 1 ? "" : "s"} from ${sourceCount} official source${sourceCount === 1 ? "" : "s"}).`
+    : `${hazardLabel}: ${statusLabel} for ${truncate(analysis.request.placeSelection.label, 70)}. No observations were returned; this does not prove safety or no danger.`;
 
   const base: ToolSuccess = {
     status: details.kind,
-    analysis_id: analysis.analysisId,
+    status_label: statusLabel,
+    display_summary: displaySummary,
     ui_updated: true,
-    evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
+    evidence_scope: evidenceScope,
+    hazard_label: hazardLabel,
     request: {
       place: truncate(analysis.request.placeSelection.label, 100),
       hazard: analysis.request.hazardId,
@@ -870,8 +1069,14 @@ function compactSuccess(
       source_count: sourceCount,
     },
     answer_order: ANSWER_ORDER,
+    agent_response_contract: {
+      style: "plain_english",
+      use_display_summary_and_labels: true,
+      use_source_name: true,
+      never_repeat_internal_ids_source_keys_or_enum_names: true,
+    },
     citations,
-    limitations: limitations.slice(0, 2).map((item) => truncate(item, 180)),
+    limitations: limitations.slice(0, 2).map((item) => truncate(publicNarrativeText(item), 180)),
     ...(observationCount === 0
       ? {
           no_data_is_not_no_danger: true as const,
@@ -893,11 +1098,11 @@ function compactSuccess(
   if (JSON.stringify(reduced).length <= MAX_OUTPUT_CHARACTERS) return reduced;
   const compact: ToolSuccess = {
     ...reduced,
-    analysis_id: truncate(reduced.analysis_id, 120),
     limitations: reduced.limitations.slice(0, 1).map((item) => truncate(item, 80)),
     citations: reduced.citations.map((citation) => ({
-      ...citation,
-      product: truncate(citation.product, 60),
+      source_name: citation.source_name,
+      observed: citation.observed,
+      url: citation.url,
     })),
   };
   if (JSON.stringify(compact).length <= MAX_OUTPUT_CHARACTERS) return compact;
@@ -913,22 +1118,17 @@ function compactEvidenceChain(analysis: ActiveAnalysis): CompactEvidenceChain {
   const evidence = details.evidence;
   const observation = evidence ? orderedEvidenceObservations(evidence)[0] : undefined;
   const limitation = details.rejectionReason ?? details.limitations[0] ?? null;
+  const evidenceScope = evidenceScopeForHazard(analysis.request.hazardId);
+  const statusLabel = resultStatusNameForOutput(details.kind);
   return {
     hazard: analysis.request.hazardId,
     name: HAZARD_NAMES[analysis.request.hazardId],
-    evidence_scope: evidenceScopeForHazard(analysis.request.hazardId),
-    status_summary: ({
-      success: "observations returned",
-      no_observation: "no matching observation returned",
-      unsupported_coverage: "not supported for this area",
-      source_failure: "source retrieval failed",
-      invalid_request: "invalid request",
-      not_applicable: "not applicable",
-    } as Record<string, string>)[details.kind] ?? details.kind.replaceAll("_", " "),
+    evidence_scope: evidenceScope,
+    status_summary: statusLabel.toLocaleLowerCase("en-US"),
     observation: observation ? compactObservation(observation) : null,
     citation: observation ? compactCitation(observation) : null,
     confidence: evidence?.confidence.level ?? "insufficient",
-    limitation: limitation ? truncate(limitation, 130) : null,
+    limitation: limitation ? truncate(publicNarrativeText(limitation), 130) : null,
   };
 }
 
@@ -944,19 +1144,19 @@ function synthesizeAnalyses(analyses: ActiveAnalysis[]): CrossSourceSynthesis {
   for (const { details } of chains) {
     for (const attribution of details.evidence?.missionAttributions ?? []) {
       if (attribution.retrievalStatus === "failed" || attribution.retrievalStatus === "partial") {
-        failedOrIncomplete.add(truncate(attribution.missionName, 55));
+        failedOrIncomplete.add(truncate(publicNarrativeText(attribution.missionName), 55));
       }
     }
     for (const limitation of details.evidence?.limitations ?? []) {
       if (/\b(?:failed|failure|partially completed)\b/iu.test(limitation.description)) {
-        failedOrIncomplete.add(truncate(limitation.source, 55));
+        failedOrIncomplete.add(truncate(sourceNameForOutput(limitation.source), 55));
       }
     }
   }
   const directlyObserved = withObservations.slice(0, 3).map(({ analysis, details }) => {
     const observation = orderedEvidenceObservations(details.evidence!)[0];
     return truncate(
-      `${HAZARD_NAMES[analysis.request.hazardId]}: ${observation.variableName} from ${observation.provenance.sourceId} at ${observation.provenance.observedAt}`,
+      `${HAZARD_NAMES[analysis.request.hazardId]}: ${publicVariableName(observation.variableName)} from ${sourceNameForOutput(observation.provenance.sourceId)} at ${formatUtcTimestamp(observation.provenance.observedAt)}`,
       145
     );
   });
@@ -999,7 +1199,6 @@ function compactEvidenceBundle(
   primary: ActiveAnalysis,
   timeDisplay: string
 ): ToolEvidenceBundle {
-  const includedChains = analyses.map((analysis) => analysis.request.hazardId);
   const compactChains = analyses.map(compactEvidenceChain);
   const chainEvidence = analyses.map(resultDetails).map((details) => details.evidence);
   const chainsWithObservations = chainEvidence.filter(
@@ -1023,9 +1222,13 @@ function compactEvidenceBundle(
     : assessmentConfidence === "low"
       ? "official_observations_in_multiple_chains" as const
       : "incomplete_related_context" as const;
+  const overallSummary = compactChains
+    .map((chain) => `${chain.name}: ${chain.status_summary}`)
+    .join("; ");
   const bundle: ToolEvidenceBundle = {
     status: "related_environmental_evidence_bundle",
-    analysis_id: `related-bundle:${analyses.map((analysis) => analysis.analysisId).join(":")}`,
+    status_label: "Related environmental evidence",
+    display_summary: overallSummary,
     ui_updated: true,
     evidence_scope: "separate_related_hazard_chains",
     relationship: "related_evidence_for_assessment",
@@ -1039,9 +1242,7 @@ function compactEvidenceBundle(
     },
     inference_guidance: "state_strongest_supported_inference_and_confidence",
     answer_order: ANSWER_ORDER,
-    overall_summary: compactChains
-      .map((chain) => `${chain.name}: ${chain.status_summary}`)
-      .join("; "),
+    overall_summary: overallSummary,
     synthesis: synthesizeAnalyses(analyses),
     must_report_every_chain: true,
     required_chain_reporting: "report_each_included_chain",
@@ -1063,7 +1264,6 @@ function compactEvidenceBundle(
       radius_km: primary.request.placeSelection.analysisArea.radiusKm,
       time: timeDisplay,
     },
-    included_chains: includedChains,
     chains: compactChains,
     claim_discussion_available:
       primary.outcome.hazardId === "wind_storm" && Boolean(primary.outcome.result.claimDiscussion),
@@ -1088,11 +1288,14 @@ function compactEvidenceBundle(
 
   const compact: ToolEvidenceBundle = {
     ...reduced,
-    analysis_id: truncate(reduced.analysis_id, 120),
     chains: reduced.chains.map((chain) => ({
       ...chain,
       citation: chain.citation
-        ? { ...chain.citation, product: truncate(chain.citation.product, 60) }
+        ? {
+            source_name: chain.citation.source_name,
+            observed: chain.citation.observed,
+            url: chain.citation.url,
+          }
         : null,
       limitation: chain.limitation ? truncate(chain.limitation, 90) : null,
     })),
@@ -1112,7 +1315,7 @@ function compactEvidenceBundle(
 
   const finalBundle: ToolEvidenceBundle = {
     ...primaryUrlOnly,
-    analysis_id: truncate(primaryUrlOnly.analysis_id, 24),
+    display_summary: truncate(primaryUrlOnly.display_summary, 80),
     request: {
       ...primaryUrlOnly.request,
       place: truncate(primaryUrlOnly.request.place, 40),
@@ -1126,8 +1329,8 @@ function compactEvidenceBundle(
       ...(chain.citation
         ? {
             citation: {
-              ...chain.citation,
-              product: truncate(chain.citation.product, 20),
+              source_name: chain.citation.source_name,
+              observed: chain.citation.observed,
               url: null,
             },
           }
@@ -1136,27 +1339,27 @@ function compactEvidenceBundle(
     synthesis: {
       directly_observed: primaryUrlOnly.synthesis.directly_observed
         .slice(0, 1)
-        .map((item) => truncate(item, 60)),
+        .map((item) => truncate(item, 42)),
       supported_inference: primaryUrlOnly.synthesis.directly_observed.length >= 2
-        ? "Multiple chains add regional context; they do not prove causation."
+        ? "Multiple chains add context; causation is not established."
         : primaryUrlOnly.synthesis.directly_observed.length === 1
-          ? "One chain has direct evidence; cross-chain support is incomplete."
-          : "No direct observation supports a cross-chain inference.",
+          ? "One chain has observations; related support is incomplete."
+          : "No observation supports a combined inference.",
       still_unknown: primaryUrlOnly.synthesis.still_unknown
         .slice(0, 1)
-        .map((item) => truncate(item, 50)),
+        .map((item) => truncate(item, 34)),
       source_status: {
         official_sources_returned:
           primaryUrlOnly.synthesis.source_status.official_sources_returned,
         failed_or_incomplete_checks:
           primaryUrlOnly.synthesis.source_status.failed_or_incomplete_checks
             .slice(0, 1)
-            .map((item) => truncate(item, 45)),
+            .map((item) => truncate(item, 28)),
       },
       what_would_change_conclusion:
         primaryUrlOnly.synthesis.what_would_change_conclusion
           .slice(0, 1)
-          .map((item) => truncate(item, 55)),
+          .map((item) => truncate(item, 34)),
     },
     claim_discussion_available: primaryUrlOnly.claim_discussion_available || undefined,
   };
@@ -1168,12 +1371,51 @@ function compactEvidenceBundle(
   } = finalBundle;
   void omittedUseDecision;
   void omittedVisibleReceipt;
-  return {
+  const mostCompactOutput: ToolEvidenceBundle = {
     ...mostCompact,
+    status_label: "Evidence",
+    display_summary: "See summary.",
+    chains: mostCompact.chains.map((chain) => ({
+      ...chain,
+      citation: chain.citation,
+    })),
+    synthesis: {
+      directly_observed: [],
+      supported_inference: mostCompact.synthesis.directly_observed.length >= 2
+        ? "Causation unknown."
+        : mostCompact.synthesis.directly_observed.length === 1
+          ? "Related support incomplete."
+          : "No combined inference.",
+      still_unknown: [],
+      source_status: {
+        official_sources_returned:
+          mostCompact.synthesis.source_status.official_sources_returned,
+        failed_or_incomplete_checks: [],
+      },
+      what_would_change_conclusion: [],
+    },
     agent_response_contract: {
       style: "plain_english",
+      avoid_internal_names: true,
+      use_chain_name: true,
+      use_status_summary: true,
+      use_overall_summary: true,
       summary_first: true,
+      per_chain_fields: "status_strongest_evidence_time_source_limitation",
     },
+  };
+  if (JSON.stringify(mostCompactOutput).length <= MAX_OUTPUT_CHARACTERS) {
+    return mostCompactOutput;
+  }
+  return {
+    ...mostCompactOutput,
+    display_summary: "Summary.",
+    overall_summary: truncate(mostCompactOutput.overall_summary, 80),
+    chains: mostCompactOutput.chains.map((chain) => ({
+      ...chain,
+      name: truncate(chain.name, 32),
+      status_summary: truncate(chain.status_summary, 64),
+    })),
   };
 }
 
@@ -1195,42 +1437,101 @@ export async function executeAnalyzeHazardTool(
   // while retaining a never-aborted signal for the one-argument surface.
   const signal = options?.signal ?? new AbortController().signal;
   if (signal.aborted) {
-    throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+    throw toolCancellationError();
   }
+  const isCurrentInvocation = dependencies.beginInvocation?.() ?? (() => true);
   const now = dependencies.now?.() ?? new Date();
   const input = parseInput(rawInput, now);
-  if ("status" in input) return input;
-  const isCurrentInvocation = dependencies.beginInvocation?.() ?? (() => true);
-
-  const resolved = await resolvePlace(
-    input,
-    dependencies.fetchImpl ?? fetch,
-    signal
-  );
-  if (signal.aborted) {
-    throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+  if ("status" in input) {
+    return publishInvalidAnalysisInput(
+      rawInput,
+      dependencies,
+      input,
+      "analysis"
+    );
   }
+  const feedbackContext: AgentPlaceLookupFeedbackContext | undefined =
+    input.latitude === undefined
+      ? { query: input.place, operation: "analysis" }
+      : undefined;
+  const feedbackSession = feedbackContext
+    ? await dependencies.beginPlaceLookupFeedback?.(feedbackContext)
+    : undefined;
   if (!isCurrentInvocation()) {
+    await publishPlaceLookupSuperseded(feedbackSession, feedbackContext);
     return failure(
       "superseded",
       "A newer analysis request replaced this request while its place was being resolved."
     );
   }
-  if ("status" in resolved) return resolved;
+
+  let resolved: Awaited<ReturnType<typeof resolvePlace>>;
+  try {
+    resolved = await resolvePlace(
+      input,
+      dependencies.fetchImpl ?? fetch,
+      signal
+    );
+  } catch (error) {
+    if (signal.aborted || isAbortError(error)) {
+      await publishPlaceLookupSuperseded(feedbackSession, feedbackContext);
+      throw toolCancellationError();
+    }
+    resolved = {
+      kind: "failure",
+      output: failure(
+        "place_lookup_failed",
+        "Place search is temporarily unavailable. No environmental check was run."
+      ),
+    };
+  }
+  if (signal.aborted) {
+    await publishPlaceLookupSuperseded(feedbackSession, feedbackContext);
+    throw toolCancellationError();
+  }
+  if (!isCurrentInvocation()) {
+    await publishPlaceLookupSuperseded(feedbackSession, feedbackContext);
+    return failure(
+      "superseded",
+      "A newer analysis request replaced this request while its place was being resolved."
+    );
+  }
+  await publishPlaceResolutionFeedback(
+    feedbackSession,
+    feedbackContext,
+    resolved
+  );
+  if (signal.aborted) {
+    await publishPlaceLookupSuperseded(feedbackSession, feedbackContext);
+    throw toolCancellationError();
+  }
+  if (!isCurrentInvocation()) {
+    await publishPlaceLookupSuperseded(feedbackSession, feedbackContext);
+    return failure(
+      "superseded",
+      "A newer analysis request replaced this request while its place was being resolved."
+    );
+  }
+  if (resolved.kind === "failure") return resolved.output;
 
   const time = selectionTime(input, now);
   let placeSelection: PlaceSelection;
   try {
     placeSelection = buildSelection(
       input,
-      resolved,
+      resolved.candidate,
       time,
       input.latitude !== undefined ? "agent" : "geocoder"
     );
-  } catch (error) {
-    return failure(
-      "invalid_input",
-      error instanceof Error ? error.message : "The place, radius, or date selection was invalid."
+  } catch {
+    return publishInvalidAnalysisInput(
+      rawInput,
+      dependencies,
+      failure(
+        "invalid_input",
+        "We couldn’t use this place, date, or area size. Check them and try again."
+      ),
+      "analysis"
     );
   }
 
@@ -1281,7 +1582,7 @@ export async function executeAnalyzeHazardTool(
     }
     if (analyses === null) {
       if (signal.aborted) {
-        throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+        throw toolCancellationError();
       }
       return failure(
         "superseded",
@@ -1310,7 +1611,7 @@ export async function executeAnalyzeHazardTool(
   );
   if (analysis === null) {
     if (signal.aborted) {
-      throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+      throw toolCancellationError();
     }
     return failure(
       "superseded",
@@ -1366,7 +1667,7 @@ function comparisonPlaceFailure(
   }
   return {
     ...input,
-    message: `PAUSE FOR USER: the ${scenario} place is ambiguous. Ask the person to choose one option, wait for a new user message, then retry this comparison with every original argument unchanged and set only ${scenario}.place_choice_id to the selected choice_id.`,
+    message: `Several places matched the ${scenario === "baseline" ? "first" : "second"} comparison place. Please choose one below. The current map and results have not changed.`,
     ambiguous_scenario: scenario,
     after_user_choice: {
       required_next_action: "retry_comparison_with_selected_place" as const,
@@ -1418,7 +1719,7 @@ function comparisonSummary(analyses: ActiveAnalysis[]) {
     }
     if (leftDetails.kind !== rightDetails.kind) {
       differences.push(
-        `${HAZARD_NAMES[hazard]} evidence status differs: baseline ${leftDetails.kind.replaceAll("_", " ")}; comparison ${rightDetails.kind.replaceAll("_", " ")}.`
+        `${HAZARD_NAMES[hazard]} evidence status differs: baseline ${resultStatusNameForOutput(leftDetails.kind).toLocaleLowerCase("en-US")}; comparison ${resultStatusNameForOutput(rightDetails.kind).toLocaleLowerCase("en-US")}.`
       );
     }
   }
@@ -1437,51 +1738,227 @@ export async function executeCompareHazardTool(
   options: WebMCP.ToolExecuteCallbackOptions | undefined,
   dependencies: AnalyzeHazardToolDependencies
 ): Promise<unknown> {
-  const unexpected = Object.keys(rawInput).find((key) => !COMPARISON_INPUT_KEYS.has(key));
-  if (unexpected) return failure("invalid_input", `Unexpected input field: ${unexpected}.`);
   const signal = options?.signal ?? new AbortController().signal;
   if (signal.aborted) {
-    throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+    throw toolCancellationError();
+  }
+  const isCurrentInvocation = dependencies.beginInvocation?.() ?? (() => true);
+  const unexpected = Object.keys(rawInput).find((key) => !COMPARISON_INPUT_KEYS.has(key));
+  if (unexpected) {
+    return publishInvalidAnalysisInput(
+      rawInput,
+      dependencies,
+      failure("invalid_input", `Unexpected input field: ${unexpected}.`),
+      "comparison"
+    );
   }
   const now = dependencies.now?.() ?? new Date();
   const baselineInput = comparisonScenarioInput(rawInput, "baseline", now);
-  if ("status" in baselineInput) return baselineInput;
+  if ("status" in baselineInput) {
+    return publishInvalidAnalysisInput(
+      rawInput,
+      dependencies,
+      baselineInput,
+      "comparison"
+    );
+  }
   const comparisonInput = comparisonScenarioInput(rawInput, "comparison", now);
-  if ("status" in comparisonInput) return comparisonInput;
-  const isCurrentInvocation = dependencies.beginInvocation?.() ?? (() => true);
-
+  if ("status" in comparisonInput) {
+    return publishInvalidAnalysisInput(
+      rawInput,
+      dependencies,
+      comparisonInput,
+      "comparison"
+    );
+  }
   const fetchImpl = dependencies.fetchImpl ?? fetch;
   const shareNamedPlaceResolution = canShareNamedPlaceResolution(
     baselineInput,
     comparisonInput
   );
-  const baselineResolved = await resolvePlace(baselineInput, fetchImpl, signal);
-  if (signal.aborted) {
-    throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
-  }
+  const baselineFeedbackContext: AgentPlaceLookupFeedbackContext | undefined =
+    baselineInput.latitude === undefined
+      ? {
+          query: baselineInput.place,
+          operation: "comparison",
+          context_label: shareNamedPlaceResolution
+            ? "Both comparison places"
+            : "First comparison place",
+        }
+      : undefined;
+  const baselineFeedbackSession = baselineFeedbackContext
+    ? await dependencies.beginPlaceLookupFeedback?.(baselineFeedbackContext)
+    : undefined;
   if (!isCurrentInvocation()) {
+    await publishPlaceLookupSuperseded(
+      baselineFeedbackSession,
+      baselineFeedbackContext
+    );
     return failure(
       "superseded",
       "A newer analysis request replaced this comparison while its places were being resolved."
     );
   }
-  if ("status" in baselineResolved) {
-    return comparisonPlaceFailure("baseline", baselineResolved, rawInput);
+  let baselineResolved: Awaited<ReturnType<typeof resolvePlace>>;
+  try {
+    baselineResolved = await resolvePlace(baselineInput, fetchImpl, signal);
+  } catch (error) {
+    if (signal.aborted || isAbortError(error)) {
+      await publishPlaceLookupSuperseded(
+        baselineFeedbackSession,
+        baselineFeedbackContext
+      );
+      throw toolCancellationError();
+    }
+    baselineResolved = {
+      kind: "failure",
+      output: failure(
+        "place_lookup_failed",
+        "Place search is temporarily unavailable. The comparison was not run."
+      ),
+    };
   }
-  const comparisonResolved = shareNamedPlaceResolution
-    ? baselineResolved
-    : await resolvePlace(comparisonInput, fetchImpl, signal);
   if (signal.aborted) {
-    throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+    await publishPlaceLookupSuperseded(
+      baselineFeedbackSession,
+      baselineFeedbackContext
+    );
+    throw toolCancellationError();
   }
   if (!isCurrentInvocation()) {
+    await publishPlaceLookupSuperseded(
+      baselineFeedbackSession,
+      baselineFeedbackContext
+    );
     return failure(
       "superseded",
       "A newer analysis request replaced this comparison while its places were being resolved."
     );
   }
-  if ("status" in comparisonResolved) {
-    return comparisonPlaceFailure("comparison", comparisonResolved, rawInput);
+  await publishPlaceResolutionFeedback(
+    baselineFeedbackSession,
+    baselineFeedbackContext,
+    baselineResolved
+  );
+  if (signal.aborted) {
+    await publishPlaceLookupSuperseded(
+      baselineFeedbackSession,
+      baselineFeedbackContext
+    );
+    throw toolCancellationError();
+  }
+  if (!isCurrentInvocation()) {
+    await publishPlaceLookupSuperseded(
+      baselineFeedbackSession,
+      baselineFeedbackContext
+    );
+    return failure(
+      "superseded",
+      "A newer analysis request replaced this comparison while its places were being resolved."
+    );
+  }
+  if (baselineResolved.kind === "failure") {
+    return comparisonPlaceFailure(
+      "baseline",
+      baselineResolved.output,
+      rawInput
+    );
+  }
+  const comparisonFeedbackContext: AgentPlaceLookupFeedbackContext | undefined =
+    !shareNamedPlaceResolution && comparisonInput.latitude === undefined
+      ? {
+          query: comparisonInput.place,
+          operation: "comparison",
+          context_label: "Second comparison place",
+        }
+      : undefined;
+  const comparisonFeedbackSession = comparisonFeedbackContext
+    ? await dependencies.beginPlaceLookupFeedback?.(comparisonFeedbackContext)
+    : undefined;
+  if (!isCurrentInvocation()) {
+    await publishPlaceLookupSuperseded(
+      comparisonFeedbackSession,
+      comparisonFeedbackContext
+    );
+    return failure(
+      "superseded",
+      "A newer analysis request replaced this comparison while its places were being resolved."
+    );
+  }
+  let comparisonResolved: Awaited<ReturnType<typeof resolvePlace>>;
+  if (shareNamedPlaceResolution) {
+    comparisonResolved = baselineResolved;
+  } else {
+    try {
+      comparisonResolved = await resolvePlace(
+        comparisonInput,
+        fetchImpl,
+        signal
+      );
+    } catch (error) {
+      if (signal.aborted || isAbortError(error)) {
+        await publishPlaceLookupSuperseded(
+          comparisonFeedbackSession,
+          comparisonFeedbackContext
+        );
+        throw toolCancellationError();
+      }
+      comparisonResolved = {
+        kind: "failure",
+        output: failure(
+          "place_lookup_failed",
+          "Place search is temporarily unavailable. The comparison was not run."
+        ),
+      };
+    }
+  }
+  if (signal.aborted) {
+    await publishPlaceLookupSuperseded(
+      comparisonFeedbackSession,
+      comparisonFeedbackContext
+    );
+    throw toolCancellationError();
+  }
+  if (!isCurrentInvocation()) {
+    await publishPlaceLookupSuperseded(
+      comparisonFeedbackSession,
+      comparisonFeedbackContext
+    );
+    return failure(
+      "superseded",
+      "A newer analysis request replaced this comparison while its places were being resolved."
+    );
+  }
+  if (!shareNamedPlaceResolution) {
+    await publishPlaceResolutionFeedback(
+      comparisonFeedbackSession,
+      comparisonFeedbackContext,
+      comparisonResolved
+    );
+    if (signal.aborted) {
+      await publishPlaceLookupSuperseded(
+        comparisonFeedbackSession,
+        comparisonFeedbackContext
+      );
+      throw toolCancellationError();
+    }
+    if (!isCurrentInvocation()) {
+      await publishPlaceLookupSuperseded(
+        comparisonFeedbackSession,
+        comparisonFeedbackContext
+      );
+      return failure(
+        "superseded",
+        "A newer analysis request replaced this comparison while its places were being resolved."
+      );
+    }
+  }
+  if (comparisonResolved.kind === "failure") {
+    return comparisonPlaceFailure(
+      "comparison",
+      comparisonResolved.output,
+      rawInput
+    );
   }
 
   const baselineTime = selectionTime(baselineInput, now);
@@ -1491,20 +1968,25 @@ export async function executeCompareHazardTool(
   try {
     baselineSelection = buildSelection(
       baselineInput,
-      baselineResolved,
+      baselineResolved.candidate,
       baselineTime,
       baselineInput.latitude !== undefined ? "agent" : "geocoder"
     );
     comparisonSelection = buildSelection(
       comparisonInput,
-      comparisonResolved,
+      comparisonResolved.candidate,
       comparisonTime,
       comparisonInput.latitude !== undefined ? "agent" : "geocoder"
     );
-  } catch (error) {
-    return failure(
-      "invalid_input",
-      error instanceof Error ? error.message : "One comparison scenario was invalid."
+  } catch {
+    return publishInvalidAnalysisInput(
+      rawInput,
+      dependencies,
+      failure(
+        "invalid_input",
+        "We couldn’t use one of the comparison places, dates, or area sizes. Check them and try again."
+      ),
+      "comparison"
     );
   }
 
@@ -1569,7 +2051,7 @@ export async function executeCompareHazardTool(
   }
   if (analyses === null) {
     if (signal.aborted) {
-      throw signal.reason ?? new DOMException("Tool execution cancelled", "AbortError");
+      throw toolCancellationError();
     }
     return failure("superseded", "A newer request replaced the comparison before every evidence chain completed.");
   }
@@ -1590,9 +2072,15 @@ export async function executeCompareHazardTool(
       .filter((analysis) => analysis.request.evidenceBundle?.scenarioId === scenario.id)
       .map(compactEvidenceChain),
   }));
+  const comparison = comparisonSummary(analyses);
+  const displaySummary = [
+    `Compared ${groupedScenarios[0]?.label ?? "the baseline"} with ${groupedScenarios[1]?.label ?? "the comparison"}.`,
+    comparison.differences[0] ?? comparison.agreements[0] ?? comparison.unknowns[0],
+  ].filter(Boolean).join(" ");
   const output = {
     status: "environmental_evidence_comparison",
-    analysis_id: investigationId,
+    status_label: "Environmental evidence comparison",
+    display_summary: displaySummary,
     ui_updated: true,
     evidence_scope: "separate_scenarios_and_hazard_chains",
     must_report_every_scenario_and_chain: true,
@@ -1601,9 +2089,10 @@ export async function executeCompareHazardTool(
       summary_first: true,
       report_agreements_differences_and_unknowns: true,
       never_treat_missing_data_as_no_hazard: true,
+      never_repeat_internal_ids_source_keys_or_enum_names: true,
     },
     scenarios: groupedScenarios,
-    comparison: comparisonSummary(analyses),
+    comparison,
     synthesis: synthesizeAnalyses(analyses),
   };
   if (JSON.stringify(output).length <= MAX_OUTPUT_CHARACTERS) return output;
@@ -1618,7 +2107,13 @@ export async function executeCompareHazardTool(
         status_summary: chain.status_summary,
         confidence: chain.confidence,
         ...(chain.citation
-          ? { citation: { ...chain.citation, product: "official source", url: null } }
+          ? {
+              citation: {
+                source_name: chain.citation.source_name,
+                observed: chain.citation.observed,
+                url: null,
+              },
+            }
           : {}),
       })),
     })),
@@ -1628,7 +2123,47 @@ export async function executeCompareHazardTool(
       what_would_change_conclusion: output.synthesis.what_would_change_conclusion.slice(0, 1),
     },
   };
-  return reduced;
+  if (JSON.stringify(reduced).length <= MAX_OUTPUT_CHARACTERS) return reduced;
+  return {
+    ...reduced,
+    display_summary: truncate(reduced.display_summary, 70),
+    scenarios: reduced.scenarios.map((scenario) => ({
+      ...scenario,
+      label: truncate(scenario.label, 80),
+      place: truncate(scenario.place, 45),
+      chains: scenario.chains.map((chain) => ({
+        ...chain,
+        citation: chain.citation
+          ? {
+              ...chain.citation,
+              source_name: chain.citation.source_name,
+              url: null,
+            }
+          : undefined,
+      })),
+    })),
+    synthesis: {
+      directly_observed: reduced.synthesis.directly_observed
+        .slice(0, 1)
+        .map((item) => truncate(item, 80)),
+      supported_inference: truncate(reduced.synthesis.supported_inference, 45),
+      still_unknown: reduced.synthesis.still_unknown
+        .slice(0, 1)
+        .map((item) => truncate(item, 30)),
+      source_status: {
+        official_sources_returned:
+          reduced.synthesis.source_status.official_sources_returned,
+        failed_or_incomplete_checks:
+          reduced.synthesis.source_status.failed_or_incomplete_checks
+            .slice(0, 1)
+            .map((item) => truncate(item, 30)),
+      },
+      what_would_change_conclusion:
+        reduced.synthesis.what_would_change_conclusion
+          .slice(0, 1)
+          .map((item) => truncate(item, 30)),
+    },
+  };
 }
 
 export function createAnalyzeHazardTool(
@@ -1638,7 +2173,7 @@ export function createAnalyzeHazardTool(
     name: ANALYZE_HAZARD_TOOL_NAME,
     title: "Analyze environmental hazard",
     description:
-      "Analyze place+hazard. Call help first for demos. If unclear, ask and wait; season/place/goal alone implies none. First named-place call: pass as stated; set place_choice_id=null; never pre-qualify place. Use latest_completed unless dates given; never today. After the reply, copy selected choice_id to place_choice_id, preserve inputs, execute and finish. For unqualified storm/thunderstorm/severe weather: use wind_storm+related_context and copy question; single_hazard_only needs explicit wind/water. For related_context, plain English: overall summary; every chain's status, strongest evidence, time, source, limitation; no field/enum names. Infer concern; else general.",
+      "Analyze place+hazard. Call help first for demos. If unclear, ask and wait; season/place/goal alone implies none. First named-place call: pass as stated; set place_choice_id=null; never pre-qualify place. Use latest_completed unless dates given; never today. After the reply, copy selected choice_id to place_choice_id, preserve inputs, execute and finish. For unqualified storm/thunderstorm/severe weather: use wind_storm+related_context and copy question; single_hazard_only needs explicit wind/water. Answer with display_summary, display labels, and source_name; never expose internal IDs, source keys, field names, or enum names. Infer concern; else general.",
     inputSchema: ANALYZE_HAZARD_INPUT_SCHEMA,
     annotations: {
       readOnlyHint: false,
@@ -1655,7 +2190,7 @@ export function createCompareHazardTool(
     name: COMPARE_HAZARD_TOOL_NAME,
     title: "Compare environmental evidence",
     description:
-      "Compare two place/time/radius scenarios through the same validated evidence pipeline. Use when the person asks what changed, which place/time had stronger evidence, or to compare before/after. Preserve each stated radius. For generic storm use wind_storm + related_context so both Wind & Storm and Flood & Heavy Rain run in both scenarios. Report every scenario and every chain in plain English, then agreements, differences, unknowns, confidence, and what evidence would change the conclusion.",
+      "Compare two place/time/radius scenarios through the same validated evidence pipeline. Use when the person asks what changed, which place/time had stronger evidence, or to compare before/after. Preserve each stated radius. For generic storm use wind_storm + related_context so both Wind & Storm and Flood & Heavy Rain run in both scenarios. Report every scenario and every chain in plain English, then agreements, differences, unknowns, confidence, and what would change the conclusion. Use display labels and summaries; never expose internal IDs, source keys, field names, or enum names.",
     inputSchema: COMPARE_HAZARD_INPUT_SCHEMA,
     annotations: { readOnlyHint: false, untrustedContentHint: true },
     execute: (input, options) => executeCompareHazardTool(input, options, dependencies),

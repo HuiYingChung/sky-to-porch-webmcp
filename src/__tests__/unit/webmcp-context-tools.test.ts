@@ -93,6 +93,26 @@ function evidenceFor(value: ActiveAnalysis): EvidenceObject {
   return result.evidence;
 }
 
+const RAW_ISO_TIMESTAMP_RE = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z/u;
+const INTERNAL_EVIDENCE_KEY_RE = /"(?:analysis_id|source_id|observation_id|evidence_id|dataset_id|payloadHash|payload_hash|observed_at|retrieved_at)"\s*:/u;
+
+function expectNoInternalEvidenceDetails(output: unknown): void {
+  const serialized = JSON.stringify(output);
+  expect(serialized).not.toMatch(INTERNAL_EVIDENCE_KEY_RE);
+  expect(serialized).not.toMatch(RAW_ISO_TIMESTAMP_RE);
+  expect(serialized).not.toContain("analysis-wind_storm");
+  expect(serialized).not.toContain("analysis-flood_storm");
+  expect(serialized).not.toContain("evd-test");
+  expect(serialized).not.toContain("intent-test");
+  expect(serialized).not.toContain("obs-wind_storm");
+  expect(serialized).not.toContain("obs-flood_storm");
+  expect(serialized).not.toContain("noaa_ncei_global_hourly");
+  expect(serialized).not.toContain("usgs_instantaneous_values");
+  expect(serialized).not.toContain("nasa_gibs_imerg");
+  expect(serialized).not.toContain("https://example.test/");
+  expect(serialized).not.toContain("a".repeat(64));
+}
+
 describe("contextual WebMCP tools", () => {
   const options = { signal: new AbortController().signal } as WebMCP.ToolExecuteCallbackOptions;
 
@@ -132,11 +152,26 @@ describe("contextual WebMCP tools", () => {
     });
     expect(output).toMatchObject({
       citations: [
-        { hazard: "wind_storm", source: "noaa_ncei_global_hourly", product: "NOAA GHCNh" },
-        { hazard: "flood_storm", source: "usgs_instantaneous_values", product: "USGS IV" },
+        {
+          hazard: "wind_storm",
+          source_name: "NOAA NCEI Global Historical Climatology Network-hourly (GHCNh)",
+          product: "NOAA GHCNh",
+          observed: "Jul 8, 2024, 2:35 PM UTC",
+          retrieved: "Aug 26, 2026, 11:00 AM UTC",
+          url: "https://www.ncei.noaa.gov/products/global-historical-climatology-network-hourly",
+        },
+        {
+          hazard: "flood_storm",
+          source_name: "USGS Water Data Continuous Values",
+          product: "USGS IV",
+          observed: "Jul 8, 2024, 2:35 PM UTC",
+          retrieved: "Aug 26, 2026, 11:00 AM UTC",
+          url: "https://waterdata.usgs.gov/nwis",
+        },
       ],
     });
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
+    expectNoInternalEvidenceDetails(output);
   });
 
   it("keeps production-sized related citations inside the contextual output limit", async () => {
@@ -171,6 +206,7 @@ describe("contextual WebMCP tools", () => {
 
     floodEvidence.observations[0].provenance.sourceUrl =
       "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=IMERG_Precipitation_Rate&SRS=EPSG%3A4326&STYLES=&WIDTH=512&HEIGHT=512&TIME=2024-07-08&BBOX=-95.62849777141066%2C29.535822206252245%2C-95.11110222858933%2C29.984977793747756";
+    floodEvidence.observations[0].provenance.sourceId = "nasa_gibs_imerg";
     floodEvidence.observations[0].provenance.product =
       "NASA GIBS best-service layer IMERG_Precipitation_Rate; GetMap does not expose a numeric rainfall value";
     floodEvidence.limitations = [{
@@ -191,6 +227,11 @@ describe("contextual WebMCP tools", () => {
     expect((output as { citations: Array<{ hazard: string }> }).citations.map(
       (citation) => citation.hazard
     )).toEqual(["wind_storm", "flood_storm"]);
+    const serialized = JSON.stringify(output);
+    expect(serialized).toContain("NOAA NCEI Global Historical Climatology Network-hourly (GHCNh)");
+    expect(serialized).toContain("NASA GIBS IMERG Precipitation Rate Visualization");
+    expect(serialized).not.toMatch(/GHCNh_USW00000188_2024\.psv|PSHHGX_2024AL02_Beryl_Summary\.pdf|SERVICE=WMS|IMERG_Precipitation_Rate/u);
+    expectNoInternalEvidenceDetails(output);
   });
 
   it("keeps inspection bounded when internal identifiers are unexpectedly long", async () => {
@@ -208,6 +249,7 @@ describe("contextual WebMCP tools", () => {
       status: "ok",
       observations: [{ name: "Peak wind gust", value: 39.6 }],
     });
+    expectNoInternalEvidenceDetails(output);
   });
 
   it("answers natural source-failure and evidence-needed follow-ups without re-querying", async () => {
@@ -237,7 +279,10 @@ describe("contextual WebMCP tools", () => {
       focus: "sources",
       hazard: "wind_storm",
       source_checks: expect.arrayContaining([
-        expect.objectContaining({ source: "NWS Preliminary Local Storm Reports", status: "failed" }),
+        expect.objectContaining({
+          source: "NWS Preliminary Local Storm Reports",
+          status: "failed",
+        }),
       ]),
       agent_response_contract: { style: "plain_english", answer_the_follow_up_directly: true },
     });
@@ -249,6 +294,10 @@ describe("contextual WebMCP tools", () => {
     });
     expect(JSON.stringify(sources).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
     expect(JSON.stringify(needed).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
+    expect(JSON.stringify(sources)).not.toContain("NWS LSR");
+    expect(JSON.stringify(sources)).not.toContain("lim-lsr-failure");
+    expectNoInternalEvidenceDetails(sources);
+    expectNoInternalEvidenceDetails(needed);
   });
 
   it("can inspect only one chain from the current multi-chain result", async () => {
@@ -258,10 +307,38 @@ describe("contextual WebMCP tools", () => {
     ).execute({ focus: "direct_observations", hazard: "flood_storm" }, options);
 
     expect(output).toMatchObject({
+      status_label: "Information available",
+      display_summary: expect.stringContaining("Flood & Heavy Rain"),
       focus: "direct_observations",
       hazard: "flood_storm",
-      direct_observations: [{ name: "Gage height", value: 4.2 }],
+      hazard_label: "Flood & Heavy Rain",
+      direct_observations: [{
+        name: "Gage height",
+        value: 4.2,
+        source_name: "USGS Water Data Continuous Values",
+        observed: "Jul 8, 2024, 2:35 PM UTC",
+      }],
     });
+    const directObservation = (output as {
+      direct_observations: Array<Record<string, unknown>>;
+    }).direct_observations[0];
+    expect(directObservation).not.toHaveProperty("id");
+    expect(directObservation).not.toHaveProperty("source");
+    expect(directObservation).not.toHaveProperty("observed_at");
+    expectNoInternalEvidenceDetails(output);
+  });
+
+  it("does not echo an unexpected internal field name in a rejected request", async () => {
+    const output = await createInspectEvidenceTool(
+      analysis("wind_storm", "home")
+    ).execute({ internal_debug_code: true }, options);
+
+    expect(output).toMatchObject({
+      status: "invalid_input",
+      status_label: "Request could not be used",
+      display_summary: "The evidence request could not be used.",
+    });
+    expect(JSON.stringify(output)).not.toContain("internal_debug_code");
   });
 
   it("registers claim preparation only for a Home + Wind result and only updates local UI", async () => {
@@ -271,6 +348,13 @@ describe("contextual WebMCP tools", () => {
     expect(tool).not.toBeNull();
     expect(claimDiscussionForAnalysis(analysis("wind_storm", "travel"))).toBeNull();
     expect(createStormClaimDiscussionTool(analysis("flood_storm", "home"), open)).toBeNull();
+    const rejected = await tool!.execute({ internal_debug_code: true }, options);
+    expect(rejected).toMatchObject({
+      status: "invalid_input",
+      message: "Open this discussion without adding extra details, then try again.",
+    });
+    expect(JSON.stringify(rejected)).not.toMatch(/internal_debug_code|This tool takes no input/u);
+    expect(open).not.toHaveBeenCalled();
     const output = await tool!.execute({}, options);
     expect(open).toHaveBeenCalledOnce();
     expect(output).toMatchObject({
@@ -281,7 +365,34 @@ describe("contextual WebMCP tools", () => {
       confidence: "moderate",
       no_claim_decision: true,
     });
+    expect(output).not.toHaveProperty("analysis_id");
+    expectNoInternalEvidenceDetails(output);
     expect(JSON.stringify(output).length).toBeLessThanOrEqual(MAX_CONTEXT_TOOL_OUTPUT_CHARACTERS);
+  });
+
+  it("keeps implementation details out of storm-claim display text", async () => {
+    const wind = analysis("wind_storm", "home");
+    const discussion = claimDiscussionForAnalysis(wind);
+    if (!discussion) throw new Error("test analysis must include a claim discussion");
+    discussion.assessmentSummary =
+      "NOAA GHCNh supports this assessment; obs-secret and station-data.psv are internal references.";
+    discussion.supportedStatements = [
+      "The nasa_gibs_imerg check also carried evd-secret and aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+    ];
+
+    const output = await createStormClaimDiscussionTool(wind, vi.fn())!.execute({}, options) as {
+      display_summary: string;
+      assessment: string;
+      supported_by_evidence: string[];
+    };
+    const displayText = [
+      output.display_summary,
+      output.assessment,
+      ...output.supported_by_evidence,
+    ].join(" ");
+    expect(displayText).not.toMatch(/nasa_gibs_imerg|obs-secret|evd-secret|station-data\.psv|a{64}/u);
+    expect(displayText).toContain("NOAA GHCNh");
+    expectNoInternalEvidenceDetails(output);
   });
 
   it("keeps the claim discussion bounded when source fields are unexpectedly long", async () => {
@@ -305,5 +416,6 @@ describe("contextual WebMCP tools", () => {
       ui_updated: true,
       no_claim_decision: true,
     });
+    expect(output).not.toHaveProperty("analysis_id");
   });
 });

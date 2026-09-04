@@ -13,6 +13,34 @@ import {
 import type { MissionSelectionIntegrationProps } from "@/components/missions/mission-selection";
 import { publicSourceUrl } from "@/data/public-source-links";
 import { dataModeLabel, evidenceStateLabel } from "@/lib/ui/evidence-labels";
+import {
+  formatUtcTimestamp,
+  publicErrorMessage,
+  publicNarrativeText,
+  publicObservationValue,
+  publicSourceName,
+  publicVariableName,
+} from "@/lib/ui/public-presentation";
+
+const INTERNAL_DISPLAY_VALUE = /(?:\b(?:obs|evd|intent|lim|src)-[a-z0-9_-]+\b|\b(?:analysis|place)-[a-z0-9_-]{8,}\b|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b|\b[0-9a-f]{32,}\b|[a-z]:\\|\\\\[^\\\s]+\\|(?:^|\s)\/(?:[^/\s]+\/)+[^/\s]+|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b|\.(?:csv|json|geojson|png|tiff?|kml|xml|psv|txt|zip|gz|pdf|nc|grib2?|hdf5?|parquet)\b)/iu;
+
+function observationLabel(value: string): string {
+  return INTERNAL_DISPLAY_VALUE.test(value) ? publicVariableName(value) : value;
+}
+
+function sourceDetail(value: string): string {
+  const safeValue = publicNarrativeText(value);
+  return INTERNAL_DISPLAY_VALUE.test(safeValue) ? "Source details unavailable" : safeValue;
+}
+
+function rejectionMessage(result: HeatQueryResult): string {
+  const fallback = "The check could not be completed. No evidence was returned.";
+  if (!result.rejectionReason) return fallback;
+  if (result.kind === "source_failure" || INTERNAL_DISPLAY_VALUE.test(result.rejectionReason)) {
+    return publicErrorMessage(result.rejectionReason);
+  }
+  return result.rejectionReason;
+}
 
 const LABELS: Record<HeatEvidenceCode, string> = {
   satellite_land_surface_temperature_visualization: "Satellite land-surface-temperature visualization",
@@ -34,10 +62,10 @@ function RejectionPanel({ result }: { result: HeatQueryResult }) {
     <div role="status" data-testid="heat-rejection-panel">
       <h3 style={{ margin: "0 0 8px", fontSize: "16px" }}>Extreme Heat evidence unavailable</h3>
       <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "14px" }}>
-        {result.rejectionReason ?? "The request failed closed. No evidence was returned."}
+        {rejectionMessage(result)}
       </p>
       <p style={{ margin: "8px 0 0", color: "var(--status-warning-fg)", fontSize: "14px" }}>
-        Missing evidence is not evidence of safe conditions. No Tucson fixture was substituted.
+        Missing evidence is not evidence of safe conditions. No information from another place was substituted.
       </p>
       <p data-testid="explanation-provider-status" style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: "13px" }}>
         No AI was used because there was no validated evidence to explain.
@@ -93,7 +121,8 @@ function EvidencePanel({
             <strong>{LABELS[assessment.code]}:</strong> {statusLabel(assessment.status)}
             {assessment.sourceIds.length > 0 && (
               <div style={{ color: "var(--text-muted)", overflowWrap: "anywhere" }}>
-                Sources: {assessment.sourceIds.join(", ")} · Observation IDs: {assessment.observationIds.join(", ")}
+                Sources: {Array.from(new Set(assessment.sourceIds.map(publicSourceName))).join(", ")} · {assessment.observationIds.length}{" "}
+                {assessment.observationIds.length === 1 ? "observation" : "observations"}
               </div>
             )}
           </li>
@@ -115,13 +144,13 @@ function EvidencePanel({
                 missionSelection={missionSelection}
                 onMissionSelectionChange={onMissionSelectionChange}
               />
-              <strong>{observation.variableName}</strong> · {observation.provenance.sourceId} ·{" "}
-              {observation.provenance.observedAt}
+              <strong>{observationLabel(observation.variableName)}</strong> · {publicSourceName(observation.provenance.sourceId)} ·{" "}
+              {formatUtcTimestamp(observation.provenance.observedAt)}
               {observation.value !== undefined
-                ? ` · ${observation.value} ${observation.unit}`
+                ? ` · ${publicObservationValue(observation.value, observation.unit)}`
                 : " · visualization available · no numeric temperature inferred"}
               <div style={{ color: "var(--text-muted)" }}>
-                Product: {observation.provenance.product} · Retrieved: {observation.provenance.retrievedAt}
+                Product: {sourceDetail(observation.provenance.product)} · Retrieved: {formatUtcTimestamp(observation.provenance.retrievedAt)}
               </div>
               {publicSourceUrl(observation.provenance.sourceId) && (
                 <a href={publicSourceUrl(observation.provenance.sourceId)!} target="_blank" rel="noopener noreferrer"
@@ -137,7 +166,7 @@ function EvidencePanel({
       <h3 style={{ margin: "12px 0 6px", fontSize: "16px" }}>Required limitations</h3>
       <ul data-testid="heat-limitations" style={{ paddingLeft: "20px" }}>
         {evidence.limitations.filter((limitation) => limitation.required).map((limitation) => (
-          <li key={limitation.limitationId}>{limitation.description}</li>
+          <li key={limitation.limitationId}>{publicNarrativeText(limitation.description)}</li>
         ))}
       </ul>
       </ProgressiveDisclosure>
@@ -171,7 +200,7 @@ function MissionsPanel({
       >
       {evidence.missionAttributions.map((mission, index) => (
         <article key={`${mission.missionName}-${mission.datasetId}-${index}`}>
-          <strong>{mission.missionName}</strong>
+          <strong>{publicNarrativeText(mission.missionName)}</strong>
           <MissionReferenceDetails datasetId={mission.datasetId} missionName={mission.missionName} />
         </article>
       ))}

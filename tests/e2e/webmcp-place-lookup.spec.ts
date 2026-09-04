@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import { gotoHydrated } from "./helpers";
 
 interface GeocodeCandidate {
@@ -30,10 +30,20 @@ async function installToolRegistry(page: Page) {
 
 async function mockPlaces(
   page: Page,
-  places: Record<string, GeocodeCandidate[]>
+  places: Record<string, GeocodeCandidate[]>,
+  failures: Record<string, { status: number; body: unknown }> = {}
 ) {
   await page.route("**/api/geocode", async (route) => {
     const body = route.request().postDataJSON() as { query?: string };
+    const failure = body.query ? failures[body.query] : undefined;
+    if (failure) {
+      await route.fulfill({
+        status: failure.status,
+        contentType: "application/json",
+        body: JSON.stringify(failure.body),
+      });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -44,6 +54,99 @@ async function mockPlaces(
     });
   });
 }
+
+test("pending and replaced place searches are visibly announced", async ({ page }) => {
+  await installToolRegistry(page);
+  const pendingRoutes = new Map<string, Route>();
+  await page.route("**/api/geocode", async (route) => {
+    const body = route.request().postDataJSON() as { query: string };
+    pendingRoutes.set(body.query, route);
+  });
+  await gotoHydrated(page, "/");
+  await waitForPlaceTool(page);
+
+  await page.evaluate(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+      __pendingPlaceLookups?: Record<string, Promise<unknown>>;
+    };
+    const tool = state.__skyToPorchWebMcpTools!.look_up_place_location;
+    state.__pendingPlaceLookups = {
+      older: Promise.resolve(tool.execute(
+        { place: "Slowtown" },
+        { signal: new AbortController().signal }
+      )),
+    };
+  });
+  const notice = page.getByTestId("agent-place-lookup-notice");
+  await expect(notice).toHaveAttribute("data-status", "lookup_pending");
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("Finding the place");
+  await expect(notice).toContainText("current map and results stay in place");
+  await expect.poll(() => pendingRoutes.has("Slowtown")).toBe(true);
+
+  await page.evaluate(() => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+      __pendingPlaceLookups?: Record<string, Promise<unknown>>;
+    };
+    const tool = state.__skyToPorchWebMcpTools!.look_up_place_location;
+    state.__pendingPlaceLookups!.newer = Promise.resolve(tool.execute(
+      { place: "Newtown" },
+      { signal: new AbortController().signal }
+    ));
+  });
+  await expect(notice).toHaveAttribute("data-status", "lookup_pending");
+  await expect(notice).toContainText("The earlier search for “Slowtown” stopped");
+  await expect(notice).toContainText("this newer request took its place");
+  expect(await notice.textContent()).not.toMatch(
+    /choice_id|place-[A-Za-z0-9._-]+|\.tsx?:\d+|sha256|[a-f0-9]{32,}/iu
+  );
+  await expect.poll(() => pendingRoutes.has("Newtown")).toBe(true);
+
+  await pendingRoutes.get("Newtown")!.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      ok: true,
+      results: [{
+        id: "internal-newtown-550e8400-e29b-41d4-a716-446655440000",
+        label: "Newtown, Texas, United States",
+        lon: -97.1,
+        lat: 30.1,
+      }],
+    }),
+  });
+  await page.evaluate(async () => {
+    const state = globalThis as typeof globalThis & {
+      __pendingPlaceLookups?: Record<string, Promise<unknown>>;
+    };
+    await state.__pendingPlaceLookups!.newer;
+  });
+
+  await pendingRoutes.get("Slowtown")!.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      ok: true,
+      results: [{
+        id: "internal-slowtown-result",
+        label: "Slowtown, Texas, United States",
+        lon: -98.1,
+        lat: 31.1,
+      }],
+    }),
+  });
+  const olderOutput = await page.evaluate(async () => {
+    const state = globalThis as typeof globalThis & {
+      __pendingPlaceLookups?: Record<string, Promise<unknown>>;
+    };
+    return state.__pendingPlaceLookups!.older;
+  });
+  expect(olderOutput).toMatchObject({ status: "superseded", ui_updated: false });
+  await expect(page.getByTestId("agent-place-lookup-notice"))
+    .toHaveAttribute("data-status", "success");
+});
 
 async function waitForPlaceTool(page: Page) {
   await page.waitForFunction(() => {
@@ -187,10 +290,20 @@ test("a unique place lookup has updated the visible map before the tool returns"
       '[data-announcement-slot]:not(:empty)'
     )?.dataset.announcementSlot ?? "";
     const textBefore = liveRegionBefore?.textContent ?? "";
-    const output = await state.__skyToPorchWebMcpTools!.look_up_place_location.execute(
-      { place: "Houston" },
-      { signal: new AbortController().signal }
+    const pendingOutput = Promise.resolve(
+      state.__skyToPorchWebMcpTools!.look_up_place_location.execute(
+        { place: "Houston" },
+        { signal: new AbortController().signal }
+      )
     );
+    const liveRegionPending = document.querySelector<HTMLElement>(
+      '[data-testid="agent-place-lookup-live-region"]'
+    );
+    const activeSlotPending = liveRegionPending?.querySelector<HTMLElement>(
+      '[data-announcement-slot]:not(:empty)'
+    )?.dataset.announcementSlot ?? "";
+    const pendingText = liveRegionPending?.textContent ?? "";
+    const output = await pendingOutput;
     const liveRegionAfter = document.querySelector<HTMLElement>(
       '[data-testid="agent-place-lookup-live-region"]'
     );
@@ -198,10 +311,12 @@ test("a unique place lookup has updated the visible map before the tool returns"
       output,
       sameLiveRegion: liveRegionBefore === liveRegionAfter,
       activeSlotBefore,
+      activeSlotPending,
       activeSlotAfter: liveRegionAfter?.querySelector<HTMLElement>(
         '[data-announcement-slot]:not(:empty)'
       )?.dataset.announcementSlot ?? "",
       textBefore,
+      pendingText,
       textAfter: liveRegionAfter?.textContent ?? "",
     };
   });
@@ -214,9 +329,10 @@ test("a unique place lookup has updated the visible map before the tool returns"
     },
     sameLiveRegion: true,
   });
-  expect(repeatedAnnouncement.activeSlotAfter).not.toBe(
+  expect(repeatedAnnouncement.activeSlotPending).not.toBe(
     repeatedAnnouncement.activeSlotBefore
   );
+  expect(repeatedAnnouncement.pendingText).toContain("Finding the place");
   expect(repeatedAnnouncement.textAfter).toBe(repeatedAnnouncement.textBefore);
 
   if (testInfo.project.name === "chromium-mobile") {
@@ -229,7 +345,7 @@ test("a unique place lookup has updated the visible map before the tool returns"
 
 test("ambiguous and failed lookups are visible but leave the current map in place", async ({
   page,
-}) => {
+}, testInfo) => {
   await installToolRegistry(page);
   const springfields: GeocodeCandidate[] = [
     ["il", "Illinois", -89.65, 39.78],
@@ -237,6 +353,7 @@ test("ambiguous and failed lookups are visible but leave the current map in plac
     ["ma", "Massachusetts", -72.59, 42.1],
     ["or", "Oregon", -123.02, 44.05],
     ["oh", "Ohio", -83.81, 39.92],
+    ["vt", "Vermont", -72.58, 44.26],
   ].map(([id, state, lon, lat]) => ({
     id: `springfield-${id}`,
     label: `Springfield, ${state}, United States`,
@@ -260,6 +377,14 @@ test("ambiguous and failed lookups are visible but leave the current map in plac
     }],
     Springfield: springfields,
     Nowhere: [],
+  }, {
+    "Broken Place": {
+      status: 500,
+      body: {
+        ok: false,
+        error: "C:\\srv\\geocode-handler.ts:77 550e8400-e29b-41d4-a716-446655440000 sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      },
+    },
   });
   await gotoHydrated(page, "/");
   await waitForPlaceTool(page);
@@ -293,7 +418,18 @@ test("ambiguous and failed lookups are visible but leave the current map in plac
       noticeStatus: notice?.dataset.status ?? "",
       noticeText: notice?.textContent ?? "",
       choiceCount: notice?.querySelectorAll("li[data-choice-id]").length ?? 0,
+      choiceTexts: [...(notice?.querySelectorAll<HTMLElement>("li[data-choice-id]") ?? [])]
+        .map((choice) => choice.textContent ?? ""),
       smallestNoticeFontPx: noticeFonts.length > 0 ? Math.min(...noticeFonts) : 0,
+      noticeVisible: Boolean(notice?.getClientRects().length),
+      viewportWidth: window.innerWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+      bodyScrollWidth: document.body.scrollWidth,
+      noticeLeft: notice?.getBoundingClientRect().left ?? -1,
+      noticeRight: notice?.getBoundingClientRect().right ?? -1,
+      noticeOverflowY: notice ? getComputedStyle(notice).overflowY : "",
+      noticeScrollHeight: notice?.scrollHeight ?? 0,
+      noticeClientHeight: notice?.clientHeight ?? 0,
     };
   });
 
@@ -304,6 +440,7 @@ test("ambiguous and failed lookups are visible but leave the current map in plac
     map_unchanged: true,
   });
   expect(result.noticeStatus).toBe("needs_place_choice");
+  expect(result.noticeVisible).toBe(true);
   expect(result.choiceCount).toBe(5);
   expect(result.smallestNoticeFontPx).toBeGreaterThanOrEqual(14);
   expect(result.after).toBe(result.before);
@@ -311,12 +448,34 @@ test("ambiguous and failed lookups are visible but leave the current map in plac
   expect(result.noticeText).toContain("Coordinates:");
   expect(result.noticeText).toContain("Located in:");
   expect(result.noticeText).toContain("Approximate area:");
-  for (const candidate of springfields) {
-    expect(result.noticeText).toContain(candidate.label);
+  for (const [index, candidate] of springfields.slice(0, 5).entries()) {
+    expect(result.choiceTexts[index]).toContain(candidate.label);
+    expect(result.choiceTexts[index]).toContain("Coordinates:");
+    expect(result.choiceTexts[index]).toContain("Located in:");
+    expect(result.choiceTexts[index]).toContain("Approximate area:");
+    expect(result.noticeText).not.toContain(candidate.id);
   }
+  expect(result.noticeText).not.toContain(springfields[5].label);
+  expect(result.noticeText).not.toContain(springfields[5].id);
   expect(result.noticeText).not.toMatch(
-    /PAUSE FOR USER|choice_id|Choice ID|WGS84|revision|schema/iu
+    /PAUSE FOR USER|choice_id|Choice ID|place-[A-Za-z0-9._-]+|WGS84|revision|schema|\.tsx?:\d+|sha256|[a-f0-9]{32,}/iu
   );
+
+  if (testInfo.project.name === "chromium-mobile") {
+    expect(result.documentScrollWidth).toBeLessThanOrEqual(result.viewportWidth);
+    expect(result.bodyScrollWidth).toBeLessThanOrEqual(result.viewportWidth);
+    expect(result.noticeLeft).toBeGreaterThanOrEqual(0);
+    expect(result.noticeRight).toBeLessThanOrEqual(result.viewportWidth);
+    expect(result.noticeOverflowY).toBe("auto");
+    expect(result.noticeScrollHeight).toBeGreaterThan(result.noticeClientHeight);
+    const scrollTop = await page.getByTestId("agent-place-lookup-notice").evaluate(
+      (notice) => {
+        notice.scrollTop = notice.scrollHeight;
+        return notice.scrollTop;
+      }
+    );
+    expect(scrollTop).toBeGreaterThan(0);
+  }
 
   const failure = await page.evaluate(async () => {
     const state = globalThis as typeof globalThis & {
@@ -338,6 +497,7 @@ test("ambiguous and failed lookups are visible but leave the current map in plac
       selection,
       noticeStatus: notice?.dataset.status ?? "",
       noticeText: notice?.textContent ?? "",
+      noticeVisible: Boolean(notice?.getClientRects().length),
     };
   });
 
@@ -348,6 +508,40 @@ test("ambiguous and failed lookups are visible but leave the current map in plac
     map_unchanged: true,
   });
   expect(failure.noticeStatus).toBe("place_not_found");
+  expect(failure.noticeVisible).toBe(true);
   expect(failure.noticeText).toContain("We couldn’t find a place matching");
   expect(failure.selection).toBe(result.before);
+
+  const unavailable = await page.evaluate(async () => {
+    const state = globalThis as typeof globalThis & {
+      __skyToPorchWebMcpTools?: Record<string, WebMCP.ModelContextTool>;
+    };
+    const output = await state.__skyToPorchWebMcpTools!.look_up_place_location.execute(
+      { place: "Broken Place" },
+      { signal: new AbortController().signal }
+    );
+    const notice = document.querySelector<HTMLElement>(
+      '[data-testid="agent-place-lookup-notice"]'
+    );
+    return {
+      output,
+      noticeStatus: notice?.dataset.status ?? "",
+      noticeText: notice?.textContent ?? "",
+      noticeVisible: Boolean(notice?.getClientRects().length),
+    };
+  });
+  expect(unavailable.output).toMatchObject({
+    status: "place_lookup_failed",
+    ui_updated: true,
+    map_updated: false,
+    map_unchanged: true,
+  });
+  expect(unavailable).toMatchObject({
+    noticeStatus: "place_lookup_failed",
+    noticeVisible: true,
+  });
+  expect(unavailable.noticeText).toContain("Place search isn’t available right now");
+  expect(unavailable.noticeText).not.toMatch(
+    /geocode-handler\.ts|550e8400-e29b-41d4-a716-446655440000|0123456789abcdef|sha256/iu
+  );
 });

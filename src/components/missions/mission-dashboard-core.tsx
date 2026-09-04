@@ -12,6 +12,11 @@
 import React from "react";
 import type { EvidenceObject, MissionAttribution, Observation } from "@/contracts/evidence";
 import { missionAttributionKey } from "@/components/missions/mission-selection";
+import {
+  formatUtcTimestamp,
+  publicAgencyName,
+  publicNarrativeText,
+} from "@/lib/ui/public-presentation";
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -79,6 +84,9 @@ export function MissionDashboardCore(
 
             // Latest known observedAt
             const latestTime = resolveLatestObservedAt(contributedObs, attr.contributedObservationIds);
+            const displayedLatestTime = latestTime === "Unknown" || latestTime === "Not available"
+              ? latestTime
+              : formatUtcTimestamp(latestTime);
 
             // Whether this entry is related to the currently selected observation
             const relatedToSelected =
@@ -121,10 +129,10 @@ export function MissionDashboardCore(
                       textAlign: "left",
                     }}
                   >
-                    {attr.missionName}
+                    {publicNarrativeText(attr.missionName)}
                   </button>
                   <span style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
-                    — {attr.agency}
+                    — {publicAgencyName(attr.agency)}
                   </span>
                 </div>
 
@@ -155,26 +163,19 @@ export function MissionDashboardCore(
                   }}
                 >
                   <dt style={{ color: "var(--text-muted)" }}>Role</dt>
-                  <dd style={{ margin: 0 }}>{attr.purpose}</dd>
+                  <dd style={{ margin: 0 }}>{publicNarrativeText(attr.purpose)}</dd>
 
                   <dt style={{ color: "var(--text-muted)" }}>Retrieval status</dt>
                   <dd style={{ margin: 0 }}>{formatRetrievalStatus(attr.retrievalStatus)}</dd>
 
                   <dt style={{ color: "var(--text-muted)" }}>Latest known observation</dt>
-                  <dd style={{ margin: 0 }}>{latestTime}</dd>
+                  <dd style={{ margin: 0 }}>{displayedLatestTime}</dd>
 
                   <dt style={{ color: "var(--text-muted)" }}>Why selected</dt>
-                  <dd style={{ margin: 0 }}>{attr.selectionReason}</dd>
+                  <dd style={{ margin: 0 }}>{publicNarrativeText(attr.selectionReason)}</dd>
 
                   <dt style={{ color: "var(--text-muted)" }}>Key limitation</dt>
-                  <dd style={{ margin: 0 }}>{attr.keyLimitation}</dd>
-
-                  {attr.datasetId !== undefined && (
-                    <>
-                      <dt style={{ color: "var(--text-muted)" }}>Dataset</dt>
-                      <dd style={{ margin: 0 }}>{attr.datasetId}</dd>
-                    </>
-                  )}
+                  <dd style={{ margin: 0 }}>{publicNarrativeText(attr.keyLimitation)}</dd>
                 </dl>
 
                 {/* Contributed observations */}
@@ -212,7 +213,7 @@ export function MissionDashboardCore(
                                 textDecoration: "underline",
                               }}
                             >
-                              {obs.variableName}
+                              {publicNarrativeText(obs.variableName)}
                             </button>
                             {/* PR4b (owner rule): internal observation ids
                                 (obs-wp10-…) are developer identifiers, never
@@ -221,7 +222,7 @@ export function MissionDashboardCore(
                             {" — "}
                             {obs.provenance.observedAt === "unknown"
                               ? "Unknown"
-                              : obs.provenance.observedAt}
+                              : formatUtcTimestamp(obs.provenance.observedAt)}
                           </li>
                         );
                       })}

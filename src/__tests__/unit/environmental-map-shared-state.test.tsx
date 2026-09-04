@@ -633,8 +633,8 @@ describe("shared environmental map state", () => {
       selection_updated: false,
       analysis_cleared: false,
       map_updated: true,
-      map_focus_revision: 1,
     });
+    expect(samePlaceOutput).not.toHaveProperty("map_focus_revision");
 
     let olderOutput: unknown;
     await act(async () => {
@@ -798,11 +798,13 @@ describe("shared environmental map state", () => {
     expect(secondOutput).toMatchObject({
       status: "success",
       selected_place: { radius_km: 30 },
-      layers: {
-        rain_satellite: { requested: true },
-        surface_heat_satellite: { requested: true },
-      },
     });
+    expect((secondOutput as { layers: unknown[] }).layers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ layer_name: "Rainfall imagery", requested: true }),
+        expect.objectContaining({ layer_name: "Land-surface heat imagery", requested: true }),
+      ])
+    );
     for (const id of ["desktop-map-state", "mobile-map-state"]) {
       expect(byTestId(id).dataset).toMatchObject({
         radius: "30",
@@ -923,8 +925,8 @@ describe("shared environmental map state", () => {
       selection_updated: false,
       analysis_cleared: false,
       map_updated: true,
-      map_focus_revision: 2,
     });
+    expect(samePlaceOutput).not.toHaveProperty("map_focus_revision");
     for (const id of ["desktop-map-state", "mobile-map-state"]) {
       expect(byTestId(id).dataset).toMatchObject({
         place: "Houston, Texas, United States (place search result)",

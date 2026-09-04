@@ -1,6 +1,7 @@
 "use client";
 
 import type { HeatQueryResult } from "@/lib/heat/types";
+import { publicObservationValue } from "@/lib/ui/public-presentation";
 
 export function HeatMapCoverageLabel({ result }: { result: HeatQueryResult }) {
   const evidence = result.evidence;
@@ -31,8 +32,8 @@ export function HeatMapCoverageLabel({ result }: { result: HeatQueryResult }) {
     >
       <strong>Regional Extreme Heat evidence</strong>
       <div>NASA GIBS: {gibs ? "visualization available · no numeric temperature inferred" : "not provided"}</div>
-      <div>AZ Tucson 11 W air: {air ? `${air.value} ${air.unit}` : "not provided"}</div>
-      <div>NOAA-derived heat index: {index ? `${index.value} ${index.unit}` : "not provided"}</div>
+      <div>AZ Tucson 11 W air: {air ? publicObservationValue(air.value, air.unit) : "not provided"}</div>
+      <div>NOAA-derived heat index: {index ? publicObservationValue(index.value, index.unit) : "not provided"}</div>
       <div style={{ color: "var(--status-warning-fg)", marginTop: "4px" }}>
         No indoor temperature, household certainty, or individual medical-risk layer is shown.
       </div>

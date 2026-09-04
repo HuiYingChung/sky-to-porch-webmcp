@@ -9,14 +9,50 @@ import type { MissionSelectionIntegrationProps } from "@/components/missions/mis
 import { publicSourceUrl } from "@/data/public-source-links";
 import type { FloodQueryResult } from "@/lib/flood/types";
 import type { StormQueryResult } from "@/lib/storm/types";
-import { dataModeLabel, evidenceStateLabel } from "@/lib/ui/evidence-labels";
+import { confidenceLevelLabel, dataModeLabel, evidenceStateLabel } from "@/lib/ui/evidence-labels";
+import {
+  formatUtcTimestamp,
+  publicErrorMessage,
+  publicNarrativeText,
+  publicObservationValue,
+  publicSourceName,
+  publicVariableName,
+} from "@/lib/ui/public-presentation";
+
+const INTERNAL_DISPLAY_VALUE = /(?:\b(?:obs|evd|intent|lim|src)-[a-z0-9_-]+\b|\b(?:analysis|place)-[a-z0-9_-]{8,}\b|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b|\b[0-9a-f]{32,}\b|[a-z]:\\|\\\\[^\\\s]+\\|(?:^|\s)\/(?:[^/\s]+\/)+[^/\s]+|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b|\.(?:csv|json|geojson|png|tiff?|kml|xml|psv|txt|zip|gz|pdf|nc|grib2?|hdf5?|parquet)\b)/iu;
+
+function observationLabel(value: string): string {
+  return INTERNAL_DISPLAY_VALUE.test(value) ? publicVariableName(value) : value;
+}
+
+function sourceDetail(value: string): string {
+  const safeValue = publicNarrativeText(value);
+  return INTERNAL_DISPLAY_VALUE.test(safeValue) ? "Source details unavailable" : safeValue;
+}
+
+function rejectionMessage(result: StormQueryResult): string {
+  const fallback = "The check could not be completed. No evidence was returned.";
+  if (!result.rejectionReason) return fallback;
+  if (INTERNAL_DISPLAY_VALUE.test(result.rejectionReason)) {
+    return publicErrorMessage(result.rejectionReason);
+  }
+  return result.rejectionReason;
+}
+
+function sourceStatusLabel(status: string): string {
+  if (status === "success") return "Success";
+  if (status === "partial") return "Partial";
+  if (status === "no_observation") return "No observation";
+  if (status === "failed") return "Failed";
+  return "Not checked";
+}
 
 function RejectionPanel({ result }: { result: StormQueryResult }) {
   return (
     <div role="status" data-testid="wind-rejection-panel">
       <h3 style={{ margin: "0 0 8px", fontSize: "16px" }}>Wind & Storm evidence unavailable</h3>
       <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "14px" }}>
-        {result.rejectionReason ?? "The request failed closed. No evidence was returned."}
+        {rejectionMessage(result)}
       </p>
       <p style={{ margin: "8px 0 0", color: "var(--status-warning-fg)", fontSize: "14px" }}>
         Missing wind evidence is not evidence that damaging wind did not occur. Flood or rain data was not substituted.
@@ -78,20 +114,20 @@ function ClaimDiscussion({
               background: "var(--surface-1)",
             }}
           >
-            <strong>Evidence-supported assessment · {discussion.assessmentConfidence} confidence</strong>
-            <p style={{ margin: "4px 0 0" }}>{discussion.assessmentSummary}</p>
+            <strong>Evidence-supported assessment · {confidenceLevelLabel(discussion.assessmentConfidence)} confidence</strong>
+            <p style={{ margin: "4px 0 0" }}>{publicNarrativeText(discussion.assessmentSummary)}</p>
           </div>
           <h4 style={{ margin: "0 0 5px" }}>What official evidence supports</h4>
           <ul style={{ marginTop: 0, paddingLeft: "20px" }}>
-            {discussion.supportedStatements.map((statement) => <li key={statement}>{statement}</li>)}
+            {discussion.supportedStatements.map((statement) => <li key={statement}>{publicNarrativeText(statement)}</li>)}
           </ul>
           <h4 style={{ margin: "10px 0 5px" }}>Property-specific questions that can change the assessment</h4>
           <ul style={{ marginTop: 0, paddingLeft: "20px" }}>
-            {discussion.notEstablished.map((statement) => <li key={statement}>{statement}</li>)}
+            {discussion.notEstablished.map((statement) => <li key={statement}>{publicNarrativeText(statement)}</li>)}
           </ul>
           <h4 style={{ margin: "10px 0 5px" }}>What to document before talking with an insurer</h4>
           <ol style={{ marginTop: 0, paddingLeft: "20px" }}>
-            {discussion.documentationChecklist.map((item) => <li key={item}>{item}</li>)}
+            {discussion.documentationChecklist.map((item) => <li key={item}>{publicNarrativeText(item)}</li>)}
           </ol>
           <p style={{ margin: "10px 0 4px", fontWeight: 600 }}>Official consumer guidance</p>
           <ul style={{ margin: 0, paddingLeft: "20px" }}>
@@ -172,12 +208,12 @@ function EvidencePanel({ result }: { result: StormQueryResult }) {
               );
               return (
                 <li key={observation.observationId} data-testid="wind-observation">
-                  <strong>{observation.variableName}</strong> · {observation.provenance.sourceId} · {observation.provenance.observedAt}
+                  <strong>{observationLabel(observation.variableName)}</strong> · {publicSourceName(observation.provenance.sourceId)} · {formatUtcTimestamp(observation.provenance.observedAt)}
                   {observation.value !== undefined
-                    ? ` · ${observation.value} ${observation.unit}${mph ? ` (${mph.value} mph)` : ""}`
-                    : ` · ${observation.textValue}`}
+                    ? ` · ${publicObservationValue(observation.value, observation.unit)}${mph ? ` (${mph.value} mph)` : ""}`
+                    : ` · ${sourceDetail(observation.textValue ?? "")}`}
                   <div style={{ color: "var(--text-muted)" }}>
-                    Product: {observation.provenance.product} · Retrieved: {observation.provenance.retrievedAt}
+                    Product: {sourceDetail(observation.provenance.product)} · Retrieved: {formatUtcTimestamp(observation.provenance.retrievedAt)}
                   </div>
                   {publicSourceUrl(observation.provenance.sourceId) && (
                     <a href={publicSourceUrl(observation.provenance.sourceId)!} target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)" }}>
@@ -192,7 +228,7 @@ function EvidencePanel({ result }: { result: StormQueryResult }) {
         <h3 style={{ margin: "12px 0 6px", fontSize: "16px" }}>Required limitations</h3>
         <ul data-testid="wind-limitations" style={{ paddingLeft: "20px" }}>
           {evidence.limitations.filter((item) => item.required).map((item) => (
-            <li key={item.limitationId}>{item.description}</li>
+            <li key={item.limitationId}>{publicNarrativeText(item.description)}</li>
           ))}
         </ul>
       </ProgressiveDisclosure>
@@ -211,9 +247,9 @@ function MissionsPanel({ result }: { result: StormQueryResult }) {
       </p>
       {evidence.missionAttributions.map((source) => (
         <article key={`${source.missionName}-${source.datasetId}`} style={{ marginBottom: "12px" }}>
-          <strong>{source.missionName}</strong>
-          <div>{source.purpose}</div>
-          <div style={{ color: "var(--text-muted)" }}>Status: {source.retrievalStatus} · {source.keyLimitation}</div>
+          <strong>{publicNarrativeText(source.missionName)}</strong>
+          <div>{publicNarrativeText(source.purpose)}</div>
+          <div style={{ color: "var(--text-muted)" }}>Status: {sourceStatusLabel(source.retrievalStatus)} · {publicNarrativeText(source.keyLimitation)}</div>
         </article>
       ))}
     </div>

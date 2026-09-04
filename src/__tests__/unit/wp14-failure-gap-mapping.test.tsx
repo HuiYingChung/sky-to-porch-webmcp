@@ -206,6 +206,9 @@ describe("ResultFailureGapBoundary evidence-first ordering", () => {
     expect(boundary?.children[1]?.getAttribute("data-testid"))
       .toBe("result-failure-gap-statuses");
     expect(rendered.container.textContent).toContain("separately validated evidence");
+    expect(rendered.container.textContent).not.toContain("obs-wp14-test");
+    expect(rendered.container.textContent).not.toContain("us_drought_monitor_rest");
+    expect(rendered.container.textContent).not.toContain("a".repeat(64));
     cleanup(rendered.container, rendered.root);
   });
 
@@ -274,6 +277,9 @@ describe("ResultFailureGapBoundary evidence-first ordering", () => {
     expect(outcomes?.textContent).toContain("NASA GIBS failed");
     expect(outcomes?.textContent).toContain("U.S. Drought Monitor succeeded");
     expect(outcomes?.textContent).toContain("administrative-area lookup succeeded");
+    expect(rendered.container.textContent).not.toContain("obs-wp14-test");
+    expect(rendered.container.textContent).not.toContain("us_drought_monitor_rest");
+    expect(rendered.container.textContent).not.toContain("a".repeat(64));
     cleanup(rendered.container, rendered.root);
   });
 });

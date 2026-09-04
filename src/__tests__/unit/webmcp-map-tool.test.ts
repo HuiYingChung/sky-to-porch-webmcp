@@ -1,6 +1,7 @@
 /// <reference types="webmcp-types" />
 
 import { describe, expect, it, vi } from "vitest";
+import { createAgentPlaceLookupFeedbackCoordinator } from "@/components/webmcp/webmcp-bridge";
 import {
   SET_ENVIRONMENTAL_MAP_LAYERS_INPUT_SCHEMA,
   SET_ENVIRONMENTAL_MAP_LAYERS_TOOL_NAME,
@@ -19,8 +20,11 @@ import {
   buildGeocodedPlaceSelection,
   type PlaceSelection,
 } from "@/lib/location/selection";
+import type { AgentPlaceLookupReceiptPayload } from "@/lib/webmcp/place-tool";
 
 const NOW = new Date("2026-08-26T18:00:00.000Z");
+const PUBLIC_INVALID_MAP_MESSAGE =
+  "We couldn’t use this map request. Check the place, date, area size, and map choices, then try again.";
 
 function toolOptions(
   signal = new AbortController().signal
@@ -116,6 +120,38 @@ describe("set_environmental_map_layers WebMCP tool", () => {
     ]);
   });
 
+  it("keeps map revisions and internal layer codes behind the public factory boundary", async () => {
+    const { dependencies } = harness(selection());
+    const tool = createSetEnvironmentalMapLayersTool(dependencies);
+
+    const output = await tool.execute(
+      { layers: { rain_satellite: true } },
+      toolOptions()
+    ) as Record<string, unknown>;
+
+    expect(output).toMatchObject({
+      status: "success",
+      status_label: "Map updated",
+      layers: expect.arrayContaining([
+        expect.objectContaining({
+          layer_name: "Rainfall imagery",
+          status_label: "Loading",
+          source_name: "NASA GIBS IMERG Precipitation Rate Visualization",
+        }),
+      ]),
+    });
+    expect(output).not.toHaveProperty("map_state_revision");
+    const publicLayers = output.layers as Array<Record<string, unknown>>;
+    expect(publicLayers).toHaveLength(4);
+    for (const layer of publicLayers) {
+      expect(layer).not.toHaveProperty("status");
+      expect(layer).not.toHaveProperty("source");
+    }
+    expect(JSON.stringify(output)).not.toMatch(
+      /rain_satellite|surface_heat_satellite|thermal_anomalies_firms|flood_extent/u
+    );
+  });
+
   it("applies a partial patch, preserves omitted layers, and makes retries idempotent", async () => {
     const current = applyEnvironmentalMapDesiredState(
       stateWithDate(),
@@ -137,10 +173,19 @@ describe("set_environmental_map_layers WebMCP tool", () => {
 
     expect(first).toMatchObject({
       status: "success",
+      status_label: "Map updated",
+      display_summary: expect.stringContaining("Environmental map updated"),
       ui_updated: true,
       analysis_cleared: false,
       layers: {
-        rain_satellite: { requested: true, visible: false, status: "loading" },
+        rain_satellite: {
+          layer_name: "Rainfall imagery",
+          requested: true,
+          visible: false,
+          status: "loading",
+          status_label: "Loading",
+          source_name: "NASA GIBS IMERG Precipitation Rate Visualization",
+        },
         surface_heat_satellite: { requested: true, visible: false, status: "loading" },
         thermal_anomalies_firms: { requested: false, status: "hidden" },
         flood_extent: { requested: false, status: "hidden" },
@@ -163,8 +208,8 @@ describe("set_environmental_map_layers WebMCP tool", () => {
     );
 
     expect(output).toMatchObject({ status: "invalid_input", ui_updated: false });
-    expect("message" in output ? output.message : "").toContain(
-      "A current place or a place argument is required"
+    expect("message" in output ? output.message : "").toBe(
+      PUBLIC_INVALID_MAP_MESSAGE
     );
     expect(applyUpdate).not.toHaveBeenCalled();
   });
@@ -185,8 +230,8 @@ describe("set_environmental_map_layers WebMCP tool", () => {
       dependencies
     );
     expect(rejected).toMatchObject({ status: "invalid_input", ui_updated: false });
-    expect("message" in rejected ? rejected.message : "").toContain(
-      "spans multiple days"
+    expect("message" in rejected ? rejected.message : "").toBe(
+      PUBLIC_INVALID_MAP_MESSAGE
     );
     expect(applyUpdate).not.toHaveBeenCalled();
 
@@ -290,7 +335,7 @@ describe("set_environmental_map_layers WebMCP tool", () => {
           status: "unsupported_date",
           date: "2026-08-24",
           visualization_only: true,
-          source: "NASA FIRMS VIIRS_NOAA20_NRT",
+          source: "NASA FIRMS Active Fire Data",
         },
       },
     });
@@ -337,7 +382,7 @@ describe("set_environmental_map_layers WebMCP tool", () => {
           requested: true,
           visible: true,
           status: "ready",
-          source: "NASA GIBS IMERG_Precipitation_Rate",
+          source: "NASA GIBS IMERG Precipitation Rate Visualization",
           visualization_only: true,
         },
         surface_heat_satellite: {
@@ -400,6 +445,10 @@ describe("set_environmental_map_layers WebMCP tool", () => {
     expect(output.layers.flood_extent.status_detail).toContain(
       "no rendered observation"
     );
+    const displayText = Object.values(output.layers)
+      .flatMap((layer) => [layer.layer_name, layer.source_name, layer.status_detail])
+      .join(" ");
+    expect(displayText).not.toMatch(/\b(?:nasa_gibs|thermal_anomalies_firms|flood_extent)\b/u);
   });
 
   it("pauses for an ambiguous place and preserves every map argument on retry", async () => {
@@ -468,6 +517,39 @@ describe("set_environmental_map_layers WebMCP tool", () => {
     });
   });
 
+  it("returns all five checked candidates for an ambiguous map place", async () => {
+    const candidates = Array.from({ length: 5 }, (_, index) => ({
+      id: `springfield-${index}`,
+      label: `Springfield ${index + 1}`,
+      lon: -90 - index,
+      lat: 35 + index,
+    }));
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      results: candidates,
+    }), { headers: { "Content-Type": "application/json" } }));
+    const { dependencies, applyUpdate } = harness(
+      null,
+      createInitialEnvironmentalMapState()
+    );
+
+    const output = await executeSetEnvironmentalMapLayersTool(
+      {
+        layers: { rain_satellite: true },
+        place: "Springfield",
+        date: "2026-08-25",
+      },
+      toolOptions(),
+      { ...dependencies, fetchImpl }
+    );
+
+    expect(output.status).toBe("needs_place_choice");
+    expect("choices" in output ? output.choices : []).toHaveLength(5);
+    expect("choices" in output ? output.choices?.at(-1)?.label : undefined)
+      .toBe("Springfield 5");
+    expect(applyUpdate).not.toHaveBeenCalled();
+  });
+
   it("refreshes a stale place choice without losing retry arguments", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       ok: true,
@@ -490,7 +572,7 @@ describe("set_environmental_map_layers WebMCP tool", () => {
     );
     expect(output).toMatchObject({
       status: "needs_place_choice",
-      message: expect.stringContaining("previous place choice is stale"),
+      message: expect.stringContaining("earlier choice is no longer available"),
       after_user_choice: {
         retry_with_original_arguments: {
           layers: { surface_heat_satellite: true },
@@ -504,15 +586,15 @@ describe("set_environmental_map_layers WebMCP tool", () => {
   });
 
   it.each([
-    [{ layers: {} }, "at least one supported layer"],
-    [{ layers: { unknown: true } }, "at least one supported layer"],
-    [{ layers: { rain_satellite: "yes" } }, "at least one supported layer"],
-    [{ layers: { rain_satellite: true }, date: "2026-02-29" }, "real, non-future"],
-    [{ layers: { rain_satellite: true }, date: "2026-08-27" }, "real, non-future"],
-    [{ layers: { rain_satellite: true }, radius_km: 0 }, "from 1 to 250"],
-    [{ layers: { rain_satellite: true }, place_choice_id: "place-valid" }, "requires the original place"],
-    [{ layers: { rain_satellite: true }, extra: true }, "Only layers, place"],
-  ])("rejects invalid input before updating state %#", async (input, message) => {
+    { layers: {} },
+    { layers: { unknown: true } },
+    { layers: { rain_satellite: "yes" } },
+    { layers: { rain_satellite: true }, date: "2026-02-29" },
+    { layers: { rain_satellite: true }, date: "2026-08-27" },
+    { layers: { rain_satellite: true }, radius_km: 0 },
+    { layers: { rain_satellite: true }, place_choice_id: "place-valid" },
+    { layers: { rain_satellite: true }, extra: true },
+  ])("rejects invalid input before updating state %#", async (input) => {
     const { dependencies, applyUpdate } = harness(selection());
 
     const output = await executeSetEnvironmentalMapLayersTool(
@@ -522,7 +604,59 @@ describe("set_environmental_map_layers WebMCP tool", () => {
     );
 
     expect(output).toMatchObject({ status: "invalid_input", ui_updated: false });
-    expect("message" in output ? output.message : "").toContain(message);
+    expect("message" in output ? output.message : "").toBe(
+      PUBLIC_INVALID_MAP_MESSAGE
+    );
+    expect(applyUpdate).not.toHaveBeenCalled();
+  });
+
+  it("does not expose an unexpected geocoder error in the map result or visible feedback", async () => {
+    const privateError =
+      "C:\\services\\private-geocoder.ts 123e4567-e89b-12d3-a456-426614174000 deadbeefcafebabe";
+    const fetchImpl = vi.fn(async () => {
+      throw new Error(privateError);
+    });
+    const { dependencies, applyUpdate } = harness(
+      null,
+      createInitialEnvironmentalMapState()
+    );
+    const receipts: AgentPlaceLookupReceiptPayload[] = [];
+    const beginPlaceLookupFeedback = createAgentPlaceLookupFeedbackCoordinator(
+      async (receipt) => {
+        receipts.push(receipt);
+      }
+    );
+    const tool = createSetEnvironmentalMapLayersTool({
+      ...dependencies,
+      fetchImpl,
+      beginPlaceLookupFeedback,
+    });
+
+    const output = await tool.execute(
+      { layers: { rain_satellite: true }, place: "Houston" },
+      toolOptions()
+    );
+
+    expect(output).toMatchObject({
+      status: "place_lookup_failed",
+      message: "Place search was unavailable; the map was not changed.",
+      ui_updated: false,
+    });
+    expect(receipts.map((receipt) => receipt.status)).toEqual([
+      "lookup_pending",
+      "place_lookup_failed",
+    ]);
+    expect(receipts.at(-1)).toMatchObject({
+      status: "place_lookup_failed",
+      query: "Houston",
+      operation: "map",
+    });
+    for (const exposedValue of [output, receipts.at(-1)]) {
+      const publicText = JSON.stringify(exposedValue);
+      expect(publicText).not.toContain("private-geocoder.ts");
+      expect(publicText).not.toContain("123e4567-e89b-12d3-a456-426614174000");
+      expect(publicText).not.toContain("deadbeefcafebabe");
+    }
     expect(applyUpdate).not.toHaveBeenCalled();
   });
 
@@ -564,7 +698,7 @@ describe("set_environmental_map_layers WebMCP tool", () => {
     expect(applyUpdate).not.toHaveBeenCalled();
   });
 
-  it("keeps a pending place lookup alive across a newer layer-only Agent request", async () => {
+  it("lets a newer layer-only request supersede a pending map lookup without claiming an analysis mutation", async () => {
     let resolveFetch: ((response: Response) => void) | undefined;
     const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => {
       resolveFetch = resolve;
@@ -573,29 +707,70 @@ describe("set_environmental_map_layers WebMCP tool", () => {
       null,
       createInitialEnvironmentalMapState()
     );
-    const older = executeSetEnvironmentalMapLayersTool(
+    const beginContextMutationInvocation = vi.fn(() => () => true);
+    const tool = createSetEnvironmentalMapLayersTool({
+      ...dependencies,
+      fetchImpl,
+      beginContextMutationInvocation,
+    });
+    const older = tool.execute(
       { layers: { rain_satellite: true }, place: "Houston" },
-      toolOptions(),
-      { ...dependencies, fetchImpl }
+      toolOptions()
     );
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
-    const newer = await executeSetEnvironmentalMapLayersTool(
+    const newer = await tool.execute(
       { layers: { rain_satellite: false } },
-      toolOptions(),
-      { ...dependencies, fetchImpl }
+      toolOptions()
     );
-    expect(newer).toMatchObject({ status: "success", map_state_revision: 0 });
+    expect(newer).toMatchObject({ status: "success" });
+    expect(newer).not.toHaveProperty("map_state_revision");
     resolveFetch?.(new Response(JSON.stringify({
       ok: true,
       results: [{ id: "osm-houston", label: "Houston", lon: -95.36, lat: 29.76 }],
     }), { headers: { "Content-Type": "application/json" } }));
 
-    await expect(older).resolves.toMatchObject({
-      status: "success",
-      ui_updated: true,
-      selected_place: { label: "Houston (place search result)" },
+    await expect(older).resolves.toMatchObject({ status: "superseded", ui_updated: false });
+    expect(applyUpdate).toHaveBeenCalledTimes(1);
+    expect(beginContextMutationInvocation).not.toHaveBeenCalled();
+  });
+
+  it("lets an invalid newer map request supersede an older pending lookup", async () => {
+    let resolveFetch: ((response: Response) => void) | undefined;
+    const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    }));
+    const { dependencies, applyUpdate } = harness(
+      null,
+      createInitialEnvironmentalMapState()
+    );
+    let latestContextInvocation = 0;
+    const beginContextInvocation = vi.fn(() => {
+      const invocation = ++latestContextInvocation;
+      return () => invocation === latestContextInvocation;
     });
-    expect(applyUpdate).toHaveBeenCalledTimes(2);
+    const tool = createSetEnvironmentalMapLayersTool({
+      ...dependencies,
+      fetchImpl,
+      beginContextInvocation,
+    });
+
+    const older = tool.execute(
+      { layers: { rain_satellite: true }, place: "Houston" },
+      toolOptions()
+    );
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    await expect(tool.execute(
+      { layers: {} },
+      toolOptions()
+    )).resolves.toMatchObject({ status: "invalid_input", ui_updated: false });
+
+    resolveFetch?.(new Response(JSON.stringify({
+      ok: true,
+      results: [{ id: "osm-houston", label: "Houston", lon: -95.36, lat: 29.76 }],
+    }), { headers: { "Content-Type": "application/json" } }));
+    await expect(older).resolves.toMatchObject({ status: "superseded", ui_updated: false });
+    expect(beginContextInvocation).toHaveBeenCalledTimes(2);
+    expect(applyUpdate).not.toHaveBeenCalled();
   });
 
   it("reserves invocation order before lookup so an older result cannot beat a newer request", async () => {

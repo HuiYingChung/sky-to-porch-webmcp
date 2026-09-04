@@ -73,9 +73,12 @@ test("Air Quality composes separate live satellite and outdoor AQI evidence", as
   await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("MAIAC aerosol optical depth");
   await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("succeeded");
   await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("AirNow daily outdoor AQI");
-  await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("42 AQI");
+  await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("42 on the air quality index");
   await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("UTC instant unavailable");
   await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("not indoor air quality");
+  expect(await evidence.innerText()).not.toMatch(
+    /nasa_gibs|airnow_daily_data|Observation ID|Evidence ID|payload hash|\b(?:obs|evd)-[a-z0-9_-]+\b|\b[0-9a-f]{32,}\b|\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b|\.(?:csv|json|geojson|png|tiff?|kml|xml|psv|txt|zip|gz)\b/iu
+  );
 
   const missions = await insight(page, "missions");
   await expect(missions.getByTestId("coverage-gap-missions")).toContainText("AirNow daily outdoor AQI succeeded");
@@ -91,10 +94,13 @@ test("Earth and Volcanoes separates satellite, volcano, and observed-earthquake 
   await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("USGS Volcano Hazards");
   await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("USGS observed earthquake catalog events");
   await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("USGS observed earthquake event");
-  await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("2.1 magnitude");
+  await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("magnitude 2.1");
   await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("Earthquake prediction");
   await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("out of scope");
   await expect(evidence.getByTestId("coverage-gap-evidence")).toContainText("not no volcanic hazard");
+  expect(await evidence.innerText()).not.toMatch(
+    /nasa_gibs|usgs_earthquake_geojson|usgs_volcano_hans|Observation ID|Evidence ID|payload hash|\b(?:obs|evd)-[a-z0-9_-]+\b|\b[0-9a-f]{32,}\b|\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b|\.(?:csv|json|geojson|png|tiff?|kml|xml|psv|txt|zip|gz)\b/iu
+  );
 
   const missions = await insight(page, "missions");
   await expect(missions.getByTestId("coverage-gap-missions")).toContainText("OMPS returned nothing");

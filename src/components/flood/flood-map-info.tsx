@@ -1,6 +1,7 @@
 "use client";
 
 import type { FloodQueryResult } from "@/lib/flood/types";
+import { formatUtcTimestamp, publicObservationValue } from "@/lib/ui/public-presentation";
 
 export function FloodMapCoverageLabel({ result }: { result: FloodQueryResult }) {
   const evidence = result.evidence;
@@ -31,8 +32,8 @@ export function FloodMapCoverageLabel({ result }: { result: FloodQueryResult }) 
     >
       <strong>Regional Flood evidence area</strong>
       <div>{gibs?.metadata?.boundingBox ?? "Houston demonstration bounds"}</div>
-      <div>GIBS: {gibs?.provenance.observedAt ?? "not provided"}</div>
-      <div>{gageLabel}: {gage ? `${gage.value} ${gage.unit}` : "not provided"}</div>
+      <div>GIBS: {gibs ? formatUtcTimestamp(gibs.provenance.observedAt) : "not provided"}</div>
+      <div>{gageLabel}: {gage ? publicObservationValue(gage.value, gage.unit) : "not provided"}</div>
       <div style={{ color: "var(--status-warning-fg)", marginTop: "4px" }}>
         No surface-water, road-closure, route-safety, or property-impact geometry is shown.
       </div>

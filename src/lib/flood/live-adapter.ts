@@ -656,7 +656,7 @@ function floodExtentNoObservationLimitation(endDate: string): Limitation {
     limitationId: "lim-wp10-live-flood-extent-no-observation",
     source: "nasa_lance_flood_extent",
     description:
-      `The flood-extent request returned a valid transparent no-observation image for the ` +
+      `The flood-extent request returned a valid transparent image with no visible flood information for the ` +
       `3-day composite covering ${floodExtentWindowStart(endDate)} through ${endDate} UTC. ` +
       "That is not evidence of no flood or no danger.",
     required: true,
@@ -730,7 +730,7 @@ function floodExtentAttribution(result: FloodExtentResult): MissionAttribution {
     retrievalStatus: result.kind === "source_failure" ? "failed" : "success",
     keyLimitation:
       result.kind === "no_observation"
-        ? "A transparent response is no observation, not no flood or no danger."
+        ? "A transparent response with no visible flood information is not evidence of no flood or no danger."
         : "The visualization is not interpreted as flood depth, property impact, road status, or an evacuation instruction.",
     datasetId: "VIIRS_Combined_Flood_3-Day",
   };
@@ -741,11 +741,11 @@ function gpmAttribution(observations: Observation[], anyTransparent: boolean): M
     missionName: "GPM (Global Precipitation Measurement)",
     agency: "NASA / JAXA",
     purpose: "Global precipitation measurement visualized through GIBS IMERG",
-    selectionReason: "Credential-free regional precipitation visualization for the Flood evidence path",
+    selectionReason: "Regional precipitation visualization used as supporting Flood evidence",
     contributedObservationIds: observations.map((observation) => observation.observationId),
     retrievalStatus: anyTransparent ? "partial" : "success",
     keyLimitation:
-      "The PNG is visualization evidence only; no numeric rainfall, surface-water, property, or route conclusion is derived from colors.",
+      "The image is visualization evidence only; no numeric rainfall, surface-water, property, or route conclusion is derived from colors.",
     datasetId: GIBS_LAYER,
   };
 }
@@ -762,8 +762,8 @@ function localStormReportAttribution(
     selectionReason: result.kind === "observations"
       ? "Reports were accepted only when their event type matched Flood & Rain, their report date matched the request, and their coordinate was inside the exact selected geometry."
       : result.kind === "not_applicable"
-        ? "The requested dates are outside the bounded recent report index or no applicable NWS office was found."
-        : "The bounded recent report index was checked for matching in-area water events.",
+        ? "The requested dates are outside the recent report index or no applicable NWS office was found."
+        : "The recent report index was checked for matching in-area water events.",
     contributedObservationIds: observations.map((observation) => observation.observationId),
     retrievalStatus: result.kind === "observations"
       ? hasPartialFailure ? "partial" : "success"
@@ -785,7 +785,7 @@ function canadaHydrometricAttribution(
     agency: "Environment and Climate Change Canada",
     purpose: "In-area hydrometric daily-mean water-level context",
     selectionReason:
-      "Official anonymous Canadian ground-station evidence queried by the validated selected bounding box and end date",
+      "Official anonymous Canadian ground-station evidence queried by the selected area and end date",
     contributedObservationIds:
       result.kind === "observation" ? [result.observation.observationId] : [],
     retrievalStatus: result.kind === "observation" ? "success" : "failed",
@@ -813,21 +813,21 @@ function buildFailureEvidence(evaluatedAt: string, reason: FloodFailureReason): 
     },
     confidence: {
       level: "insufficient",
-      rationale: `A required live source failed (${reason}). Failure is not evidence of no danger.`,
+      rationale: "A required live source failed. Failure is not evidence of no danger.",
     },
     limitations: [
       {
         limitationId: "lim-wp08-live-failure-not-safe",
         source: "nasa_gibs_imerg",
         description:
-          "Live source failure is not zero precipitation, no flooding, no property impact, or a safe route. No fixture was substituted.",
+          "Live source failure is not zero precipitation, no flooding, no property impact, or a safe route. No sample data was substituted.",
         required: true,
       },
       {
         limitationId: "lim-wp08-live-failure-usgs-not-safe",
         source: "usgs_instantaneous_values",
         description:
-          "A failed USGS retrieval is not a low gage value, no flooding, no property impact, or a safe route. No fixture was substituted.",
+          "A failed USGS retrieval is not a low gage value, no flooding, no property impact, or a safe route. No sample data was substituted.",
         required: true,
       },
     ],
@@ -1030,7 +1030,7 @@ export async function queryLiveFloodEvidence(
           selectionReason: nceiStormEvents.kind === "observations"
             ? "Only records on the final requested date whose reported coordinate fell inside the exact selected geometry were included."
             : nceiStormEvents.kind === "source_failure"
-              ? "The bounded annual Storm Events publication check failed closed."
+              ? "The annual collection of storm reports could not be checked."
               : "The annual publication contained no matching geolocated Flood & Heavy Rain record for the final requested date inside the selected geometry.",
           contributedObservationIds: nceiObservations.map((item) => item.observationId),
           retrievalStatus: "success" as const,
@@ -1044,7 +1044,7 @@ export async function queryLiveFloodEvidence(
           selectionReason: mrmsQpe.kind === "observation"
             ? "The rolling raster period overlapped the final requested UTC date and returned a finite center-point value."
             : mrmsQpe.kind === "source_failure"
-              ? "The rolling catalog or raster sample failed closed."
+              ? "The recent radar rainfall source could not be checked."
               : "The rolling service did not contain a usable value whose valid period overlapped the final requested date.",
           contributedObservationIds: mrmsObservation ? [mrmsObservation.observationId] : [],
           retrievalStatus: "success" as const,
@@ -1059,7 +1059,7 @@ export async function queryLiveFloodEvidence(
       confidence: {
         level: unsupported || inconclusive ? "insufficient" : "low",
         rationale: unsupported
-          ? "Every requested day returned a transparent GIBS response and cannot support a precipitation observation."
+          ? "Every requested day returned a transparent satellite-image response and cannot support a precipitation observation."
           : inconclusive
             ? floodExtent.kind === "source_failure"
               ? "The returned precipitation or gage context cannot replace the failed flood-extent source."

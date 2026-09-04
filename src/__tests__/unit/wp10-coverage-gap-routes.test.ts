@@ -389,9 +389,19 @@ describe("Air Quality and Earth & Volcanoes live query routes", () => {
     expect(html).toContain("Live retrieval");
     expect(html).toContain("Retrieval attempted: <strong>yes</strong>");
     expect(html).toContain("AirNow daily outdoor AQI");
-    expect(html).toContain("42 AQI");
+    expect(html).toContain("42 on the air quality index");
     expect(html).toContain("UTC instant unavailable");
     expect(html).toContain("AOD is never rewritten as AQI");
     expect(html).toContain("Validated observations");
+
+    const visible = document.createElement("div");
+    visible.innerHTML = html;
+    const visibleText = visible.textContent ?? "";
+    for (const observation of result.evidence?.observations ?? []) {
+      expect(visibleText).not.toContain(observation.observationId);
+      expect(visibleText).not.toContain(observation.provenance.sourceId);
+      expect(visibleText).not.toContain(observation.provenance.payloadHash);
+      expect(visibleText).not.toContain(observation.provenance.product);
+    }
   });
 });

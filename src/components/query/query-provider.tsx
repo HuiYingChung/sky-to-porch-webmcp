@@ -60,6 +60,7 @@ import { executeAnalysisRequest } from "@/lib/analysis/client";
 import type {
   ActiveAnalysis,
   AgentInvestigationState,
+  AnalysisOutcome,
   AnalysisOrigin,
   AnalysisRequest,
 } from "@/lib/analysis/types";
@@ -197,6 +198,97 @@ function sameEnvironmentalMapArea(
     firstArea.south === secondArea.south &&
     firstArea.east === secondArea.east &&
     firstArea.north === secondArea.north;
+}
+
+const UNEXPECTED_ANALYSIS_FAILURE_MESSAGE =
+  "This check couldn't be completed. Please try again.";
+
+/**
+ * Keep an unexpected client-side failure visible without exposing the thrown
+ * error or inventing observations. The normal analysis client already turns
+ * expected source failures into typed outcomes; this is only the final safety
+ * net for an exception that reaches the provider.
+ */
+function visibleFailureOutcome(request: AnalysisRequest): AnalysisOutcome {
+  switch (request.hazardId) {
+    case "fire_smoke":
+      return {
+        hazardId: "fire_smoke",
+        result: {
+          kind: "source_failure",
+          rejectionReason: UNEXPECTED_ANALYSIS_FAILURE_MESSAGE,
+        },
+      };
+    case "flood_storm":
+      return {
+        hazardId: "flood_storm",
+        result: {
+          kind: "source_failure",
+          rejectionReason: UNEXPECTED_ANALYSIS_FAILURE_MESSAGE,
+        },
+      };
+    case "wind_storm":
+      return {
+        hazardId: "wind_storm",
+        result: {
+          kind: "source_failure",
+          rejectionReason: UNEXPECTED_ANALYSIS_FAILURE_MESSAGE,
+        },
+      };
+    case "extreme_heat":
+      return {
+        hazardId: "extreme_heat",
+        result: {
+          kind: "source_failure",
+          rejectionReason: UNEXPECTED_ANALYSIS_FAILURE_MESSAGE,
+        },
+      };
+    case "drought_land":
+      return {
+        hazardId: "drought_land",
+        result: {
+          kind: "source_failure",
+          sourceOutcomes: { gibs: "failed", usdm: "failed" },
+          rejectionReason: UNEXPECTED_ANALYSIS_FAILURE_MESSAGE,
+        },
+      };
+    case "air_quality":
+    case "earth_volcanoes":
+      return {
+        hazardId: request.hazardId,
+        result: {
+          kind: "source_failure",
+          hazardId: request.hazardId,
+          date: singleMapDateFromSelection(request.placeSelection) ?? "unresolved",
+          area: request.placeSelection.analysisArea.boundingBox,
+          retrievalAttempted: false,
+          sourceOutcomes: {},
+          meaning: {
+            concern: request.concern,
+            summary: UNEXPECTED_ANALYSIS_FAILURE_MESSAGE,
+            optionalQuestionAcknowledged: Boolean(request.optionalQuestion?.trim()),
+          },
+          limitations: [
+            "The check did not finish. Missing information does not mean conditions are safe.",
+          ],
+          rejectionReason: UNEXPECTED_ANALYSIS_FAILURE_MESSAGE,
+        },
+      };
+  }
+}
+
+function visibleFailureAnalysis(
+  request: AnalysisRequest,
+  origin: AnalysisOrigin,
+  generation: number
+): ActiveAnalysis {
+  return {
+    analysisId: `analysis-${generation}-${request.hazardId}-failed`,
+    origin,
+    request,
+    outcome: visibleFailureOutcome(request),
+    completedAt: new Date().toISOString(),
+  };
 }
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
@@ -627,8 +719,35 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         if (generation === analysisQueryGenRef.current) setAgentInvestigation(null);
         return null;
       }
-      if (generation === analysisQueryGenRef.current) setAgentInvestigation(null);
-      throw error;
+      const failure = visibleFailureAnalysis(request, origin, generation);
+      if (generation === analysisQueryGenRef.current) {
+        commitOutcome(failure);
+        commitActiveAnalysis(failure);
+        if (bundleRole === "start_context") {
+          setRelatedAnalyses([failure]);
+        } else if (bundleRole === "context") {
+          setRelatedAnalyses((current) => [...current, failure]);
+        }
+        if (origin === "agent") {
+          setAgentInvestigation((current) => ({
+            investigationId:
+              current?.investigationId ??
+              request.evidenceBundle?.investigationId ??
+              `analysis-${generation}`,
+            kind:
+              current?.kind ?? request.evidenceBundle?.investigationKind ?? "analysis",
+            phase: "complete",
+            totalChains: current?.totalChains ?? 1,
+            completedChains: current?.completedChains ?? 0,
+            scenarioLabels: current?.scenarioLabels ?? (
+              request.evidenceBundle?.scenarioLabel
+                ? [request.evidenceBundle.scenarioLabel]
+                : []
+            ),
+          }));
+        }
+      }
+      return failure;
     } finally {
       if (externalSignal) {
         externalSignal.removeEventListener("abort", abortFromCaller);
@@ -705,7 +824,18 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const outcomes = await Promise.all(requests.map(async (request) => {
-        const outcome = await executeAnalysisRequest(request, { signal: controller.signal });
+        let outcome: AnalysisOutcome;
+        try {
+          outcome = await executeAnalysisRequest(request, { signal: controller.signal });
+        } catch (error) {
+          if (
+            controller.signal.aborted ||
+            (error instanceof DOMException && error.name === "AbortError")
+          ) {
+            throw error;
+          }
+          outcome = visibleFailureOutcome(request);
+        }
         if (generation === analysisQueryGenRef.current) {
           setAgentInvestigation((current) => current ? {
             ...current,
@@ -747,8 +877,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         if (generation === analysisQueryGenRef.current) setAgentInvestigation(null);
         return null;
       }
-      if (generation === analysisQueryGenRef.current) setAgentInvestigation(null);
-      throw error;
+      throw new Error(UNEXPECTED_ANALYSIS_FAILURE_MESSAGE);
     } finally {
       if (externalSignal) {
         externalSignal.removeEventListener("abort", abortFromCaller);

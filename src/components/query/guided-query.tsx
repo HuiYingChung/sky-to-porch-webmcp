@@ -86,6 +86,7 @@ import {
 } from "@/lib/heat/types";
 import type { HeatEvidenceMode } from "@/lib/heat/types";
 import type { DroughtEvidenceMode } from "@/lib/drought/types";
+import { publicErrorMessage } from "@/lib/ui/public-presentation";
 
 interface GuidedQueryProps {
   /** Prefix for all element IDs; keeps IDs unique across desktop/mobile instances. */
@@ -272,7 +273,7 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
       );
     } catch {
       setQuestionError(
-        "The analysis could not be completed. No stale or fixture evidence was substituted."
+        "The analysis could not be completed. No older or unrelated information was substituted."
       );
     }
   }
@@ -344,7 +345,7 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
       setSearchQuery("");
       setTimeout(() => document.getElementById(ids.optionalQuestion)?.focus(), 0);
     } catch (e) {
-      handleSelectionError(e instanceof Error ? e.message : String(e));
+      handleSelectionError(publicErrorMessage(e));
     }
   }
 
@@ -370,7 +371,7 @@ export function GuidedQuery({ idPrefix }: GuidedQueryProps) {
       }
       handleSelection(sel);
     } catch (e) {
-      handleSelectionError(e instanceof Error ? e.message : String(e));
+      handleSelectionError(publicErrorMessage(e));
     }
   }
 

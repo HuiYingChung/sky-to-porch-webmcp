@@ -81,7 +81,7 @@ const HURDAT2_FAILURE_LIMITATION: Limitation = {
   limitationId: "lim-wind-hurdat2-failure",
   source: "nhc_hurdat2",
   description:
-    "The bounded HURDAT2 check failed. Other evidence does not replace the missing tropical-cyclone best-track check, and the failure is not evidence that no storm occurred.",
+    "The HURDAT2 check failed. Other evidence does not replace the missing tropical-cyclone best-track check, and the failure is not evidence that no storm occurred.",
   required: true,
 };
 
@@ -105,7 +105,7 @@ const STATION_DATE_NO_OBSERVATION_LIMITATION: Limitation = {
   limitationId: "lim-wind-station-date-no-observation",
   source: "noaa_ncei_global_hourly",
   description:
-    "In-area GHCNh station-year retrievals contained no usable wind rows for the requested UTC date. Publication lag or reporting gaps may apply; this is not evidence that no storm occurred.",
+    "NOAA's historical hourly station records contained no usable wind readings inside the selected area for the requested date. The records may not be published yet or may have gaps; this does not prove that no storm occurred.",
   required: true,
 };
 
@@ -253,7 +253,7 @@ export async function queryLiveStormEvidence(
     hurdat2.kind === "source_failure"
   ) {
     return sourceFailureResult(
-      "The bounded NOAA GHCNh, NWS Local Storm Report, NCEI Storm Events, and NHC HURDAT2 requests all failed. No rain, flood, fixture, or out-of-area data was substituted."
+      "The NOAA GHCNh, NWS Local Storm Report, NCEI Storm Events, and NHC HURDAT2 checks all failed. No rain, flood, example, or out-of-area information was substituted."
     );
   }
 
@@ -287,9 +287,9 @@ export async function queryLiveStormEvidence(
         agency: "NOAA / NCEI",
         purpose: "Provide named outdoor station wind-speed and wind-gust observations.",
         selectionReason: stationDateReturnedNoObservation
-          ? "In-area station-year files were retrieved, but no usable wind row matched the requested UTC date."
+          ? "The station records were checked, but no usable wind reading matched the requested date inside the selected area."
           : ghcnh.kind === "no_observation"
-            ? "Bounded station discovery found no station whose coordinate lies inside the selected geometry."
+            ? "Station discovery found no station whose coordinate lies inside the selected geometry."
             : "Nearest usable station whose coordinate lies inside the selected geometry.",
         contributedObservationIds: stationObservations.map((item) => item.observationId),
         retrievalStatus: ghcnh.kind === "observations"
@@ -323,7 +323,7 @@ export async function queryLiveStormEvidence(
         selectionReason: nceiStormEvents.kind === "observations"
           ? "Only records whose event date matched the request and whose reported coordinate fell inside the exact selected geometry were included."
           : nceiStormEvents.kind === "source_failure"
-            ? "The bounded annual Storm Events publication check failed closed."
+            ? "The annual collection of historical storm reports could not be checked."
             : "The published annual file contained no matching geolocated Wind & Storm record inside the selected geometry.",
         contributedObservationIds: nceiObservations.map((item) => item.observationId),
         retrievalStatus: "success" as const,
@@ -337,7 +337,7 @@ export async function queryLiveStormEvidence(
         selectionReason: hurdat2.kind === "observations"
           ? "Six-hour best-track center points were included only when their timestamp matched the request and the center coordinate fell inside the exact selected geometry."
           : hurdat2.kind === "source_failure"
-            ? "The bounded HURDAT2 index or track-file check failed closed."
+            ? "The historical storm-track source could not be checked."
             : hurdat2.kind === "not_applicable"
               ? "The requested date falls outside the currently published HURDAT2 record."
               : "No published tropical-cyclone center track point matched the date and selected geometry.",
@@ -351,8 +351,8 @@ export async function queryLiveStormEvidence(
         agency: "NOAA / National Weather Service",
         purpose: "Provide official regional post-event context for the governed Beryl date and area.",
         selectionReason: eventObservation
-          ? "The requested date and selected geometry match the pinned report's governed scope."
-          : "The requested date or selected geometry does not match the pinned report scope.",
+          ? "The requested date and selected geometry match the report's scope."
+          : "The requested date or selected geometry does not match the report scope.",
         contributedObservationIds: eventObservation ? [eventObservation.observationId] : [],
         retrievalStatus: "success" as const,
         keyLimitation: EVENT_LIMITATION.description,

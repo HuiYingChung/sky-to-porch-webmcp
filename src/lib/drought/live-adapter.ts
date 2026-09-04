@@ -91,7 +91,7 @@ const LIM_GIBS_VISUAL_ONLY: Limitation = {
   limitationId: "lim-wp10-gibs-visual-only",
   source: "nasa_gibs_modis_ndvi_16day",
   description:
-    "GIBS NDVI imagery is visualization only; numeric NDVI, vegetation trend, drought cause, crop condition, and property condition are not inferred from PNG colors.",
+    "GIBS NDVI imagery is visualization only; numeric NDVI, vegetation trend, drought cause, crop condition, and property condition are not inferred from image colors.",
   required: true,
 };
 
@@ -139,7 +139,7 @@ const LIM_FAILURE: Limitation = {
   limitationId: "lim-wp10-failure-no-fallback",
   source: "us_drought_monitor_rest",
   description:
-    "No fixture, stale value, cached value, or alternate source was substituted for failed live retrieval.",
+    "No sample data, stale value, cached value, or alternate source was substituted for failed live retrieval.",
   required: true,
 };
 
@@ -948,8 +948,8 @@ export async function queryLiveDroughtEvidence(
     if (canadaObservation) evidence.missionAttributions.push({
       missionName: canadaEntry.displayName,
       agency: canadaEntry.agency,
-      purpose: canadaEntry.role,
-      selectionReason: "The latest official monthly product not after the requested date returned a center-point source raster class inside the exact selected geometry.",
+      purpose: "Shows Canada's official monthly drought category for broad areas.",
+      selectionReason: "Used the newest official monthly map available on or before the requested date for the selected place.",
       contributedObservationIds: [canadaObservation.observationId],
       retrievalStatus: "success",
       keyLimitation: canadaEntry.requiredLimitations[0],

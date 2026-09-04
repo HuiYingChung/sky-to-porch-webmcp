@@ -45,6 +45,8 @@ describe("adaptive Meaning and map-alternative UX", () => {
     expect(html).toContain(
       "rule-based explanation · derived from validated evidence"
     );
+    expect(html).not.toContain("exp-test");
+    expect(html).not.toContain("evidence-test");
   });
 
   it("renders the same canonical map selection as a text view without duplicating date controls", () => {

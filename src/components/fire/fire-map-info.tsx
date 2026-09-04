@@ -23,17 +23,26 @@
 import React from "react";
 import type { EvidenceObject } from "@/contracts/evidence";
 import type { FireTemporalCoverage } from "@/lib/fire/types";
+import { evidenceStateLabel } from "@/lib/ui/evidence-labels";
+import { formatUtcTimestamp } from "@/lib/ui/public-presentation";
 
 interface FireMapInfoProps {
   evidence: EvidenceObject;
   temporalCoverage?: FireTemporalCoverage;
 }
 
+function coverageStatusLabel(status: FireTemporalCoverage["status"]): string {
+  if (status === "complete") return "All requested dates checked";
+  if (status === "partial") return "Some requested dates checked";
+  if (status === "unsupported") return "Dates not covered";
+  return "Dates could not be checked";
+}
+
 function mapModeLabel(dataMode: string): string {
   if (dataMode === "live") return "LIVE RETRIEVAL · HISTORICAL OBSERVATION";
   if (dataMode === "fixture") return "FIXTURE · HISTORICAL";
   if (dataMode === "failed") return "FAILED RETRIEVAL";
-  return dataMode.toUpperCase();
+  return "DATA MODE UNAVAILABLE";
 }
 
 /**
@@ -89,19 +98,19 @@ export function FireMapCoverageLabel({ evidence, temporalCoverage }: FireMapInfo
         </span>
       </div>
       <div>Coverage: {bboxStr}</div>
-      <div>Observed: {observedAt}</div>
+      <div>Observed: {formatUtcTimestamp(observedAt)}</div>
       {temporalCoverage && (
         <div data-testid="fire-map-temporal-coverage">
           UTC dates: {temporalCoverage.resolvedStartDate ?? "none"}
           {temporalCoverage.resolvedEndDate && temporalCoverage.resolvedEndDate !== temporalCoverage.resolvedStartDate
             ? ` – ${temporalCoverage.resolvedEndDate}`
             : ""}
-          {" · "}{temporalCoverage.status}
+          {" · "}{coverageStatusLabel(temporalCoverage.status)}
         </div>
       )}
       <div>
         State:{" "}
-        <span data-testid="fire-map-state">{evidence.evidenceState}</span>
+        <span data-testid="fire-map-state">{evidenceStateLabel(evidence.evidenceState)}</span>
       </div>
       {isNoData && (
         <div

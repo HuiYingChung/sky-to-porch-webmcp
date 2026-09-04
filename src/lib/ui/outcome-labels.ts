@@ -14,7 +14,9 @@ const SOURCE_OUTCOME_LABELS: Record<string, string> = {
   credential_gate_closed: "blocked by a missing credential",
 };
 
-/** Plain-language label for a per-source outcome; unknown values fall back to spaced words. */
-export function sourceOutcomeLabel(outcome: string): string {
-  return SOURCE_OUTCOME_LABELS[outcome] ?? outcome.replaceAll("_", " ");
+/** Plain-language label for a per-source outcome; unknown values never leak raw codes. */
+export function sourceOutcomeLabel(outcome: unknown): string {
+  return typeof outcome === "string"
+    ? SOURCE_OUTCOME_LABELS[outcome] ?? "status unavailable"
+    : "status unavailable";
 }

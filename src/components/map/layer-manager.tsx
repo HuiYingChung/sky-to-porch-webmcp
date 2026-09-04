@@ -152,13 +152,13 @@ function wildfireErrorMessage(error: WildfireLayerErrorCode | null): string {
     return "Fire hotspots are not available right now because this app is running without its NASA FIRMS access key. No substitute points are shown.";
   }
   if (error === "rate_limited") {
-    return "NASA FIRMS temporarily rate-limited the selected-area request. This is not evidence of no wildfire.";
+    return "NASA FIRMS received too many requests to check this area right now. This is not evidence of no wildfire.";
   }
   if (error === "response_too_large") {
     return "The response exceeded the safe display limit. No partial or silently truncated layer is shown.";
   }
   if (error === "schema_validation") {
-    return "The response failed deterministic validation. No unvalidated points are shown.";
+    return "The source returned information this app could not verify, so no map points are shown.";
   }
   return "The FIRMS selected-area request failed. Failure is not evidence of no wildfire.";
 }

@@ -1,5 +1,6 @@
 import type { Explanation } from "@/contracts/evidence";
 import { missionContextReference } from "@/data/mission-context";
+import { publicNarrativeText } from "@/lib/ui/public-presentation";
 
 /** Full deterministic claim trace belongs in Evidence, not the concise Meaning answer. */
 export function ExplanationAudit({ explanation }: { explanation?: Explanation }) {
@@ -31,7 +32,7 @@ export function ExplanationAudit({ explanation }: { explanation?: Explanation })
         }}
       >
         <strong style={{ display: "block", marginBottom: "3px" }}>Observed</strong>
-        {explanation.observed}
+        {publicNarrativeText(explanation.observed)}
       </div>
       {explanation.inferred && (
         <div
@@ -44,7 +45,7 @@ export function ExplanationAudit({ explanation }: { explanation?: Explanation })
           }}
         >
           <strong style={{ display: "block", marginBottom: "3px" }}>Inferred</strong>
-          {explanation.inferred}
+          {publicNarrativeText(explanation.inferred)}
         </div>
       )}
       {keyBoundaries.length > 0 && (
@@ -52,7 +53,7 @@ export function ExplanationAudit({ explanation }: { explanation?: Explanation })
           <strong>Key boundaries</strong>
           <ul style={{ margin: "6px 0 0", paddingInlineStart: "20px", display: "grid", gap: "6px" }}>
             {keyBoundaries.map((item) => (
-              <li key={item} style={{ paddingInlineStart: "2px", lineHeight: 1.45 }}>{item}</li>
+              <li key={item} style={{ paddingInlineStart: "2px", lineHeight: 1.45 }}>{publicNarrativeText(item)}</li>
             ))}
           </ul>
         </div>
@@ -64,7 +65,7 @@ export function ExplanationAudit({ explanation }: { explanation?: Explanation })
           </summary>
           <ul style={{ margin: "8px 0 0", paddingInlineStart: "20px", display: "grid", gap: "7px" }}>
             {additionalLimitations.map((item) => (
-              <li key={item} style={{ paddingInlineStart: "2px", lineHeight: 1.5 }}>{item}</li>
+              <li key={item} style={{ paddingInlineStart: "2px", lineHeight: 1.5 }}>{publicNarrativeText(item)}</li>
             ))}
           </ul>
         </details>
@@ -79,7 +80,7 @@ export function ExplanationAudit({ explanation }: { explanation?: Explanation })
           }}
         >
           <strong style={{ display: "block", marginBottom: "3px" }}>Conflicts or missing data</strong>
-          {explanation.conflictsOrGaps}
+          {publicNarrativeText(explanation.conflictsOrGaps)}
         </div>
       )}
     </section>

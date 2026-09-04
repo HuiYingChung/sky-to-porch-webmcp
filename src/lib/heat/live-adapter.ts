@@ -571,7 +571,7 @@ const GIBS_LIMITATION: Limitation = {
   limitationId: "lim-wp09-live-gibs-visual-only",
   source: "nasa_gibs_modis_lst_day",
   description:
-    "NASA GIBS imagery is visualization evidence only; no numeric temperature is inferred from PNG colors, and land-surface temperature is not air or indoor temperature.",
+    "NASA GIBS imagery is visualization evidence only; no numeric temperature is inferred from image colors, and land-surface temperature is not air or indoor temperature.",
   required: true,
 };
 
@@ -579,7 +579,7 @@ const NO_STATION_LIMITATION: Limitation = {
   limitationId: "lim-uxfix02-heat-no-station-in-area",
   source: "noaa_uscrn_heat_exposure",
   description:
-    "No allowlisted NOAA USCRN outdoor station exists inside the selected area. " +
+    "No NOAA USCRN outdoor station exists inside the selected area. " +
     "Satellite visualization alone does not establish outdoor air temperature, heat index, " +
     "indoor conditions, or individual risk.",
   required: true,
@@ -595,7 +595,7 @@ function uscrnPartialDayLimitation(distinctHourCount: number): Limitation {
     limitationId: "lim-adr0041-uscrn-partial-day",
     source: "noaa_uscrn_heat_exposure",
     description:
-      `The USCRN station published ${distinctHourCount} of 24 hourly rows for this UTC date. ` +
+      `The USCRN station published ${distinctHourCount} of 24 hourly readings for this UTC date. ` +
       "Unpublished hours are missing evidence, not observed-safe hours, and the daily peak " +
       "may fall inside a missing hour.",
     required: true,
@@ -621,7 +621,7 @@ const NOAA_LIMITATION: Limitation = {
   limitationId: "lim-wp09-live-uscrn-station",
   source: "noaa_uscrn_heat_exposure",
   description:
-    "USCRN Heat01 describes one named outdoor station and hour. It does not establish indoor temperature, household certainty, or individual medical risk.",
+    "USCRN describes one named outdoor station and hour. It does not establish indoor temperature, household certainty, or individual medical risk.",
   required: true,
 };
 
@@ -662,8 +662,8 @@ const GHCNH_UNAVAILABLE_LIMITATION: Limitation = {
   limitationId: "lim-adr0039-ghcnh-no-usable-station",
   source: NCEI_GHCNH_SOURCE_ID,
   description:
-    "No in-area GHCNh station returned usable readings for this date within the bounded " +
-    "attempts. Missing evidence is not evidence of safe conditions.",
+    "No in-area GHCNh station returned usable readings for this date. " +
+    "Missing evidence is not evidence of safe conditions.",
   required: true,
 };
 
@@ -692,11 +692,11 @@ function missionAttribution(
     agency: "NASA",
     purpose: "MODIS daily daytime land-surface-temperature visualization through NASA GIBS",
     selectionReason: isCustomArea
-      ? "Credential-free daily visualization for the Web-Mercator tile covering the selected area center"
-      : "Credential-free daily visualization for the fixed Tucson demonstration tile",
+      ? "Used the daily satellite image covering the selected area center."
+      : "Used the daily satellite image covering the selected example area.",
     contributedObservationIds: observationId ? [observationId] : [],
     retrievalStatus: status,
-    keyLimitation: "The PNG is visualization only; no numeric temperature is inferred from colors.",
+    keyLimitation: "The image is visualization only; no numeric temperature is inferred from colors.",
     datasetId: GIBS_HEAT_LAYER_ID,
   };
 }
@@ -766,7 +766,7 @@ function sourceFailureEvidence(
       status: "unknown",
       classificationBasis: "no_observation_time",
       evaluatedAt,
-      note: "No observation time exists because the live retrieval failed closed.",
+      note: "No observation time exists because the source could not be checked.",
     },
     confidence: {
       level: "insufficient",

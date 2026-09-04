@@ -52,7 +52,7 @@ test("Drought uses the shared CTA and adaptive Meaning for a blank question", as
     .toContainText("rule-based explanation");
 });
 
-test("Drought Evidence exposes observations and safe product URLs, not raw request URLs", async ({ page }) => {
+test("Drought Evidence exposes observations and safe product URLs, not raw request URLs or internal IDs", async ({ page }) => {
   await submitDrought(page);
   const evidence = await insight(page, "evidence");
   await expect(evidence.getByTestId("drought-evidence-summary")).toBeVisible();
@@ -65,6 +65,10 @@ test("Drought Evidence exposes observations and safe product URLs, not raw reque
   const hrefs = await sourceLinks.evaluateAll((links) => links.map((link) => link.getAttribute("href")));
   expect(hrefs.join(" ")).not.toContain("?bbox=");
   expect(hrefs.join(" ")).not.toContain("apiKey");
+  const visibleText = await evidence.innerText();
+  expect(visibleText).not.toMatch(
+    /Evidence ID|Observation ID|payload hash|\b(?:evd|obs)-[a-z0-9_-]+\b|\b[0-9a-f]{32,}\b|\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b|\.(?:csv|json|geojson|png|tiff?|kml|xml|psv|txt|zip|gz)\b/iu
+  );
 });
 
 test("Drought Missions separates Terra and USDM background from this observation", async ({ page }) => {
