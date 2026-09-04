@@ -30,7 +30,7 @@ export type AdministrativeAreaResult =
       kind: "resolved";
       area: UsAdministrativeArea;
       sourceUrl: string;
-      selectionBasis: "center_inside" | "nearest_intersecting_geometry";
+      selectionBasis: "center_inside";
     }
   | { kind: "no_observation"; sourceUrl: string }
   | { kind: "source_failure"; reason: AdministrativeAreaFailureReason };
@@ -255,13 +255,18 @@ export async function resolveUsAdministrativeArea(
     candidates.sort((left, right) =>
       left.distance - right.distance || left.area.fips.localeCompare(right.area.fips)
     );
+    // USDM returns whole-state statistics. A state that merely intersects the
+    // request envelope is not representative when the selected area's center
+    // is outside that state (for example, Toronto with a box that grazes New
+    // York). Fail closed instead of promoting the nearest intersecting state.
+    if (candidates[0].distance !== 0) {
+      return { kind: "no_observation", sourceUrl: url.toString() };
+    }
     return {
       kind: "resolved",
       area: candidates[0].area,
       sourceUrl: url.toString(),
-      selectionBasis: candidates[0].distance === 0
-        ? "center_inside"
-        : "nearest_intersecting_geometry",
+      selectionBasis: "center_inside",
     };
   } catch (error) {
     return {

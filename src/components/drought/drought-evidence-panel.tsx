@@ -97,6 +97,9 @@ function EvidencePanel({
         Monitor {sourceOutcomeLabel(result.sourceOutcomes.usdm)}
         {result.sourceOutcomes.administrativeArea
           ? `; administrative-area lookup ${sourceOutcomeLabel(result.sourceOutcomes.administrativeArea)}`
+          : ""}
+        {result.sourceOutcomes.canadaDrought
+          ? `; Canadian Drought Monitor ${sourceOutcomeLabel(result.sourceOutcomes.canadaDrought)}`
           : ""}.
       </p>
       <ProgressiveDisclosure

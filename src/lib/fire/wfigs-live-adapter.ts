@@ -72,7 +72,7 @@ export function observationsFromWfigsGeoJson(
     const acres = finiteNumber(properties.poly_GISAcres ?? properties.attr_IncidentSize);
     const percentContained = finiteNumber(properties.attr_PercentContained);
     observations.push({
-      observationId: `obs-wfigs-perimeter-${String(objectId)}`,
+      observationId: `obs-wfigs-perimeter-${String(objectId)}-${date}`,
       provenance: {
         sourceId: "nifc_wfigs_fire_perimeters",
         sourceUrl,
@@ -88,7 +88,7 @@ export function observationsFromWfigsGeoJson(
       },
       variableName: "Official interagency wildfire perimeter record",
       textValue: `${incidentName} has a WFIGS perimeter intersecting the selected area for the requested date.`,
-      dataMode: "historical",
+      dataMode: "live",
       qualifiers: ["official_interagency_perimeter", "publication_timing_varies", "not_property_or_tactical_truth"],
       periodStart: `${date}T00:00:00.000Z`,
       periodEnd: `${date}T23:59:59.999Z`,

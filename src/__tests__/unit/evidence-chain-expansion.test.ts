@@ -141,7 +141,11 @@ describe("expanded official evidence adapters", () => {
     const raw = bytes(JSON.stringify(payload));
     const observations = observationsFromGvpGeoJson(payload, raw, "https://webservices.volcano.si.edu/geoserver/GVP-VOTW/ows", AREA, "2026-08-28", NOW.toISOString());
     expect(observations).toHaveLength(1);
-    expect(observations[0]).toMatchObject({ provenance: { sourceId: "smithsonian_gvp_eruptions" }, metadata: { volcanoName: "Fixture Volcano", maximumVei: 2 } });
+    expect(observations[0]).toMatchObject({
+      dataMode: "live",
+      provenance: { sourceId: "smithsonian_gvp_eruptions" },
+      metadata: { volcanoName: "Fixture Volcano", maximumVei: 2 },
+    });
   });
 
   it("bounds the Smithsonian GVP live query by selected area and requested year", async () => {
@@ -180,7 +184,11 @@ describe("expanded official evidence adapters", () => {
     const observations = observationsFromAqsJson(payload, raw, AREA, "2025-01-08", NOW.toISOString());
     expect(observations).toHaveLength(1);
     expect(observations[0].provenance.sourceUrl).not.toContain("key=");
-    expect(observations[0]).toMatchObject({ value: 9.5, provenance: { sourceId: "epa_aqs" } });
+    expect(observations[0]).toMatchObject({
+      dataMode: "live",
+      value: 9.5,
+      provenance: { sourceId: "epa_aqs" },
+    });
   });
 
   it("selects the latest published Canadian drought raster without guessing a class label", async () => {
@@ -201,6 +209,7 @@ describe("expanded official evidence adapters", () => {
     );
     expect(result.kind).toBe("observation");
     if (result.kind !== "observation") return;
+    expect(result.observation.dataMode).toBe("live");
     expect(result.observation.textValue).toBe("Official source raster class code 0");
     expect(result.observation.qualifiers).toContain("source_code_not_relabelled_without_verified_attribute_table");
   });

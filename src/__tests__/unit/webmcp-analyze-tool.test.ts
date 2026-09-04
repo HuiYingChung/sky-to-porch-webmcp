@@ -8,6 +8,7 @@ import {
   MAX_OUTPUT_CHARACTERS,
   createAnalyzeHazardTool,
   executeAnalyzeHazardTool,
+  resultStatusNameForOutput,
 } from "@/lib/webmcp/analyze-tool";
 import { placeChoiceId } from "@/lib/webmcp/place-resolution";
 import type {
@@ -16,6 +17,20 @@ import type {
 } from "@/lib/webmcp/place-tool";
 
 const NOW = new Date("2026-08-26T18:00:00.000Z");
+
+describe("agent-facing result status labels", () => {
+  it.each([
+    ["success", "Official readings and reports returned"],
+    ["no_observation", "No matching readings or reports returned"],
+    ["inconclusive_evidence", "Context returned; no direct reading"],
+    ["stale_data", "Available readings are out of date"],
+    ["unsupported_coverage", "Not supported for this area"],
+    ["source_failure", "Official source unavailable"],
+  ])("uses a specific public label for %s", (status, label) => {
+    expect(resultStatusNameForOutput(status)).toBe(label);
+    expect(resultStatusNameForOutput(status)).not.toBe("Information status unavailable");
+  });
+});
 
 function toolOptions(signal = new AbortController().signal): WebMCP.ToolExecuteCallbackOptions {
   return { signal };

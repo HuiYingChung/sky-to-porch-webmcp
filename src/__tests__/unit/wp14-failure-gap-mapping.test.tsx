@@ -262,7 +262,12 @@ describe("ResultFailureGapBoundary evidence-first ordering", () => {
   it("keeps each Drought source outcome visible beside partial evidence", () => {
     const result = {
       kind: "inconclusive_evidence",
-      sourceOutcomes: { gibs: "failed", usdm: "success", administrativeArea: "success" },
+      sourceOutcomes: {
+        gibs: "failed",
+        usdm: "success",
+        administrativeArea: "success",
+        canadaDrought: "no_observation",
+      },
       evidence: evidence({ observations: [observation] }),
     } as DroughtQueryResult;
     const rendered = render(
@@ -277,6 +282,7 @@ describe("ResultFailureGapBoundary evidence-first ordering", () => {
     expect(outcomes?.textContent).toContain("NASA GIBS failed");
     expect(outcomes?.textContent).toContain("U.S. Drought Monitor succeeded");
     expect(outcomes?.textContent).toContain("administrative-area lookup succeeded");
+    expect(outcomes?.textContent).toContain("Canadian Drought Monitor returned nothing");
     expect(rendered.container.textContent).not.toContain("obs-wp14-test");
     expect(rendered.container.textContent).not.toContain("us_drought_monitor_rest");
     expect(rendered.container.textContent).not.toContain("a".repeat(64));

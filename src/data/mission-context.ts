@@ -46,12 +46,25 @@ const USDM: MissionContextReference = {
   imageryLabel: "Official U.S. Drought Monitor map examples",
 };
 
+const CANADIAN_DROUGHT_MONITOR: MissionContextReference = {
+  label: "Canadian Drought Monitor",
+  instrument: "Multi-source monthly assessment; not a satellite instrument",
+  overviewUrl:
+    "https://agriculture.canada.ca/en/agriculture-and-environment/drought-watch-and-agroclimate/canadian-drought-monitor",
+  imageryUrl:
+    "https://agriculture.canada.ca/en/agricultural-production/weather/canadian-drought-monitor/drought-analysis",
+  imageryLabel: "Official Canadian Drought Monitor maps and comparisons",
+};
+
 export function missionContextReference(
   datasetId: string | undefined,
   missionName: string
 ): MissionContextReference | null {
   const key = `${datasetId ?? ""} ${missionName}`.toLowerCase();
-  if (key.includes("drought monitor") || key.includes("us_drought_monitor")) return USDM;
+  if (key.includes("canadian drought monitor") || key.includes("canada_drought_monitor")) {
+    return CANADIAN_DROUGHT_MONITOR;
+  }
+  if (key.includes("u.s. drought monitor") || key.includes("us_drought_monitor")) return USDM;
   if (key.includes("gpm") || key.includes("imerg") || key.includes("precipitation measurement")) return GPM;
   if (key.includes("terra") || key.includes("modis") || key.includes("surface_temp") || key.includes("ndvi")) return TERRA;
   if (key.includes("firms") || key.includes("suomi") || key.includes("viirs")) return FIRMS_VIIRS;

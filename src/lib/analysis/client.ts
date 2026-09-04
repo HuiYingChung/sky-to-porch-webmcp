@@ -199,7 +199,7 @@ async function analyzeCoverageGap(
       hazardId,
       date,
       area: placeSelection.analysisArea.boundingBox,
-      retrievalAttempted: false,
+      retrievalAttempted: true,
       sourceOutcomes: {},
       meaning: {
         concern,
