@@ -118,6 +118,7 @@ interface ToolFailure {
   message: string;
   ui_updated: false;
   no_data_is_not_no_danger: true;
+  reason?: "rate_limited";
   choices?: AgentPlaceChoice[];
   requires_user_input?: true;
   required_next_action?: "ask_user_to_choose_place_and_wait";
@@ -676,6 +677,13 @@ async function resolvePlace(
     return failure("place_lookup_failed", "Place search failed; no evidence query was run.");
   }
 
+  if (response.status === 429) {
+    return {
+      ...failure("place_lookup_failed", "Place search was rate-limited; no evidence query was run."),
+      reason: "rate_limited",
+    };
+  }
+
   let payload: unknown;
   try {
     payload = await response.json();
@@ -720,6 +728,30 @@ async function resolvePlace(
     return placeChoiceFailure(input, placeChoices(candidates));
   }
   return candidates[0];
+}
+
+function namedPlaceResolutionKey(input: ParsedInput): string | null {
+  if (input.latitude !== undefined && input.longitude !== undefined) {
+    return null;
+  }
+  const normalizedPlace = input.place
+    .normalize("NFKC")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .toLocaleLowerCase("en-US");
+  return normalizedPlace;
+}
+
+function canShareNamedPlaceResolution(
+  baseline: ParsedInput,
+  comparison: ParsedInput
+): boolean {
+  const baselineKey = namedPlaceResolutionKey(baseline);
+  if (baselineKey === null || baselineKey !== namedPlaceResolutionKey(comparison)) {
+    return false;
+  }
+  return comparison.placeChoiceId === undefined ||
+    baseline.placeChoiceId === comparison.placeChoiceId;
 }
 
 function truncate(value: string, maxLength: number): string {
@@ -1335,7 +1367,12 @@ function comparisonPlaceFailure(
   input: ToolFailure,
   rawInput: Record<string, unknown>
 ) {
-  if (input.status !== "needs_place_choice") return input;
+  if (input.status !== "needs_place_choice") {
+    return {
+      ...input,
+      failed_scenario: scenario,
+    };
+  }
   return {
     ...input,
     message: `PAUSE FOR USER: the ${scenario} place is ambiguous. Ask the person to choose one option, wait for a new user message, then retry this comparison with every original argument unchanged and set only ${scenario}.place_choice_id to the selected choice_id.`,
@@ -1421,11 +1458,18 @@ export async function executeCompareHazardTool(
   const comparisonInput = comparisonScenarioInput(rawInput, "comparison", now);
   if ("status" in comparisonInput) return comparisonInput;
 
-  const baselineResolved = await resolvePlace(baselineInput, dependencies.fetchImpl ?? fetch, signal);
+  const fetchImpl = dependencies.fetchImpl ?? fetch;
+  const shareNamedPlaceResolution = canShareNamedPlaceResolution(
+    baselineInput,
+    comparisonInput
+  );
+  const baselineResolved = await resolvePlace(baselineInput, fetchImpl, signal);
   if ("status" in baselineResolved) {
     return comparisonPlaceFailure("baseline", baselineResolved, rawInput);
   }
-  const comparisonResolved = await resolvePlace(comparisonInput, dependencies.fetchImpl ?? fetch, signal);
+  const comparisonResolved = shareNamedPlaceResolution
+    ? baselineResolved
+    : await resolvePlace(comparisonInput, fetchImpl, signal);
   if ("status" in comparisonResolved) {
     return comparisonPlaceFailure("comparison", comparisonResolved, rawInput);
   }

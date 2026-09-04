@@ -828,6 +828,20 @@ test("Agent comparison keeps both storm chains visible for both user-sized scena
     });
   });
 
+  let geocodeRequestCount = 0;
+  await page.route("**/api/geocode", async (route) => {
+    geocodeRequestCount += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        results: [
+          { id: "houston-city", label: "Houston, Texas", lon: -95.3698, lat: 29.7604 },
+        ],
+      }),
+    });
+  });
   const floodRequests: Array<Record<string, unknown>> = [];
   const windRequests: Array<Record<string, unknown>> = [];
   await page.route("**/api/flood/query", async (route) => {
@@ -868,21 +882,24 @@ test("Agent comparison keeps both storm chains visible for both user-sized scena
     if (!tool) throw new Error("WebMCP comparison tool was not registered");
     return tool.execute({
       baseline: {
-        place: "29.7604, -95.3698",
+        place: " Houston ",
+        place_choice_id: "place-houston-city",
         radius_km: 50,
-        time: "2026-08-28",
+        time: "2024-07-07",
       },
       comparison: {
-        place: "30.2672, -97.7431",
+        place: "HOUSTON",
+        place_choice_id: "place-houston-city",
         radius_km: 15,
-        time: "2026-08-27",
+        time: "2024-07-08",
       },
       hazard: "wind_storm",
       analysis_scope: "related_context",
-      question: "Compare the storm evidence for both scenarios.",
+      question: "Compare Houston storm evidence on July 7 and July 8, 2024.",
     }, { signal: new AbortController().signal });
   }) as Record<string, unknown>;
 
+  expect(geocodeRequestCount).toBe(1);
   expect(floodRequests).toHaveLength(2);
   expect(windRequests).toHaveLength(2);
   expect(output).toMatchObject({
@@ -890,16 +907,18 @@ test("Agent comparison keeps both storm chains visible for both user-sized scena
     must_report_every_scenario_and_chain: true,
     agent_response_contract: { style: "plain_english", summary_first: true },
     scenarios: [
-      {
-        id: "baseline",
-        radius_km: 50,
-        chains: [{ hazard: "flood_storm" }, { hazard: "wind_storm" }],
-      },
-      {
-        id: "comparison",
-        radius_km: 15,
-        chains: [{ hazard: "flood_storm" }, { hazard: "wind_storm" }],
-      },
+        {
+          id: "baseline",
+          radius_km: 50,
+          time: "2024-07-07",
+          chains: [{ hazard: "flood_storm" }, { hazard: "wind_storm" }],
+        },
+        {
+          id: "comparison",
+          radius_km: 15,
+          time: "2024-07-08",
+          chains: [{ hazard: "flood_storm" }, { hazard: "wind_storm" }],
+        },
     ],
   });
   expect(JSON.stringify(output).length).toBeLessThanOrEqual(2_400);
