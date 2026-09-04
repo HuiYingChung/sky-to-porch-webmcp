@@ -150,10 +150,14 @@ tool contracts and compact outputs live under
 production build, desktop/mobile browser journeys, and the secret gate.
 Live-source smoke checks and optional model-scored tool-selection evaluations
 remain separate so fixture success is never presented as live-source proof.
+The 2026-08-30 expanded evidence-chain record is local deterministic and local
+live-source evidence. Those expansion journeys have not been separately
+verified in production.
 
 Key records:
 
-- [Expanded evidence-chain verification](docs/testing/evidence-chain-expansion-live-verification-2026-08-30.md)
+- [NCEI streamed-archive OOM verification](docs/testing/ncei-streaming-oom-verification-2026-09-03.md)
+- [Expanded evidence-chain local/live-source verification](docs/testing/evidence-chain-expansion-live-verification-2026-08-30.md)
 - [Native Agent acceptance](docs/testing/native-agent-acceptance-2026-08-27.md)
 - [Production Agent verification](docs/testing/native-agent-production-verification-2026-08-27.md)
 - [Historical demo verification](docs/testing/evidence-forward-demo-live-verification-2026-08-27.md)
