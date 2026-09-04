@@ -44,15 +44,16 @@
   the secret gate. A live Houston 2026-08-28 check returned the NWS flash-flood
   report, and focused model evaluation passed 3/3 selection cases plus 1/1
   plain-English two-chain summary case
-- NCEI archive reliability: production requests to the shared Storm Events
-  path on deployed commit `92f1909` were killed for memory. The local
-  `fix/ncei-streaming-oom` candidate replaces whole-file materialization with
-  capped streaming and matches the frozen legacy output on the real 2024
-  archive while keeping sampled JavaScript heap at 49.4 MB and RSS at 178 MB.
-  The final local gate passes 1,424 unit tests, 133 integration tests, a
-  14-page production build, 234 browser journeys, and the secret check. This is
-  local candidate evidence; production repair remains pending deployment and
-  post-deploy verification
+- NCEI archive reliability: complete. Pull request #13 merged the capped
+  streaming repair as `07096ef`; Vercel deployment
+  `dpl_2Zfn2axorbunWVSL1LiHgt5Soeta` reached `READY` at that commit. The
+  production Houston 50 km reruns returned HTTP 200 for both routes, with 473
+  MB Fluid memory for Wind & Storm and 345 MB for Flood & Heavy Rain, and the
+  post-deploy log scan found no runtime error or OOM. The final local gate also
+  passes 1,424 unit tests, 133 integration tests, a 14-page production build,
+  234 browser journeys, and the secret check. A 2026-09-04
+  WebMCP-compatible Chrome Agent run passed Judge quick-start step 1 after the
+  required Houston place choice, returning both chains in one related bundle
 - W6 release and submission: private release preparation remains in progress;
   the repo stays private by owner direction. Stable-place product commit
   `72f3a36` passed local, PR-head, post-merge main, deployment, and production
@@ -64,8 +65,8 @@ is recorded in
 [`docs/testing/native-agent-acceptance-2026-08-27.md`](docs/testing/native-agent-acceptance-2026-08-27.md)
 and the later production rerun is recorded in
 [`docs/testing/native-agent-production-verification-2026-08-27.md`](docs/testing/native-agent-production-verification-2026-08-27.md).
-The NCEI incident, local repair evidence, and pending production boundary are
-recorded in
+The NCEI incident, local repair evidence, production recovery, and
+supported-browser Judge record are recorded in
 [`docs/testing/ncei-streaming-oom-verification-2026-09-03.md`](docs/testing/ncei-streaming-oom-verification-2026-09-03.md).
 
 The 2026-08-30 expanded evidence-chain gate was deterministic and live-source

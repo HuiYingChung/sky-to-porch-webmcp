@@ -131,7 +131,30 @@ it could access the site but did not have access to the site's WebMCP tool
 interface, so the required Agent return with linked Wind and Flood results was
 **not verified in that environment**. Both the Codex in-app browser and the
 controlled Chrome page likewise exposed the site's explicit `Agent
-unavailable` status. No successful WebMCP claim is made.
+unavailable` status. No successful WebMCP claim is made for those sessions.
+
+A later owner-run verification in a WebMCP-compatible Chrome environment
+passed the functional Judge quick-start step 1 at 2026-09-04 02:12--02:17 UTC.
+The exported tool transcript records the exact README prompt, followed by an
+initial `analyze_environmental_hazard` call with `wind_storm`,
+`related_context`, 50 km, and `2024-07-08`. The tool paused for the ambiguous
+Houston place choice; after option 1 was selected, the Agent retried with
+`place-osm-r-2688911` while preserving the original arguments. The completed
+`related_environmental_evidence_bundle` reported `ui_updated: true`, four
+official sources, no failed or incomplete source checks, and both included
+chains: `flood_storm` and `wind_storm`. The final response separately reported
+Flood & Heavy Rain as inconclusive evidence and Wind & Storm as observations
+returned, including each chain's confidence, strongest evidence, time, source,
+and limitation.
+
+This verifies the README-permitted WebMCP-compatible-browser route, the
+generic-storm two-chain bundle, and the shared-view update. The export identifies
+the browser Agent model as `gemini-3.6-flash`, not ChatGPT's in-app Agent, and
+does not contain the tab URL; production-host attribution therefore relies on
+the owner's test statement. It also records `ui_updated: true` but does not
+visually prove the rendered links. Later `RegisteredTool` errors in the export
+belong to a separate August 2026 comparison request and are not included in
+this Judge-step pass.
 
 As a browser fallback, the production human UI completed both Houston example
 journeys in the same session. Wind & Storm (July 8) displayed `Observations
