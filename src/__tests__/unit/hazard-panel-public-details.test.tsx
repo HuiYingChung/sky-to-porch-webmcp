@@ -98,6 +98,36 @@ describe("hazard Evidence panels public details", () => {
     expect(rendered[3].text).toContain("NASA GIBS MODIS Terra L3 NDVI 16-Day v6.1 Standard visualization");
   });
 
+  it("does not present an unqueried U.S. source as contributing to a Canadian drought result", () => {
+    const fixture = queryDroughtFixture({
+      placeId: "demo-tucson",
+      date: DROUGHT_PINNED_FIXTURE_DATE,
+      mode: "fixture",
+    });
+    if (!fixture.evidence) throw new Error("Expected successful fixture evidence");
+    const evidence = structuredClone(fixture.evidence);
+    evidence.missionAttributions = evidence.missionAttributions.filter((mission) =>
+      !mission.missionName.includes("U.S. Drought Monitor")
+    );
+    const result: DroughtQueryResult = {
+      ...fixture,
+      evidence,
+      sourceOutcomes: { gibs: "success", usdm: "not_attempted" },
+    };
+
+    const missionsText = visibleText(
+      <DroughtEvidenceInsightPanel result={result} tab="missions" />
+    );
+    const evidenceText = visibleText(
+      <DroughtEvidenceInsightPanel result={result} tab="evidence" />
+    );
+
+    expect(missionsText).toContain("1 contributing mission or data source is shown");
+    expect(missionsText).toContain("Terra");
+    expect(missionsText).not.toContain("U.S. Drought Monitor");
+    expect(evidenceText).toContain("U.S. Drought Monitor");
+  });
+
   it("preserves ordinary slashes in professional names and formats storm timestamps", () => {
     const fire = queryFireEvidence({
       placeId: "demo-los-angeles",

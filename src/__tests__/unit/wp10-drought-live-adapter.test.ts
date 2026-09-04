@@ -973,6 +973,13 @@ describe("queryLiveDroughtEvidence", () => {
       });
       expect(result.evidence?.observations.map((observation) => observation.provenance.sourceId))
         .toEqual(["nasa_gibs_modis_ndvi_16day"]);
+      expect(result.evidence?.missionAttributions.map((mission) => mission.missionName))
+        .toEqual(["Terra MODIS NDVI visualization"]);
+      expect(result.evidence?.limitations.map((limitation) => limitation.limitationId))
+        .not.toEqual(expect.arrayContaining([
+          "lim-wp10-usdm-regional",
+          "lim-wp10-scale-mismatch",
+        ]));
     });
 
     it("uses the canonical bbox, resolves New York, and queries matching USDM statistics", async () => {
@@ -1109,6 +1116,41 @@ describe("queryLiveDroughtEvidence", () => {
         "lim-wp10-gibs-no-observation-not-safe"
       );
       expect(JSON.stringify(result)).not.toContain("fixture");
+    });
+
+    it("keeps unsupported coverage valid when neither regional source can be queried", async () => {
+      const futureOnly = domainXml("2025-01-01/2025-01-17/P16D");
+      const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("gitc.earthdata.nasa.gov")) {
+          return new Response(asBody(futureOnly), {
+            status: 200,
+            headers: { "Content-Type": "text/xml" },
+          });
+        }
+        if (url.includes("tigerweb.geo.census.gov")) {
+          return new Response(JSON.stringify({ type: "FeatureCollection", features: [] }), {
+            status: 200,
+            headers: { "Content-Type": "application/geo+json" },
+          });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      }) as unknown as typeof fetch;
+
+      const result = await queryLiveDroughtEvidence(
+        { placeId: "custom-area", date: "2024-06-04", mode: "live", area },
+        { fetchImpl, now: () => NOW }
+      );
+
+      expect(result.kind).toBe("unsupported_coverage");
+      expect(result.sourceOutcomes).toEqual({
+        gibs: "not_attempted",
+        usdm: "not_attempted",
+        administrativeArea: "no_observation",
+      });
+      expect(result.evidence?.missionAttributions).toEqual([]);
+      expect(result.evidence?.limitations.some((limitation) => limitation.required)).toBe(true);
+      validateEvidenceObject(result.evidence!);
     });
 
     it("rejects a missing custom area before transport", async () => {
