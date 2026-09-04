@@ -19,6 +19,10 @@ import { ValidationError } from "@/contracts/common";
 export const PHOTON_HOST = "photon.komoot.io";
 export const GEOCODE_MAX_RESULTS = 5;
 export const GEOCODE_MIN_INTERVAL_MS = 1000;
+/** Maximum requests waiting behind the one active Photon request. */
+export const GEOCODE_MAX_QUEUED_REQUESTS = 4;
+/** A queued request fails boundedly instead of waiting on a stalled predecessor. */
+export const GEOCODE_MAX_QUEUE_WAIT_MS = 10_000;
 export const GEOCODE_ATTRIBUTION =
   "Search results © OpenStreetMap contributors, via Photon (komoot)";
 
@@ -31,19 +35,219 @@ export interface GeocodeResult {
   lat: number;
 }
 
-/** Simple process-wide minimum-interval limiter (good-citizen behavior). */
-let lastUpstreamRequestMs = 0;
+export type GeocodeScheduleResult<T> =
+  | { kind: "completed"; value: T }
+  | { kind: "rate_limited" }
+  | { kind: "aborted" };
 
-export function geocodeRateLimiterAllows(nowMs: number): boolean {
-  if (nowMs - lastUpstreamRequestMs < GEOCODE_MIN_INTERVAL_MS) return false;
-  lastUpstreamRequestMs = nowMs;
-  return true;
+interface QueuedGeocodeRequest {
+  run: (signal: AbortSignal) => Promise<unknown>;
+  controller: AbortController;
+  callerSignal?: AbortSignal;
+  resolve: (result: GeocodeScheduleResult<unknown>) => void;
+  reject: (error: unknown) => void;
+  queueTimer?: ReturnType<typeof setTimeout>;
+  onCallerAbort?: () => void;
+  onInternalAbort?: () => void;
+  settled: boolean;
 }
 
-/** Test hook: reset the limiter. */
-export function resetGeocodeRateLimiter(): void {
-  lastUpstreamRequestMs = 0;
+/**
+ * Process-local Photon scheduler. The route is the only production caller:
+ * one upstream request runs at a time, request starts remain one second apart,
+ * and overload is bounded by both queue length and queue-wait time.
+ */
+function waitForStartWindow(delayMs: number, signal?: AbortSignal): Promise<boolean> {
+  if (delayMs <= 0) return Promise.resolve(true);
+  if (signal?.aborted) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ready: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      resolve(ready);
+    };
+    const timer = setTimeout(() => finish(true), delayMs);
+    const onAbort = () => finish(false);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
+
+class GeocodeScheduler {
+  private readonly queue: QueuedGeocodeRequest[] = [];
+  private active: QueuedGeocodeRequest | null = null;
+  private running = false;
+  private disposed = false;
+  private lastUpstreamRequestMs: number | null = null;
+
+  schedule<T>(
+    run: (signal: AbortSignal) => Promise<T>,
+    callerSignal?: AbortSignal
+  ): Promise<GeocodeScheduleResult<T>> {
+    if (callerSignal?.aborted || this.disposed) {
+      return Promise.resolve({ kind: "aborted" });
+    }
+    if (this.queue.length >= GEOCODE_MAX_QUEUED_REQUESTS) {
+      return Promise.resolve({ kind: "rate_limited" });
+    }
+
+    return new Promise<GeocodeScheduleResult<T>>((resolve, reject) => {
+      const controller = new AbortController();
+      const request: QueuedGeocodeRequest = {
+        run,
+        controller,
+        callerSignal,
+        resolve: resolve as (result: GeocodeScheduleResult<unknown>) => void,
+        reject,
+        settled: false,
+      };
+      request.onCallerAbort = () => controller.abort();
+      request.onInternalAbort = () => {
+        if (this.removeQueuedRequest(request) || this.active === request) {
+          this.settle(request, { kind: "aborted" });
+        }
+      };
+      callerSignal?.addEventListener("abort", request.onCallerAbort, { once: true });
+      controller.signal.addEventListener("abort", request.onInternalAbort, { once: true });
+      request.queueTimer = setTimeout(() => {
+        if (!this.removeQueuedRequest(request)) return;
+        this.settle(request, { kind: "rate_limited" });
+        // Wake a head-of-queue request that is waiting for its start window.
+        controller.abort();
+      }, GEOCODE_MAX_QUEUE_WAIT_MS);
+      this.queue.push(request);
+      void this.drain();
+    });
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const request of [...this.queue]) {
+      this.removeQueuedRequest(request);
+      request.controller.abort();
+      this.settle(request, { kind: "aborted" });
+    }
+    if (this.active) {
+      this.active.controller.abort();
+      this.settle(this.active, { kind: "aborted" });
+    }
+  }
+
+  private removeQueuedRequest(request: QueuedGeocodeRequest): boolean {
+    const index = this.queue.indexOf(request);
+    if (index === -1) return false;
+    this.queue.splice(index, 1);
+    return true;
+  }
+
+  private clearQueueTimer(request: QueuedGeocodeRequest): void {
+    if (request.queueTimer === undefined) return;
+    clearTimeout(request.queueTimer);
+    request.queueTimer = undefined;
+  }
+
+  private cleanUp(request: QueuedGeocodeRequest): void {
+    this.clearQueueTimer(request);
+    if (request.callerSignal && request.onCallerAbort) {
+      request.callerSignal.removeEventListener("abort", request.onCallerAbort);
+    }
+    if (request.onInternalAbort) {
+      request.controller.signal.removeEventListener("abort", request.onInternalAbort);
+    }
+  }
+
+  private settle(
+    request: QueuedGeocodeRequest,
+    result: GeocodeScheduleResult<unknown>
+  ): void {
+    if (request.settled) return;
+    request.settled = true;
+    this.cleanUp(request);
+    request.resolve(result);
+  }
+
+  private fail(request: QueuedGeocodeRequest, error: unknown): void {
+    if (request.settled) return;
+    request.settled = true;
+    this.cleanUp(request);
+    request.reject(error);
+  }
+
+  private async drain(): Promise<void> {
+    if (this.running || this.disposed) return;
+    this.running = true;
+    try {
+      while (!this.disposed && this.queue.length > 0) {
+        const request = this.queue[0];
+        if (!request || request.settled || request.controller.signal.aborted) {
+          if (request) this.removeQueuedRequest(request);
+          continue;
+        }
+
+        const delayMs = this.lastUpstreamRequestMs === null
+          ? 0
+          : Math.max(
+            0,
+            this.lastUpstreamRequestMs + GEOCODE_MIN_INTERVAL_MS - performance.now()
+          );
+        if (delayMs > 0) {
+          const ready = await waitForStartWindow(delayMs, request.controller.signal);
+          if (!ready) continue;
+          // Recompute after every wake so wall-clock changes cannot start a
+          // request early; the independent queue timer remains the hard bound.
+          continue;
+        }
+
+        // No await occurs between this final abort check and dispatch.
+        if (request.controller.signal.aborted) continue;
+        this.queue.shift();
+        this.clearQueueTimer(request);
+        this.active = request;
+        this.lastUpstreamRequestMs = performance.now();
+        try {
+          const value = await request.run(request.controller.signal);
+          if (request.controller.signal.aborted) {
+            this.settle(request, { kind: "aborted" });
+          } else {
+            this.settle(request, { kind: "completed", value });
+          }
+        } catch (error) {
+          if (request.controller.signal.aborted) {
+            this.settle(request, { kind: "aborted" });
+          } else {
+            this.fail(request, error);
+          }
+        } finally {
+          if (this.active === request) this.active = null;
+        }
+      }
+    } finally {
+      this.running = false;
+      if (!this.disposed && this.queue.length > 0) void this.drain();
+    }
+  }
+}
+
+let geocodeScheduler = new GeocodeScheduler();
+
+export function scheduleGeocodeRequest<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  signal?: AbortSignal
+): Promise<GeocodeScheduleResult<T>> {
+  return geocodeScheduler.schedule(run, signal);
+}
+
+/** Test hook: dispose all work and replace the process-local scheduler. */
+export function resetGeocodeSchedulerForTests(): void {
+  geocodeScheduler.dispose();
+  geocodeScheduler = new GeocodeScheduler();
+}
+
+/** Backwards-compatible alias for the previous limiter test hook. */
+export const resetGeocodeRateLimiter = resetGeocodeSchedulerForTests;
 
 export function buildPhotonUrl(query: string): URL {
   const url = new URL(`https://${PHOTON_HOST}/api/`);
