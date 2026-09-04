@@ -7,6 +7,9 @@ import { finalizeStormQueryResult } from "@/lib/storm/service";
 import type { StormQueryRequest } from "@/lib/storm/types";
 
 export const runtime = "nodejs";
+// Let every bounded upstream timeout finish under both legacy and Fluid Pro.
+// This preserves Fluid Pro's 300 s default and is the legacy Pro maximum.
+export const maxDuration = 300;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
